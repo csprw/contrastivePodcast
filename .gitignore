@@ -1,3 +1,19 @@
+# Folders to ignore, regardless of where they are
+*/data/sp/*
+*/checkpoints/*
+
+# These files are usually too big
+# *.pkl
+*.h5
+*.pth
+*.pt
+*.bin
+*.arrow
+*.lock
+
+# Temporary files
+~$*
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
