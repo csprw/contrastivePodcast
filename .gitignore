@@ -1,6 +1,7 @@
 # Folders to ignore, regardless of where they are
 */data/sp/*
 */checkpoints/*
+*/logs/*
 
 # These files are usually too big
 # *.pkl
