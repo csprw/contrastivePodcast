@@ -1,0 +1,25 @@
+#!/bin/bash
+
+#SBATCH --partition=gpu_titanrtx_shared
+#SBATCH --gres=gpu:1
+#SBATCH --job-name=mm2
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=3
+#SBATCH --time=02:00:00
+#SBATCH --mem=32000M
+#SBATCH --output=slurm_output_%A.out
+
+module purge
+module load 2021
+module load Anaconda3/2021.05
+
+# Activate environment
+source activate mm2
+
+echo "[job] running from conda env:"
+echo $CONDA_DEFAULT_ENV
+python -c 'import sys; print(".".join(map(str, sys.version_info[:3])))'
+
+# Run the code
+cd $HOME/msc_thesis/code/contrastive_mm2
+srun python -u mm2.py --train_dataset sp --test_dataset sp --loss_type clip_loss --proj_head_type gelu --scale_type learned --num_epochs 50
