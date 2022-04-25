@@ -1052,7 +1052,10 @@ class mmModule(nn.Module):
                     self.perform_matrix_evaluation(loss_model, epoch, training_steps)
                     loss_model.zero_grad()
                     loss_model.train()
-
+            
+            # Plot loss and accuracy curves
+            to_plot(self.train_csv_filename, column='loss', title="Train loss")
+            to_plot(self.eval_csv_filename, column='mean_acc', title="Test accuracy (mean)")
        
     def init_logging(self):
         self.model_save_path = '{}/output'.format(self.log_name)
