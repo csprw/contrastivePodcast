@@ -30,6 +30,7 @@ from tqdm.autonotebook import trange
 import torch 
 from torch.utils import data as datautil
 from torch.utils.data import DataLoader
+import torch.nn.functional as F
 
 from transformers import AutoTokenizer, AutoModel, AdamW, AutoConfig, T5Config
 from transformers import get_constant_schedule, get_constant_schedule_with_warmup, get_linear_schedule_with_warmup
@@ -334,7 +335,6 @@ class spDataset(datautil.Dataset):
         samples = []
         self.max_embed_dim = 0
         for h5idx, h5py_file in enumerate(h5py_files):
-            # print("[del] file ", h5py_file)
             f = h5py.File(h5py_file, 'r')
             for idx, (_, train_split, sent, mean_embeds) in enumerate((zip(f['filenames'], f['train_split'], f['sentences'], f['mean_embeddings']))):
                 # if idx % 5000 == 0 and idx > 0:
@@ -784,7 +784,7 @@ class audioModule(nn.Module):
         elif a_cfg.proj_head == "simple_gru":
             self.audio_projection = simple_gru(a_cfg.input_dim, a_cfg.hidden_dim, 
                     num_layers=2, output_dim=a_cfg.output_dim, 
-                    dropout_prob=0.1, use_softmax = True, pad_pack=True, device=a_cfg.device)
+                    dropout_prob=0.1, use_softmax = True, pad_pack=False, device=a_cfg.device)
 
             self.features_needed = 'full_audio'
 
@@ -1031,6 +1031,7 @@ class mmModule(nn.Module):
                     mean_loss = running_loss / loss_freq
                     self.add_train_logging(epoch, training_steps, mean_loss, metrics)
                     losses.append(mean_loss)
+                    to_plot(self.train_csv_filename, column='loss', title="Train loss")
                     running_loss = 0
 
                 loss_value.backward()
@@ -1043,19 +1044,20 @@ class mmModule(nn.Module):
                     scheduler.step()
 
                 # check this
-                if update_scale:
-                    with torch.no_grad():
-                        loss_model.logit_scale.data.clamp_(-np.log(100), np.log(100))
+                # if update_scale:
+                #     with torch.no_grad():
+                #         loss_model.logit_scale.data.clamp_(-np.log(100), np.log(100))
 
-                if evaluation_steps > 0 and new_train_index % evaluation_steps == 0:
+                if new_train_index > 0 and new_train_index % evaluation_steps == 0:
                     # self._eval_during_training(evaluator, output_path, save_best_model, epoch, training_steps, callback) #TODO: add sts
                     self.perform_matrix_evaluation(loss_model, epoch, training_steps)
                     loss_model.zero_grad()
                     loss_model.train()
+                    to_plot(self.eval_csv_filename, column='mean_acc', title="Test accuracy (mean)")
             
             # Plot loss and accuracy curves
-            to_plot(self.train_csv_filename, column='loss', title="Train loss")
-            to_plot(self.eval_csv_filename, column='mean_acc', title="Test accuracy (mean)")
+            
+            
        
     def init_logging(self):
         self.model_save_path = '{}/output'.format(self.log_name)
@@ -1181,8 +1183,11 @@ class multimodal_loss(nn.Module):
         if self.scale_type == 'fixed':
             self.fixed_scale = scale
         elif self.scale_type == 'learned':
-            self.logit_scale = nn.Parameter(torch.ones([]) * np.log(1 / 0.07))
-            self.init_parameters_logtiscale()
+            # self.logit_scale = nn.Parameter(torch.ones([]) * np.log(1 / 0.07))
+            # self.init_parameters_logtiscale()
+
+            self.logit_scale = nn.Parameter(torch.log(torch.ones([]) * 100))
+            self.logit_scale.requires_grad = True
 
         self.similarity_fct = dek_cos_sim
         self.cross_entropy_loss = nn.CrossEntropyLoss()
@@ -1209,7 +1214,8 @@ class multimodal_loss(nn.Module):
             if self.scale_type == 'fixed':
                 audio_logits =  (reps_audio @ reps_sentences.t()) * self.fixed_scale
             elif self.scale_type == 'learned':
-                audio_logits =  (reps_audio @ reps_sentences.t()) * self.logit_scale.exp()
+                cur_logit_scale = torch.clamp(self.logit_scale.exp(), min=1.0, max=100.0)
+                audio_logits =  (reps_audio @ reps_sentences.t()) * cur_logit_scale.exp()
 
             text_logits = audio_logits.t()
 
@@ -1219,7 +1225,10 @@ class multimodal_loss(nn.Module):
 
             # ground_truth = torch.tensor(range(len(scores)), dtype=torch.long, device=scores.device)  
             ground_truth = torch.arange(self.batch_size, dtype=torch.long, device=self._target_device)
-            total_loss = (self.cross_entropy_loss(audio_logits,ground_truth) + self.cross_entropy_loss(text_logits,ground_truth))/2
+            # total_loss = (self.cross_entropy_loss(audio_logits,ground_truth) + self.cross_entropy_loss(text_logits,ground_truth))/2
+
+            # TODO: werkt dit beter?
+            total_loss = F.cross_entropy(audio_logits,ground_truth, weight=None) + F.cross_entropy(text_logits.transpose(-1, -2), ground_truth, weight=None)
 
             #audio_acc = torch.mean((audio_logits.detach().argmax(dim=-1) == ground_truth).float()).item()
             #text_acc = torch.mean((text_logits.detach().argmax(dim=-1) == ground_truth).float()).item()
@@ -1238,10 +1247,11 @@ class multimodal_loss(nn.Module):
                 ground_truth = F.softmax((audio_logits + text_logits) / 2 * self.fixed_scale, dim=-1)
 
             elif self.scale_type == 'learned':
-                logits =  (reps_sentences @ reps_audio.t()) / self.logit_scale.exp()
+                cur_logit_scale = torch.clamp(self.logit_scale.exp(), min=1.0, max=100.0)
+                logits =  (reps_sentences @ reps_audio.t()) / cur_logit_scale.exp()
                 audio_logits = reps_audio @ reps_audio.T
                 text_logits = reps_sentences @ reps_sentences.T
-                ground_truth = F.softmax((audio_logits + text_logits) / 2 * self.logit_scale.exp(), dim=-1)
+                ground_truth = F.softmax((audio_logits + text_logits) / 2 * cur_logit_scale.exp(), dim=-1)
                 
             if self.normalize:
                 audio_logits = audio_logits / audio_logits.norm(dim=1, keepdim=True)
@@ -1262,8 +1272,9 @@ class multimodal_loss(nn.Module):
                 # audio_logits =  (reps_audio @ reps_sentences.t()) * self.fixed_scale
                 scores = self.similarity_fct(reps_sentences, reps_audio) * self.fixed_scale
             elif self.scale_type == 'learned':
+                cur_logit_scale = torch.clamp(self.logit_scale.exp(), min=1.0, max=100.0)
                 # audio_logits =  (reps_audio @ reps_sentences.t()) * self.logit_scale.exp()
-                scores = self.similarity_fct(reps_sentences, reps_audio) * self.logit_scale.exp()
+                scores = self.similarity_fct(reps_sentences, reps_audio) * cur_logit_scale.exp()
 
             labels = torch.tensor(range(len(scores)), dtype=torch.long, device=scores.device)  # Example a[i] should match with b[i]
             loss = self.cross_entropy_loss(scores, labels)
@@ -1342,9 +1353,6 @@ def to_plot(filename, column='accuracy2', title="Test accuracy"):
     output_name = os.path.join(output_dir, output_title + "_" + column + '.jpg')
     plt.savefig(output_name)
     plt.close()
-
-
-
 
 ######### This stays in MAIN
 def main(args):
