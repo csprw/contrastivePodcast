@@ -1475,7 +1475,7 @@ if __name__ == "__main__":
 
     # GPU device number as in "cuda:0". Defaul is 0.
     parser.add_argument("-cuda", "--cuda_number", type=str, default='0')
-    parser.add_argument('--eval_every', type=int, default=10)
+    parser.add_argument('--eval_every', type=int, default=100)
     # parser.add_argument('--log_interval', type=int, default=500)
     # parser.add_argument('--audio_window', type=int, default=20480, 
     #                     help='window length to sample from each utterance')
