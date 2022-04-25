@@ -1389,8 +1389,8 @@ def main(args):
     print("[main] model setup complete, model: \n", full_model)
 
     train_loss = multimodal_loss(full_model, scale=args.scale, device=device, loss_type=loss_type, normalize=normalize, scale_type=scale_type)
-    warmup_steps =  math.ceil(len(data_loader.train_dataset) * num_epochs * 0.1)  # 10% of train data for warm-up
-    evaluation_steps = int(len(data_loader.train_dataset) * 0.1) #Evaluate every 10% of the data
+    warmup_steps =  math.ceil(len(train_dataloader) * num_epochs * 0.1)  # 10% of train data for warm-up
+    evaluation_steps = int(len(train_dataloader) * 0.1) #Evaluate every 10% of the data
 
     full_model.fit(
         train_dataloader=train_dataloader,
