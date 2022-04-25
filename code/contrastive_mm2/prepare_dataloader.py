@@ -234,7 +234,7 @@ if __name__ == "__main__":
     print("Number of transcripts found: ")
     print(len(transcripts_paths))
     transcripts_paths = sorted(transcripts_paths)
-    transcripts_paths = (transcripts_paths[:5000]) # For now, only use 100 transcripts
+    # transcripts_paths = (transcripts_paths[:5000]) # For now, only use 100 transcripts
     outer_folders, e_filenames, t_filenames = get_embed_transcript_paths(transcripts_paths)
 
     last_output_folder = outer_folders[0]
@@ -246,10 +246,14 @@ if __name__ == "__main__":
 
 
     for idx, outer_folder in enumerate(outer_folders):
+
+        if idx < 2081:
+            last_output_folder = outer_folders[idx+1]
+            continue
         filename = os.path.split(e_filenames[idx])[-1].split('.')[0]
         if outer_folder != last_output_folder:
             
-            save_path = os.path.join(conf.dataset_processed_path, outer_folder.replace(os.sep, '_') + '_embeds.h5')
+            save_path = os.path.join(conf.dataset_processed_path, last_output_folder.replace(os.sep, '_') + '_embeds.h5')
             print("saving {}/{}".format(idx, len(outer_folders)))
             save_all(save_path, all_mean_embeddings, filenames, in_train_set, all_sentences, all_full_embeddings)
   
@@ -281,6 +285,7 @@ if __name__ == "__main__":
         filenames.extend([filename] * len(sentences))
         in_train_set.extend([train_split[filename]] * len(sentences))
 
+    save_path = os.path.join(conf.dataset_processed_path, last_output_folder.replace(os.sep, '_') + '_embeds.h5')
     print("saving {}/{} {}".format(idx, len(outer_folders), save_path))
     save_all(save_path, all_mean_embeddings, filenames, in_train_set, all_sentences, all_full_embeddings)
 

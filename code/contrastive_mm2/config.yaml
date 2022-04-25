@@ -1,14 +1,15 @@
 ########################################
 # Paths for reading yamnet embeddings 
-dataset_input_path: /Users/casper/Documents/UvA master/b23456_thesis/msc_thesis/code/data/sp/podcasts-no-audio-13GB/
-dataset_processed_path: /Users/casper/Documents/UvA master/b23456_thesis/msc_thesis/code/data/sp/yamnet/processed/
+dataset_input_path: ../data/sp/podcasts-no-audio-13GB/
+dataset_processed_path: ../data/sp/yamnet/processed/
 
-yamnet_embed_dir: /Users/casper/Documents/UvA master/b23456_thesis/msc_thesis/code/data/sp/yamnet/embedding
-yamnet_score_dir: /Users/casper/Documents/UvA master/b23456_thesis/msc_thesis/code/data/sp/yamnet/score
+yamnet_embed_dir: ../data/sp/yamnet/embedding
+yamnet_score_dir: ../data/sp/yamnet/score
 
 ########################################
 # Paths for contrastive training
-sp_path: ../data/sp/yamnet/sp_yamnet.h5
+# sp_path: ../data/sp/yamnet/sp_yamnet.h5
+sp_path: ../data/sp/yamnet/processed/
 # sp_sample_path: ../data/sp/yamnet/sp_yamnet_sample.h5
 sp_sample_path: ../data/sp/yamnet/processed_sample/
 sp_train_test_split: ../data/sp/yamnet/sp_train_test_split.json

@@ -18,10 +18,9 @@ import pandas as pd
 import numpy as np
 from matplotlib import pyplot as plt
 import seaborn as sns
-from collections import Counter
+from collections import Counter, OrderedDict
+from pprint import pprint
 
-from collections import OrderedDict
-from tqdm import tqdm
 from omegaconf import OmegaConf
 import gzip
 from typing import List, Dict, Optional, Union, Tuple, Iterable, Type, Callable
@@ -78,10 +77,10 @@ def setup_config(args, dataclasses):
         config[name] = {}
         for field in dc.__dataclass_fields__:
             value = getattr(dc, field)
-            print(field, value)
             config[name][field] = value
 
-    
+    print("Config used: ")
+    pprint(config)
     config_dir = os.path.join(log_name, 'config.json')
     with open(config_dir, "w") as file:
         json.dump(config, file, indent=4, sort_keys=True)
@@ -161,7 +160,7 @@ class MMloader(object):
             self.load_full = False
 
         print("[MMloader] train dataset ", train_dataset_name)
-        print("[MMloader] loading full ", self.load_full)
+
         # Get the datasets
         if train_dataset_name == "wiki":
             train_dataset = self.get_wiki_dataset()
@@ -175,6 +174,7 @@ class MMloader(object):
         else:
             raise Exception('Unknown dataset')
         
+        self.train_dataset = train_dataset
         print("[MMloader] train dataset loaded, length: ", len(train_dataset))
 
         # if dev_dataset_name == "sts":
@@ -200,6 +200,7 @@ class MMloader(object):
 
         else:
             raise Exception('Unknown dataset')
+        self.test_dataset = test_dataset
         print("[MMloader] test dataset loaded, length: ", len(test_dataset))
 
 
@@ -333,6 +334,7 @@ class spDataset(datautil.Dataset):
         samples = []
         self.max_embed_dim = 0
         for h5idx, h5py_file in enumerate(h5py_files):
+            # print("[del] file ", h5py_file)
             f = h5py.File(h5py_file, 'r')
             for idx, (_, train_split, sent, mean_embeds) in enumerate((zip(f['filenames'], f['train_split'], f['sentences'], f['mean_embeddings']))):
                 # if idx % 5000 == 0 and idx > 0:
@@ -350,9 +352,11 @@ class spDataset(datautil.Dataset):
                 print("[spdataset] loaded {}/{}".format(h5idx, len(h5py_files)))
 
         self.samples = samples
+
     def __len__(self):
         """ Denotes the total number of utterances """
         return len(self.samples)
+
     def __getitem__(self, index):
         """ Return one item from the df """
         sample = self.samples[index]
@@ -783,7 +787,6 @@ class audioModule(nn.Module):
                     dropout_prob=0.1, use_softmax = True, pad_pack=True, device=a_cfg.device)
 
             self.features_needed = 'full_audio'
-        print("[Audiomodule] Loaded audio projection head")
 
     def forward(self, audio_seq):
         return self.audio_projection(audio_seq)
@@ -1134,6 +1137,7 @@ class mmModule(nn.Module):
         # Iterate over data and calculate accuracies
         self.to(device)
         total_len = len(self.eval_dataloader)
+        
         for idx, batch in enumerate(iter(self.eval_dataloader)):
             sent_features, audio_features, seq_len = batch
 
@@ -1275,16 +1279,21 @@ def get_metrics(audio_logits, text_logits, ground_truth):
     metrics ={}
     logits = {"audio": audio_logits, "text": text_logits}
 
+    accs = []
     for name, logit in logits.items():
         acc = torch.mean((logit.argmax(dim=-1) == ground_truth).float()).item()
+        accs.append(acc)
         metrics[f"{name}_acc"] = acc
         ranking = torch.argsort(logit, descending=True)
         preds = torch.where(ranking == ground_truth)[1]
         preds = preds.detach().cpu().numpy()
         metrics[f"{name}_mean_rank"] = preds.mean() + 1
-        metrics[f"{name}_median_rank"] = np.floor(np.median(preds)) + 1
+        #metrics[f"{name}_median_rank"] = np.floor(np.median(preds)) + 1
         for k in [1, 5, 10]:
             metrics[f"{name}_R@{k}"] = np.mean(preds < k)
+    metrics['mean_acc'] = np.mean(accs)
+
+
     return metrics
 
 
@@ -1337,7 +1346,6 @@ def to_plot(filename, column='accuracy2', title="Test accuracy"):
 ######### This stays in MAIN
 def main(args):
     set_logconfig()
-    # log_name = get_log_name(args)
     t_start = time()
 
     # Set training parameters from argparse
@@ -1349,7 +1357,6 @@ def main(args):
     scale_type =  args.scale_type
     num_epochs = args.num_epochs # original 1
     max_seq_length = 32 #todo: 512? # og 32
-    print("[main] Arguments used: ", args)
 
     # Adjust configurations
     if args.proj_head == 'simple_gru':
@@ -1358,7 +1365,6 @@ def main(args):
     if proj_head_type == 'gelu':
         mmAudioCfg.proj_type = 'gelu'
     mmAudioCfg.device = device
-
     log_name = setup_config(args, [mmAudioCfg, mmTextCfg])
 
     # Setup dataloaders
@@ -1370,7 +1376,6 @@ def main(args):
     # This is moved to later stadium TODO: fix that it would also work if sts
     # test_evaluator = data_loader.test_evaluator
 
-    print("[main] setting up multimodal model")
     text_embedding_model = textModule(t_cfg=mmTextCfg, max_seq_length=max_seq_length)
     pooling_model = Pooling(text_embedding_model.get_word_embedding_dimension())
     audio_model = audioModule(a_cfg=mmAudioCfg)
@@ -1384,9 +1389,8 @@ def main(args):
     print("[main] model setup complete, model: \n", full_model)
 
     train_loss = multimodal_loss(full_model, scale=args.scale, device=device, loss_type=loss_type, normalize=normalize, scale_type=scale_type)
-
-    warmup_steps =  math.ceil(len(train_dataloader) * num_epochs * 0.1)  # 10% of train data for warm-up
-    evaluation_steps = int(len(train_dataloader) * 0.1) #Evaluate every 10% of the data
+    warmup_steps =  math.ceil(len(data_loader.train_dataset) * num_epochs * 0.1)  # 10% of train data for warm-up
+    evaluation_steps = int(len(data_loader.train_dataset) * 0.1) #Evaluate every 10% of the data
 
     full_model.fit(
         train_dataloader=train_dataloader,
@@ -1408,17 +1412,25 @@ def main(args):
     to_plot(full_model.train_csv_filename, column='text_acc', title="Train accuracy (text)")
     to_plot(full_model.train_csv_filename, column='loss', title="Train loss")
 
+    to_plot(full_model.eval_csv_filename, column='mean_acc', title="Test accuracy (mean)")
     to_plot(full_model.eval_csv_filename, column='audio_acc', title="Test accuracy (audio)")
     to_plot(full_model.eval_csv_filename, column='text_acc', title="Test accuracy (text)")
 
     to_plot(full_model.eval_csv_filename, column='text_R@10', title="Test R@10 (text)")
     to_plot(full_model.eval_csv_filename, column='audio_R@10', title="Test R@10 (audio)")
 
+
     csv_file = pd.read_csv(full_model.eval_csv_filename)
-    print("[main] Maximum text reached at step={} acc={}".format(csv_file['text_acc'].idxmax(), csv_file['text_acc'].max()))
-    print("[main] Maximum audio reached at step={} acc={}".format(csv_file['audio_acc'].idxmax(), csv_file['audio_acc'].max()))
+    print("[main] ------------------------------------------------------------")
+    print("[main] Maximum text acc step={} acc={}".format(csv_file['text_acc'].idxmax(), csv_file['text_acc'].max()))
+    print("[main] Maximum audio acc step={} acc={}".format(csv_file['audio_acc'].idxmax(), csv_file['audio_acc'].max()))
+
+    best_idx = csv_file['mean_acc'].idxmax()
+    print("[main] Maximum mean acc step={} acc={}".format(best_idx, csv_file['mean_acc'].max()))
+    # print("[main] Results from this: ", csv_file.loc[[best_idx]])
+    print(", ".join(["{} - {}".format(k, v) for k, v in csv_file.iloc[best_idx].to_dict().items()]))
     t_end = time()
-    print("[main] Done, total duration: ", t_end - t_start)
+    print("[main] Done, total duration {} seconds ".format(int(t_end - t_start)))
 
 if __name__ == "__main__":
     # Parse flags in command line arguments
@@ -1463,7 +1475,7 @@ if __name__ == "__main__":
 
     # GPU device number as in "cuda:0". Defaul is 0.
     parser.add_argument("-cuda", "--cuda_number", type=str, default='0')
-    parser.add_argument('--eval_every', type=int, default=5)
+    parser.add_argument('--eval_every', type=int, default=10)
     # parser.add_argument('--log_interval', type=int, default=500)
     # parser.add_argument('--audio_window', type=int, default=20480, 
     #                     help='window length to sample from each utterance')
