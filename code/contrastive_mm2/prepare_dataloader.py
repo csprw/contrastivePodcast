@@ -17,11 +17,8 @@ from nltk import tokenize
 import torch
 import h5py
 
-
 from omegaconf import OmegaConf
 conf = OmegaConf.load("./config.yaml")
-
-
 
 
 def load_metadata(dataset_path):
@@ -231,38 +228,67 @@ if __name__ == "__main__":
     # Read transcripts
     transcripts_dir = os.path.join(conf.dataset_input_path, 'podcasts-transcripts')
     transcripts_paths = find_paths(subset, transcripts_dir, ".json")
-    print("Number of transcripts found: ")
-    print(len(transcripts_paths))
+    print("Number of transcripts found: ", len(transcripts_paths))
     transcripts_paths = sorted(transcripts_paths)
     # transcripts_paths = (transcripts_paths[:5000]) # For now, only use 100 transcripts
     outer_folders, e_filenames, t_filenames = get_embed_transcript_paths(transcripts_paths)
 
+    # Create output folders
+    Path(os.path.join(conf.dataset_processed_path, "train")).mkdir(parents=True, exist_ok=True) 
+    Path(os.path.join(conf.dataset_processed_path, "test")).mkdir(parents=True, exist_ok=True) 
+
+
     last_output_folder = outer_folders[0]
-    all_sentences = []
-    all_full_embeddings = []
-    all_mean_embeddings = []
-    in_train_set = []
-    filenames = []
+    train_all_sentences = []
+    train_all_full_embeddings = []
+    train_all_mean_embeddings = []
+    train_filenames = []
+    train_in_train_set = []
+    test_all_sentences = []
+    test_all_full_embeddings = []
+    test_all_mean_embeddings = []
+    test_filenames = []
+    test_in_train_set = []
 
 
     for idx, outer_folder in enumerate(outer_folders):
-
-        if idx < 2081:
-            last_output_folder = outer_folders[idx+1]
-            continue
+        # if idx < 2081:
+        #     last_output_folder = outer_folders[idx+1]
+        #     continue
         filename = os.path.split(e_filenames[idx])[-1].split('.')[0]
         if outer_folder != last_output_folder:
             
-            save_path = os.path.join(conf.dataset_processed_path, last_output_folder.replace(os.sep, '_') + '_embeds.h5')
+            save_path_train = os.path.join(conf.dataset_processed_path, "train", last_output_folder.replace(os.sep, '_') + '_embeds.h5')
+            save_path_test = os.path.join(conf.dataset_processed_path, "test", last_output_folder.replace(os.sep, '_') + '_embeds.h5')
             print("saving {}/{}".format(idx, len(outer_folders)))
-            save_all(save_path, all_mean_embeddings, filenames, in_train_set, all_sentences, all_full_embeddings)
+
+            # save_all(save_path, all_mean_embeddings, filenames, in_train_set, all_sentences, all_full_embeddings)
+            if len(train_filenames) > 0:
+                save_all(save_path_train, 
+                        train_all_mean_embeddings, 
+                        train_filenames, 
+                        train_in_train_set, 
+                        train_all_sentences, 
+                        train_all_full_embeddings)
+            if len(test_filenames) > 0:
+                save_all(save_path_test, 
+                        test_all_mean_embeddings, 
+                        test_filenames, 
+                        test_in_train_set, 
+                        test_all_sentences, 
+                        test_all_full_embeddings)
   
             last_output_folder = outer_folder
-            all_sentences = []
-            all_full_embeddings = []
-            all_mean_embeddings = []
-            in_train_set = []
-            filenames = []
+            train_all_sentences = []
+            train_all_full_embeddings = []
+            train_all_mean_embeddings = []
+            train_filenames = []
+            train_in_train_set = []
+            test_all_sentences = []
+            test_all_full_embeddings = []
+            test_all_mean_embeddings = []
+            test_filenames = []
+            test_in_train_set = []
 
         if idx % 10 == 0:
             print("\t processing {}/{}".format(idx, len(outer_folders)))
@@ -277,17 +303,42 @@ if __name__ == "__main__":
         
         # Extract all sentences and corresponding words
         sentences, timestamps, mean_embeddings, full_embeddings = extract_transcript(transcript_json, yamnet_embedding)
-        all_sentences.extend(sentences)
-        all_mean_embeddings.extend(mean_embeddings)
-        all_full_embeddings.extend(full_embeddings)
-        
-        # Check if it belongs to train or test split
-        filenames.extend([filename] * len(sentences))
-        in_train_set.extend([train_split[filename]] * len(sentences))
+        if train_split[filename]:
+            train_all_sentences.extend(sentences)
+            train_all_mean_embeddings.extend(mean_embeddings)
+            train_all_full_embeddings.extend(full_embeddings)
+            # Check if it belongs to train or test split
+            train_filenames.extend([filename] * len(sentences))
+            train_in_train_set.extend([train_split[filename]] * len(sentences))
 
-    save_path = os.path.join(conf.dataset_processed_path, last_output_folder.replace(os.sep, '_') + '_embeds.h5')
-    print("saving {}/{} {}".format(idx, len(outer_folders), save_path))
-    save_all(save_path, all_mean_embeddings, filenames, in_train_set, all_sentences, all_full_embeddings)
+        else:
+            test_all_sentences.extend(sentences)
+            test_all_mean_embeddings.extend(mean_embeddings)
+            test_all_full_embeddings.extend(full_embeddings)
+        
+            # Check if it belongs to train or test split
+            test_filenames.extend([filename] * len(sentences))
+            test_in_train_set.extend([train_split[filename]] * len(sentences))
+
+    save_path_train = os.path.join(conf.dataset_processed_path, "train", last_output_folder.replace(os.sep, '_') + '_embeds.h5')
+    save_path_test = os.path.join(conf.dataset_processed_path, "test", last_output_folder.replace(os.sep, '_') + '_embeds.h5')
+    print("saving {}/{}".format(idx, len(outer_folders)))
+
+    # save_all(save_path, all_mean_embeddings, filenames, in_train_set, all_sentences, all_full_embeddings)
+    if len(train_filenames) > 0:
+        save_all(save_path_train, 
+                train_all_mean_embeddings, 
+                train_filenames, 
+                train_in_train_set, 
+                train_all_sentences, 
+                train_all_full_embeddings)
+    if len(test_filenames) > 0:
+        save_all(save_path_test, 
+                test_all_mean_embeddings, 
+                test_filenames, 
+                test_in_train_set, 
+                test_all_sentences, 
+                test_all_full_embeddings)
 
 
 

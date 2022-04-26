@@ -1204,6 +1204,7 @@ class multimodal_loss(nn.Module):
 
         # Get sentence Representations (shape [batchsize, 768])
         reps_sentences = self.text_model(sentence_features[0])['sentence_embedding']
+        print("[del] sents: ", reps_sentences)
 
         # Get Audio representations
         reps_audio = self.audio_model((audio_features, seq_len))

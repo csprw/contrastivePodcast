@@ -5,6 +5,7 @@ Usage: python main.py
 """
 import logging
 from argparse import ArgumentParser
+from random import sample
 
 import time
 from time import time
@@ -176,6 +177,13 @@ class MMloader(object):
         
         self.train_dataset = train_dataset
         print("[MMloader] train dataset loaded, length: ", len(train_dataset))
+        # print("[del] gonna try it out")
+
+        # dataiter = iter(self.train_loader)
+        # samples = dataiter.next()
+
+        # print("[del] really done trying here...")
+        # exit(1)
 
         # if dev_dataset_name == "sts":
         #     sts_dataset = self.get_sts_dataset()
@@ -204,93 +212,19 @@ class MMloader(object):
         print("[MMloader] test dataset loaded, length: ", len(test_dataset))
 
 
-    def get_wiki_dataset(self):
-        dataset =  wikiDataset()
-        # train_dataloader = DataLoader(train_samples, shuffle=True, batch_size=train_batch_size, drop_last=True)
-        return dataset
-
-    def get_sts_dataset(self):
-        dataset = stsDataset()
-        return dataset
+    # def get_wiki_dataset(self):
+    #     dataset =  wikiDataset()
+    #     # train_dataloader = DataLoader(train_samples, shuffle=True, batch_size=train_batch_size, drop_last=True)
+    #     return dataset
+    # def get_sts_dataset(self):
+    #     dataset = stsDataset()
+    #     return dataset
 
     def get_sp_sample_dataset(self, train_set=True, directory=conf.sp_sample_path, load_full=False):
-        dataset =  spDataset(train_set=train_set, directory=directory, load_full=load_full)
+        dataset =  spDatasetNoMemory(train_set=train_set, directory=directory, load_full=load_full)
         return dataset
 
-class wikiDataset(datautil.Dataset):
-    """
-    Wiki dataset dataloader. 
-    """
-    def __init__(self, directory='../data/wiki1m_for_simcse.txt'):
-        print("[wikiDataset]")
-        # We use 1 Million sentences from Wikipedia to train our model
-        wikipedia_dataset_path = directory
-        if not os.path.exists(wikipedia_dataset_path):
-            print("[wikiDataset] wiki1m_for_simcse does not exists - start downloading")
-            util.http_get('https://huggingface.co/datasets/princeton-nlp/datasets-for-simcse/resolve/main/wiki1m_for_simcse.txt', wikipedia_dataset_path)
-
-        # train_samples is a list of InputExample objects where we pass the same sentence twice to texts, i.e. texts=[sent, sent]
-        train_samples = []
-        with open(wikipedia_dataset_path, 'r', encoding='utf8') as fIn:
-            for line in fIn:
-                line = line.strip()
-                if len(line) >= 10:
-                    train_samples.append(InputExample(texts=[line, line]))
-
-        self.train_samples = train_samples
-        print("[wikiDataset] len of train samples: ", len(train_samples))
-
-    def __len__(self):
-        """ Denotes the total number of utterances """
-        return len(self.train_samples)
-
-    def __getitem__(self, index):
-        """ Return one item from the df """
-        sample = self.train_samples[index]
-        return sample
-
-
-class stsDataset(datautil.Dataset):
-    """
-    Sts dataset dataloader. 
-    """
-    def __init__(self, directory='../data/stsbenchmark.tsv.gz'):
-        print("[stsDataset]")
-        # Check if dataset exsist. If not, download and extract  it
-        sts_dataset_path = directory
-        if not os.path.exists(sts_dataset_path):
-            print("[stsDataset] sts benchmark does not exists - start downloading")
-            util.http_get('https://sbert.net/datasets/stsbenchmark.tsv.gz', sts_dataset_path)
-
-        
-        # Read STSbenchmark dataset and use it as development set
-        logging.info("Read STSbenchmark dev dataset")
-        dev_samples = []
-        test_samples = []
-        with gzip.open(sts_dataset_path, 'rt', encoding='utf8') as fIn:
-            reader = csv.DictReader(fIn, delimiter='\t', quoting=csv.QUOTE_NONE)
-            for row in reader:
-                score = float(row['score']) / 5.0  # Normalize score to range 0 ... 1
-
-                if row['split'] == 'dev':
-                    dev_samples.append(DevInputExample(texts=[row['sentence1'], row['sentence2']], label=score))
-                elif row['split'] == 'test':
-                    test_samples.append(DevInputExample(texts=[row['sentence1'], row['sentence2']], label=score))
-
-        self.dev_samples = dev_samples
-        self.test_samples = test_samples
-
-    def __len__(self):
-        """ Denotes the total number of utterances """
-        return len(self.dev_samples), len(self.test_samples)
-
-    def __getitem__(self, index):
-        """ Return one item from the df """
-        print("getitem for sts?")
-        raise NotImplementedError
-
-
-class spDataset(datautil.Dataset):
+class spDatasetNoMemory(datautil.Dataset):
     """
     Spotify Podcast dataset dataloader. 
     """
@@ -301,32 +235,71 @@ class spDataset(datautil.Dataset):
         print("[spDataset] found {} h5py files".format(len(h5py_files)))
         samples = []
         self.max_embed_dim = 0
+        counter = 0
+
+        
+        idx2file = {}
+        self.h5py_idx2file = h5py_files
+        sample_idx = 0
+
+        self.load_full = load_full
+
         for h5idx, h5py_file in enumerate(h5py_files):
-            # print("[del] file ", h5py_file)
+            
             f = h5py.File(h5py_file, 'r')
-            for idx, (_, train_split, sent, mean_embeds) in enumerate((zip(f['filenames'], f['train_split'], f['sentences'], f['mean_embeddings']))):
-                # if idx % 5000 == 0 and idx > 0:
-                #     print("[spdataset] loaded ", idx)
-                if train_split == train_set:
-                    if load_full:
-                        full_embeds = torch.Tensor(np.array(f[str(idx)]))
-                        samples.append(InputExample(texts=[sent.decode("utf-8")], mean_embeds=None, full_embeds=[full_embeds]))
-                    else:
-                        samples.append(InputExample(texts=[sent.decode("utf-8")], mean_embeds=[torch.Tensor(mean_embeds)], full_embeds=None))
+            # print("---new f ", len(f['filenames']))
+            print("[del]: ", len(f['filenames']))
+
+            for sentidx in range(len(f['sentences'])):
+                idx2file[sample_idx] = (h5idx, sentidx)
+                sample_idx += 1
+            # for sentidx, (_, train_split, sent, mean_embeds) in enumerate((zip(f['filenames'], f['train_split'], f['sentences'], f['mean_embeddings']))):
+            #     idx2file[sample_idx] = (h5idx, sentidx)
+                
             self.max_embed_dim = max(self.max_embed_dim, f.attrs['max_embed_dim'])
             f.close()
             if h5idx % 10 == 0 and h5idx > 0:
                 print("[spdataset] loaded {}/{}".format(h5idx, len(h5py_files)))
+                print("counter: ", counter)
 
-        self.samples = samples
+        self.idx2file = idx2file
 
     def __len__(self):
         """ Denotes the total number of utterances """
-        return len(self.samples)
+        return len(self.idx2file.keys())
 
     def __getitem__(self, index):
         """ Return one item from the df """
-        sample = self.samples[index]
+        index = 0
+        if self.load_full:
+            h5py_idx, sent_idx = self.idx2file[index]
+            h5py_file = self.h5py_idx2file[h5py_idx]
+
+            # print("opening h5py: ", h5py_file)
+            f = h5py.File(h5py_file, 'r')
+
+            sent = f['sentences'][sent_idx].decode("utf-8")
+            # print("sent: ", sent)
+            full_embeds = torch.Tensor(np.array(f[str(sent_idx)]))
+
+            sample = InputExample(texts=[sent], mean_embeds=None, full_embeds=[full_embeds])
+            # samples.append(InputExample(texts=[sent.decode("utf-8")], mean_embeds=None, full_embeds=[full_embeds]))
+            f.close()
+        else:
+            h5py_idx, sent_idx = self.idx2file[index]
+            h5py_file = self.h5py_idx2file[h5py_idx]
+
+            f = h5py.File(h5py_file, 'r')
+
+            sent = f['sentences'][sent_idx].decode("utf-8")
+            # full_embeds = torch.Tensor(np.array(f[str(sent_idx)]))
+
+            mean_embeds = torch.Tensor(f['mean_embeddings'][sent_idx])
+
+            sample = InputExample(texts=[sent], mean_embeds=[mean_embeds], full_embeds=None)
+            # samples.append(InputExample(texts=[sent.decode("utf-8")], mean_embeds=None, full_embeds=[full_embeds]))
+            f.close()
+            
         return sample
 
 ######################################################
@@ -1116,6 +1089,7 @@ class mmModule(nn.Module):
             use_gru = False
 
             for new_train_index, (sent_features, audio_features, seq_len) in enumerate(train_dataloader):
+                print("\t\t\t [train] batch: ", audio_features[0][0][1])
                 if use_gru:
                     h = h.data
                 else:
@@ -1123,11 +1097,11 @@ class mmModule(nn.Module):
                 loss_value, metrics, h = loss_model(sent_features, audio_features, seq_len, h)
                 running_loss += loss_value.item()
 
+                print("[del] loss {} acc a={} t={}".format(loss_value.item(), metrics['audio_acc'], metrics['text_acc']))
                 if new_train_index > 0 and training_steps % loss_freq == 0:
                     mean_loss = running_loss / loss_freq
                     self.add_train_logging(epoch, training_steps, mean_loss, metrics)
                     to_plot(self.train_csv_filename, column='loss', title="Train loss")
-                    to_plot(self.eval_csv_filename, column='mean_acc', title="Test accuracy (mean)")
                     losses.append(mean_loss) ## TODO: dit kan weg?
                     running_loss = 0
 
@@ -1150,6 +1124,7 @@ class mmModule(nn.Module):
                 if new_train_index > 0 and new_train_index % evaluation_steps == 0:
                     # self._eval_during_training(evaluator, output_path, save_best_model, epoch, training_steps, callback) #TODO: add sts
                     self.perform_matrix_evaluation(loss_model, epoch, training_steps)
+                    to_plot(self.eval_csv_filename, column='mean_acc', title="Test accuracy (mean)")
                     loss_model.zero_grad()
                     loss_model.train()
        
@@ -1241,12 +1216,18 @@ class mmModule(nn.Module):
 
         for idx, batch in enumerate(iter(self.eval_dataloader)):
 
+            # [del]
+            if idx > 0:
+                print("eval break")
+                break
+            
             if use_gru:
                 h = h.data
             else:
                 h = tuple([e.data for e in h])
 
             sent_features, audio_features, seq_len = batch
+            print("[eval] batch: ", audio_features[0][0])
 
             if self.use_amp:
                 print("Adjested by Casp, not yet fully implemented")
@@ -1305,11 +1286,18 @@ class multimodal_loss(nn.Module):
     def forward(self, sentence_features: Iterable[Dict[str, Tensor]], audio_features: Tensor, seq_len, h):
 
         # print("multimodal h: ", h)
+
+        #[del]
         # Get sentence Representations (shape [batchsize, 768])
-        reps_sentences = self.text_model(sentence_features[0])['sentence_embedding']
+        # reps_sentences = self.text_model(sentence_features[0])['sentence_embedding']
+        reps_sentences = torch.full((128, 768), 0.001)
+
+        # print("reps_sentences: ", reps_sentences.shape)
+        
 
         # Get Audio representations
         reps_audio, h = self.audio_model((audio_features, h))
+        # print("reps_audio: ", reps_audio)
         # print('[del]', reps_audio)
         # print("[del] Reps audio: ", reps_audio)
         # Y = reps_sentences.view(-1)
