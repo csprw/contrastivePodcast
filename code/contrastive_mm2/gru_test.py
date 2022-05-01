@@ -554,6 +554,7 @@ class Optimization:
 
     def train_epoch(self, epoch, train_loader, val_loader):
         self.model.train()
+        steps = len(train_loader)
 
         # Fixed length training:
         # iterator = iter(train_loader)
@@ -566,7 +567,7 @@ class Optimization:
                 mean_loss, metrics = self.evaluate(val_loader)
                 self.add_logging(epoch, step, mean_loss, metrics, train=False)
                 
-                print("[eval] Epoch {} Step {} \t loss {} \t acc {}".format(epoch, step, mean_loss, metrics['mean_acc']))
+                print("[eval] Epoch {} Step {}/{} \t loss {} \t acc {}".format(epoch, step, steps, mean_loss, metrics['mean_acc']))
                 if mean_loss < self.best_loss:
                     print("[eval] better model found")
                     self.best_loss = mean_loss 
@@ -583,7 +584,7 @@ class Optimization:
             self.lr_scheduler.step(loss)
 
             if step % self.print_every == 0:
-                print("[train] Epoch {} Step {} \t loss {} \t acc {}".format(epoch, step, loss.item(), metrics['mean_acc']))
+                print("[train] Epoch {} Step {}/{} \t loss {} \t acc {}".format(epoch, step, steps, loss.item(), metrics['mean_acc']))
                 self.add_logging(epoch, step, loss.item(), metrics, train=True)
                 
         self.output_all_plots()
@@ -750,9 +751,8 @@ def main(args):
 
     warmup_steps =  math.ceil(len(train_loader) * num_epochs * 0.1)  # 10% of train data for warm-up
 
-    batch_steps = int((len(train_loader) / FullCfg.batch_size))
-    FullCfg.eval_every = int(math.ceil(batch_steps * 0.1)) #Evaluate every 10% of the data
-    FullCfg.print_every = int(math.ceil(batch_steps * 0.01)) #Print results every 1% of the data
+    FullCfg.eval_every = int(math.ceil(len(train_loader) * 0.1)) #Evaluate every 10% of the data
+    FullCfg.print_every = int(math.ceil(len(train_loader) * 0.001)) #Print results every 0.1% of the data
     print("[main] print_every {} eval_every {} ".format(FullCfg.print_every, FullCfg.eval_every))
 
     if args.load_model: 
