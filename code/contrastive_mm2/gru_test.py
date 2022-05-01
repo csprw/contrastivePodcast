@@ -594,14 +594,19 @@ class Optimization:
         losses = []
     
         with torch.no_grad():
-            iterator = iter(val_loader)
-            for idx in range(self.total_len):
-                batch = next(iterator)
+
+            # fixed number of steps
+            # iterator = iter(val_loader)
+            # for step in range(self.total_len):
+            #     batch = next(iterator)
+
+            # full learning
+            for step, batch in enumerate(iter(val_loader)):
 
                 #padded_audio_embeds, lengths, text_embeds  = batch
                 loss, metrics = self.model(batch)
                 losses.append(loss.item())
-                if idx == 0:
+                if step == 0:
                     met_sum = Counter(metrics.copy())
                 else:
                     #metrics_sum = {k: metrics_sum.get(k, 0) + metrics.get(k, 0) for k in set(metrics_sum)}
@@ -716,7 +721,6 @@ def main(args):
     device = "cuda:0" if torch.cuda.is_available() else "cpu"
     
     loss_type = args.loss_type
-    # normalize = args.normalize
     scale_type =  args.scale_type
     num_epochs = args.num_epochs # original 1
 
