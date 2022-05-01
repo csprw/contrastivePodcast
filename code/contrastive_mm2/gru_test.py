@@ -547,16 +547,16 @@ class Optimization:
         self.batch_size = fullCFG.batch_size
         self.device = fullCFG.device
 
-        self.total_len = 100
+        self.total_len = 1
 
         self.loss1 = nn.CrossEntropyLoss()
         self.loss2 = nn.CrossEntropyLoss()
 
     def train_epoch(self, epoch, train_loader, val_loader):
         self.model.train()
-        iterator = iter(train_loader)
 
         # Fixed length training:
+        # iterator = iter(train_loader)
         # for step in range(self.total_len):
         #     batch = next(iterator)
 

@@ -252,9 +252,9 @@ if __name__ == "__main__":
 
 
     for idx, outer_folder in enumerate(outer_folders):
-        # if idx < 2081:
-        #     last_output_folder = outer_folders[idx+1]
-        #     continue
+        if idx < 41541:
+            last_output_folder = outer_folders[idx+1]
+            continue
         filename = os.path.split(e_filenames[idx])[-1].split('.')[0]
         if outer_folder != last_output_folder:
             
