@@ -547,7 +547,7 @@ class Optimization:
         self.batch_size = fullCFG.batch_size
         self.device = fullCFG.device
 
-        self.total_len = 1
+        self.total_len = 100
 
         self.loss1 = nn.CrossEntropyLoss()
         self.loss2 = nn.CrossEntropyLoss()
@@ -596,12 +596,12 @@ class Optimization:
         with torch.no_grad():
 
             # fixed number of steps
-            # iterator = iter(val_loader)
-            # for step in range(self.total_len):
-            #     batch = next(iterator)
+            iterator = iter(val_loader)
+            for step in range(self.total_len):
+                batch = next(iterator)
 
             # full learning
-            for step, batch in enumerate(iter(val_loader)):
+            # for step, batch in enumerate(iter(val_loader)):
 
                 #padded_audio_embeds, lengths, text_embeds  = batch
                 loss, metrics = self.model(batch)
@@ -749,8 +749,8 @@ def main(args):
     data_loader.test_dataset.max_length = FullCfg.max_length
 
     warmup_steps =  math.ceil(len(train_loader) * num_epochs * 0.1)  # 10% of train data for warm-up
-    FullCfg.eval_every = int(len(train_loader) * 0.1) #Evaluate every 10% of the data
-    FullCfg.print_every = int(math.ceil(len(train_loader) * 0.10)) #Print results every 5% of the data
+    FullCfg.eval_every = int(math.ceil(len(train_loader)) * 0.1) #Evaluate every 10% of the data
+    FullCfg.print_every = int(math.ceil(len(train_loader) * 0.010)) #Print results every 1% of the data
     print("[main] print_every {} eval_every {} ".format(FullCfg.print_every, FullCfg.eval_every))
 
     if args.load_model: 
