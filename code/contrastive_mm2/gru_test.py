@@ -149,10 +149,10 @@ class MMloader(object):
             test_samples = sts_dataset.test_samples
         elif test_dataset_name == "sp_sample":
             test_dataset = self.get_sp_dataset(directory=conf.sp_sample_path,  traintest="test", load_full=self.load_full, device=self.device)
-            self.test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True, drop_last=True, **kwargs) 
+            self.test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, drop_last=True, **kwargs) 
         elif test_dataset_name == "sp":
             test_dataset = self.get_sp_dataset(directory=conf.sp_path,  traintest="test",  load_full=self.load_full, device=self.device)
-            self.test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True, drop_last=True, **kwargs)
+            self.test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, drop_last=True, **kwargs)
         else:
             raise Exception('Unknown dataset')
         self.test_dataset = test_dataset
@@ -562,7 +562,7 @@ class Optimization:
 
         # Full training
         for step, batch in enumerate(iter(train_loader)):
-            if (step * self.batch_size) % self.eval_every == 0:
+            if step % self.eval_every == 0:
                 mean_loss, metrics = self.evaluate(val_loader)
                 self.add_logging(epoch, step, mean_loss, metrics, train=False)
                 
@@ -582,7 +582,7 @@ class Optimization:
             self.optimizer.step()
             self.lr_scheduler.step(loss)
 
-            if (step * self.batch_size) % self.print_every == 0:
+            if step % self.print_every == 0:
                 print("[train] Epoch {} Step {} \t loss {} \t acc {}".format(epoch, step, loss.item(), metrics['mean_acc']))
                 self.add_logging(epoch, step, loss.item(), metrics, train=True)
                 
@@ -749,8 +749,10 @@ def main(args):
     data_loader.test_dataset.max_length = FullCfg.max_length
 
     warmup_steps =  math.ceil(len(train_loader) * num_epochs * 0.1)  # 10% of train data for warm-up
-    FullCfg.eval_every = int(math.ceil(len(train_loader)) * 0.1) #Evaluate every 10% of the data
-    FullCfg.print_every = int(math.ceil(len(train_loader) * 0.010)) #Print results every 1% of the data
+
+    batch_steps = int((len(train_loader) / FullCfg.batch_size))
+    FullCfg.eval_every = int(math.ceil(batch_steps * 0.1)) #Evaluate every 10% of the data
+    FullCfg.print_every = int(math.ceil(batch_steps * 0.01)) #Print results every 1% of the data
     print("[main] print_every {} eval_every {} ".format(FullCfg.print_every, FullCfg.eval_every))
 
     if args.load_model: 
