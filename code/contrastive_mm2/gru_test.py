@@ -603,7 +603,7 @@ class Optimization:
         self.batch_size = fullCFG.batch_size
         self.device = fullCFG.device
 
-        self.total_len = 10000
+        self.total_len = 1000
         # self.total_len = 1
 
         self.loss1 = nn.CrossEntropyLoss()
