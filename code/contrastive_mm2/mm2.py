@@ -155,6 +155,8 @@ class MMloader(object):
         train_batch_size = args.train_batch_size
         self.train_batch_size = train_batch_size
 
+        self.device = None # useless line, delete
+
         if args.proj_head == 'simple_gru':
             self.load_full = True
         else:
@@ -167,10 +169,10 @@ class MMloader(object):
             train_dataset = self.get_wiki_dataset()
             self.train_loader = DataLoader(train_dataset, batch_size=train_batch_size, shuffle=True, drop_last=True, **kwargs)
         elif train_dataset_name == "sp_sample":
-            train_dataset = self.get_sp_sample_dataset(train_set=True, directory=conf.sp_sample_path, load_full=self.load_full)
-            self.train_loader = DataLoader(train_dataset, batch_size=train_batch_size, shuffle=True, drop_last=True, **kwargs)
+            train_dataset = self.get_sp_dataset(directory=conf.sp_sample_path, traintest="train", load_full=self.load_full, device=self.device)
+            self.train_loader = DataLoader(train_dataset, batch_size=train_batch_size, shuffle=False, drop_last=True, **kwargs)
         elif train_dataset_name == "sp":
-            train_dataset = self.get_sp_sample_dataset(train_set=True, directory=conf.sp_path, load_full=self.load_full)
+            train_dataset = self.get_sp_dataset(directory=conf.sp_path,  traintest="train", load_full=self.load_full, device=self.device)
             self.train_loader = DataLoader(train_dataset, batch_size=train_batch_size, shuffle=True, drop_last=True, **kwargs)
         else:
             raise Exception('Unknown dataset')
@@ -191,11 +193,14 @@ class MMloader(object):
             test_samples = sts_dataset.test_samples
             #self.test_evaluator = EmbeddingSimilarityEvaluator.from_input_examples(test_samples, batch_size=train_batch_size, name='sts-test')
         elif test_dataset_name == "sp_sample":
-            test_dataset = self.get_sp_sample_dataset(train_set=False, directory=conf.sp_sample_path, load_full=self.load_full)
-            self.test_loader = DataLoader(test_dataset, batch_size=train_batch_size, shuffle=True, drop_last=True, **kwargs)
+            # test_dataset = self.get_sp_sample_dataset(train_set=False, directory=conf.sp_sample_path, load_full=self.load_full)
+            test_dataset = self.get_sp_dataset(directory=conf.sp_sample_path,  traintest="test", load_full=self.load_full, device=self.device)
+            self.test_loader = DataLoader(test_dataset, batch_size=train_batch_size, shuffle=False, drop_last=True, **kwargs)
         elif test_dataset_name == "sp":
-            test_dataset = self.get_sp_sample_dataset(train_set=False, directory=conf.sp_path, load_full=self.load_full)
-            self.test_loader = DataLoader(test_dataset, batch_size=train_batch_size, shuffle=True, drop_last=True, **kwargs)
+            # test_dataset = self.get_sp_sample_dataset(train_set=False, directory=conf.sp_path, load_full=self.load_full)
+            test_dataset = self.get_sp_dataset(directory=conf.sp_path,  traintest="test",  load_full=self.load_full, device=self.device)
+
+            self.test_loader = DataLoader(test_dataset, batch_size=train_batch_size, shuffle=False, drop_last=True, **kwargs)
 
             # self.test_evaluator = EmbeddingMatrixEvaluator.EmbeddingMatrixEvaluator.from_input_dataloader(test_loader, batch_size=train_batch_size, name='sp-test')
 
@@ -214,8 +219,12 @@ class MMloader(object):
         dataset = stsDataset()
         return dataset
 
-    def get_sp_sample_dataset(self, train_set=True, directory=conf.sp_sample_path, load_full=False):
-        dataset =  spDataset(train_set=train_set, directory=directory, load_full=load_full)
+    # def get_sp_sample_dataset(self, train_set=True, directory=conf.sp_sample_path, load_full=False):
+    #     dataset =  spDatasetNoMemory(train_set=train_set, directory=directory, load_full=load_full)
+    #     return dataset
+
+    def get_sp_dataset(self, directory=conf.sp_sample_path, traintest="train", load_full=False, device=None):
+        dataset =  spDatasetNoMemory(directory=directory, traintest=traintest,  load_full=load_full, device=device)
         return dataset
 
 class wikiDataset(datautil.Dataset):
@@ -290,40 +299,7 @@ class stsDataset(datautil.Dataset):
         print("getitem for sts?")
         raise NotImplementedError
 
-# class spDataset_old(datautil.Dataset):
-#     """
-#     Spotify Podcast dataset dataloader. 
-#     """
-#     def __init__(self, train_set=True, directory=conf.sp_sample_path, load_full=False):
-#         print("[spDataset] init from directory ", directory)
-
-#         f = h5py.File(directory, 'r')
-
-#         samples = []
-#         for idx, (_, train_split, sent, mean_embeds) in enumerate((zip(f['filenames'], f['train_split'], f['sentences'], f['mean_embeddings']))):
-            
-#             if idx % 5000 == 0 and idx > 0:
-#                 print("[spdataset] loaded ", idx)
-#             if train_split == train_set:
-#                 if load_full:
-#                     full_embeds = torch.Tensor(np.array(f[str(idx)]))
-#                     samples.append(InputExample(texts=[sent.decode("utf-8")], mean_embeds=None, full_embeds=[full_embeds]))
-#                 else:
-#                     samples.append(InputExample(texts=[sent.decode("utf-8")], mean_embeds=[torch.Tensor(mean_embeds)], full_embeds=None))
-        
-#         self.samples = samples
-#         self.max_embed_dim = f.attrs['max_embed_dim']
-#         f.close()
-#     def __len__(self):
-#         """ Denotes the total number of utterances """
-#         return len(self.samples)
-#     def __getitem__(self, index):
-#         """ Return one item from the df """
-#         sample = self.samples[index]
-#         return sample
-
-
-class spDataset(datautil.Dataset):
+class spDataset_old(datautil.Dataset):
     """
     Spotify Podcast dataset dataloader. 
     """
@@ -361,6 +337,81 @@ class spDataset(datautil.Dataset):
         """ Return one item from the df """
         sample = self.samples[index]
         return sample
+
+class spDatasetNoMemory(datautil.Dataset):
+    """
+    Spotify Podcast dataset dataloader. 
+    """
+    def __init__(self,  directory=conf.sp_sample_path, traintest="train", load_full=False, device=None):
+        print("[spDataset] init from directory ", directory, traintest)
+        directory = os.path.join(directory, traintest)
+        h5py_files = list(Path(directory).glob('*.h5'))
+        print("[spDataset] found {} h5py files".format(len(h5py_files)))
+        self.max_embed_dim = 0
+        self.device = device
+        idx2file = {}
+        self.h5py_idx2file = h5py_files
+        sample_idx = 0
+
+        self.load_full = load_full
+
+        for h5idx, h5py_file in enumerate(h5py_files):    
+            f = h5py.File(h5py_file, 'r')
+
+            for sentidx in range(len(f['sentences'])):
+                idx2file[sample_idx] = (h5idx, sentidx)
+                sample_idx += 1
+ 
+            self.max_embed_dim = max(self.max_embed_dim, f.attrs['max_embed_dim'])
+            f.close()
+            if h5idx % 10 == 0 and h5idx > 0:
+                print("[spdataset] loaded {}/{}".format(h5idx, len(h5py_files)))
+        self.idx2file = idx2file
+
+        # if self.load_full:
+        #     self.collate_fn = self.full_batching_collate
+        # else:
+        #     self.collate_fn = self.mean_batching_collate
+
+    def __len__(self):
+        """ Denotes the total number of utterances """
+        return len(self.idx2file.keys())
+
+    def __getitem__(self, index):
+        """ Return one item from the df """
+
+        # if load_full:
+        #                 full_embeds = torch.Tensor(np.array(f[str(idx)]))
+        #                 samples.append(InputExample(texts=[sent.decode("utf-8")], mean_embeds=None, full_embeds=[full_embeds]))
+        #             else:
+        #                 samples.append(InputExample(texts=[sent.decode("utf-8")], mean_embeds=[torch.Tensor(mean_embeds)], full_embeds=None))
+
+        if self.load_full:
+            h5py_idx, sent_idx = self.idx2file[index]
+            h5py_file = self.h5py_idx2file[h5py_idx]
+
+            f = h5py.File(h5py_file, 'r')
+            sent = f['sentences'][sent_idx].decode("utf-8")
+            full_embeds = torch.Tensor(np.array(f[str(sent_idx)]))
+            # sample = (sent, full_embeds)
+            sample = InputExample(texts=[sent], mean_embeds=None, full_embeds=[full_embeds])
+            f.close()
+
+        
+        else:
+            h5py_idx, sent_idx = self.idx2file[index]
+            h5py_file = self.h5py_idx2file[h5py_idx]
+
+            f = h5py.File(h5py_file, 'r')
+
+            sent = f['sentences'][sent_idx].decode("utf-8")
+            mean_embeds = torch.Tensor(f['mean_embeddings'][sent_idx])
+            # sample = (sent, mean_embeds)
+            sample = InputExample(texts=[sent], mean_embeds=mean_embeds, full_embeds=None)
+            f.close()
+            
+        return sample
+
 
 ######################################################
 # MODULES
@@ -528,7 +579,13 @@ class Pooling(nn.Module):
         super(Pooling, self).__init__()
 
         self.config_keys = ['word_embedding_dimension',  'pooling_mode_cls_token', 'pooling_mode_mean_tokens', 'pooling_mode_max_tokens', 'pooling_mode_mean_sqrt_len_tokens']
+        print("pooling mode: ", pooling_mode)
+        print(pooling_mode_cls_token)
+        print(pooling_mode_max_tokens)
+        print(pooling_mode_mean_tokens)
+        print(pooling_mode_mean_sqrt_len_tokens)
 
+        exit(1)
         if pooling_mode is not None:        #Set pooling mode by string
             pooling_mode = pooling_mode.lower()
             assert pooling_mode in ['mean', 'max', 'cls']
@@ -706,6 +763,8 @@ class textModule(nn.Module):
 
         output_states = self.auto_model(**trans_features, return_dict=False)
         
+        print("[del] output_states :", output_states)
+        
         # Original was like this
         output_tokens = output_states[0]
         features.update({'token_embeddings': output_tokens, 'attention_mask': features['attention_mask']})
@@ -720,22 +779,23 @@ class textModule(nn.Module):
         Tokenizes a text and maps tokens to token-ids
         """
         output = {}
-        if isinstance(texts[0], str):
-            to_tokenize = [texts]
-        elif isinstance(texts[0], dict):
-            to_tokenize = []
-            output['text_keys'] = []
-            for lookup in texts:
-                text_key, text = next(iter(lookup.items()))
-                to_tokenize.append(text)
-                output['text_keys'].append(text_key)
-            to_tokenize = [to_tokenize]
-        else:
-            batch1, batch2 = [], []
-            for text_tuple in texts:
-                batch1.append(text_tuple[0])
-                batch2.append(text_tuple[1])
-            to_tokenize = [batch1, batch2]
+        to_tokenize = [texts]
+        # if isinstance(texts[0], str):
+        #     to_tokenize = [texts]
+        # elif isinstance(texts[0], dict):
+        #     to_tokenize = []
+        #     output['text_keys'] = []
+        #     for lookup in texts:
+        #         text_key, text = next(iter(lookup.items()))
+        #         to_tokenize.append(text)
+        #         output['text_keys'].append(text_key)
+        #     to_tokenize = [to_tokenize]
+        # else:
+        #     batch1, batch2 = [], []
+        #     for text_tuple in texts:
+        #         batch1.append(text_tuple[0])
+        #         batch2.append(text_tuple[1])
+        #     to_tokenize = [batch1, batch2]
 
         #strip
         to_tokenize = [[str(s).strip() for s in col] for col in to_tokenize]
@@ -883,8 +943,8 @@ class mmModule(nn.Module):
         mean_embeds = []
 
         for example in batch:
-            texts.extend(example.texts)
-            mean_embeds.extend(example.mean_embeds)
+            texts.append(example.texts)
+            mean_embeds.append(example.mean_embeds)
 
         # Send audio features to target devce
         audio_features = torch.stack(mean_embeds).to(self._target_device)
@@ -896,6 +956,7 @@ class mmModule(nn.Module):
             if isinstance(tokenized[key], torch.Tensor):
                 tokenized[key] = tokenized[key].to(self._target_device)
         sentence_features.append(tokenized)
+
         return sentence_features, audio_features, None
 
     def full_batching_collate(self, batch):
@@ -1029,6 +1090,7 @@ class mmModule(nn.Module):
 
                 if new_train_index > 0 and training_steps % loss_freq == 0:
                     mean_loss = running_loss / loss_freq
+                    # print("\t\t\t[del] mean loss: ", mean_loss)
                     self.add_train_logging(epoch, training_steps, mean_loss, metrics)
                     losses.append(mean_loss)
                     to_plot(self.train_csv_filename, column='loss', title="Train loss")
@@ -1048,13 +1110,19 @@ class mmModule(nn.Module):
                 #     with torch.no_grad():
                 #         loss_model.logit_scale.data.clamp_(-np.log(100), np.log(100))
 
+
                 if new_train_index > 0 and new_train_index % evaluation_steps == 0:
                     # self._eval_during_training(evaluator, output_path, save_best_model, epoch, training_steps, callback) #TODO: add sts
                     self.perform_matrix_evaluation(loss_model, epoch, training_steps)
                     loss_model.zero_grad()
                     loss_model.train()
                     to_plot(self.eval_csv_filename, column='mean_acc', title="Test accuracy (mean)")
-            
+
+                # [del] check on one batch
+                # print("[metrics] ", loss_value.item(), metrics['mean_acc'])
+                # if new_train_index >= 0:
+                #     print("[del] break")
+                #     break            
             # Plot loss and accuracy curves
             
             
@@ -1160,6 +1228,8 @@ class mmModule(nn.Module):
                         #metrics_sum = {k: metrics_sum.get(k, 0) + metrics.get(k, 0) for k in set(metrics_sum)}
                         met_sum.update(Counter(metrics))
 
+                    print("\t\t\t[del] loss: ", loss_value.item())
+
         mean_metrics = {k: value / total_len  for k, value in met_sum.items()}
         return mean_metrics
 
@@ -1208,7 +1278,7 @@ class multimodal_loss(nn.Module):
         # Get Audio representations
         reps_audio = self.audio_model((audio_features, seq_len))
 
-        # ['simcse_loss', 'clip_loss', 'clip_loss_simple'] del
+        # ['simcse_loss', 'clip_loss', 'clip_loss_simple'] 
         if self.loss_type == 'clip_loss':
             # Loss function from CLIP paper
             if self.scale_type == 'fixed':
@@ -1401,7 +1471,7 @@ def main(args):
 
     train_loss = multimodal_loss(full_model, scale=args.scale, device=device, loss_type=loss_type, normalize=normalize, scale_type=scale_type)
     warmup_steps =  math.ceil(len(train_dataloader) * num_epochs * 0.1)  # 10% of train data for warm-up
-    evaluation_steps = int(len(train_dataloader) * 0.1) #Evaluate every 10% of the data
+    evaluation_steps = int(math.ceil(len(train_dataloader) * 0.1)) #Evaluate every 10% of the data
 
     full_model.fit(
         train_dataloader=train_dataloader,
@@ -1444,6 +1514,13 @@ def main(args):
     print("[main] Done, total duration {} seconds ".format(int(t_end - t_start)))
 
 if __name__ == "__main__":
+
+    # del
+    # test= torch.Tensor([0.1, 0.1, 0.1, 0.1]).reshape(-1,1)
+    # # mean_embeds = torch.Tensor(f['mean_embeddings'][sent_idx])
+    # print("test :", test.shape)
+    # exit(1)
+
     # Parse flags in command line arguments
     parser = ArgumentParser()
 

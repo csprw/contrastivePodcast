@@ -3,6 +3,7 @@ Contrastive multimodal learning
 Author: Casper Wortmann
 Usage: python main.py
 """
+from email.mime import audio
 import logging
 from argparse import ArgumentParser
 import itertools 
@@ -38,19 +39,15 @@ from transformers import get_constant_schedule, get_constant_schedule_with_warmu
 
 from transformers import DistilBertModel, DistilBertConfig, DistilBertTokenizer
 
-# from transformers import AdamW 
-# import torch.nn as nn, Tensor 
 from torch import nn, Tensor
 from torch.optim import Optimizer
 import torch.nn.functional as F
 from torch.nn.utils.rnn import pad_sequence, pad_packed_sequence, pack_padded_sequence
 
-# Load all static config stuff
+# Load static configuration variables. 
 conf = OmegaConf.load("./config.yaml")
 print("[cudacheck] Is cuda available? ", torch.cuda.is_available())
-
-
-
+# exit(1)
 ################################################################################
 # move to Utils
 def set_seed(args):
@@ -63,10 +60,9 @@ def set_logconfig():
             datefmt='%Y-%m-%d %H:%M:%S',
             level=logging.INFO)
 
-def get_log_name(args):
-
-    log_name = "v2-{}_{}_{}_{}_{}".format(args.loss_type, args.proj_head, 
-            args.audio_activation, args.final_projection_dim, 
+def get_log_name(args, dataclasses):
+    log_name = "v2-{}_{}_{}_{}_{}_{}".format(args.loss_type, args.audio_proj_head, 
+            args.audio_activation, args.final_projection_dim, dataclasses[0].head_lr,
             datetime.now().strftime("%Y-%m-%d_%H-%M-%S"))
     log_name = os.path.join(args.log_dir, log_name)
     return log_name
@@ -74,7 +70,7 @@ def get_log_name(args):
 def setup_config(args, dataclasses):
     # Set the seed and create output directories
     set_seed(args)
-    log_name = get_log_name(args)
+    log_name = get_log_name(args, dataclasses)
     os.makedirs(log_name, exist_ok=True)
 
     # Create a configuration file
@@ -112,7 +108,7 @@ class MMloader(object):
         self.batch_size = batch_size
         self.device = CFG.device
 
-        if args.proj_head in ['gru', 'rnn']:
+        if args.audio_proj_head in ['gru', 'rnn']:
             self.load_full = True
         else:
             self.load_full = False
@@ -125,7 +121,7 @@ class MMloader(object):
             self.train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, drop_last=True, **kwargs)
         elif train_dataset_name == "sp_sample":
             train_dataset = self.get_sp_dataset(directory=conf.sp_sample_path, traintest="train", load_full=self.load_full, device=self.device)
-            self.train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, drop_last=True, **kwargs)  ### TODO: SHUFFLE=TRUE [DEL]
+            self.train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=False, drop_last=True, **kwargs)  ### TODO: SHUFFLE=TRUE [DEL]
         elif train_dataset_name == "sp":
             train_dataset = self.get_sp_dataset(directory=conf.sp_path,  traintest="train", load_full=self.load_full, device=self.device)
             self.train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, drop_last=True, **kwargs)
@@ -136,14 +132,6 @@ class MMloader(object):
         self.train_loader.collate_fn = self.train_dataset.collate_fn
         print("[MMloader] train dataset loaded, length: ", len(self.train_dataset))
 
-        # if dev_dataset_name == "sts":
-        #     sts_dataset = self.get_sts_dataset()
-        #     dev_samples = sts_dataset.dev_samples
-        #     #self.dev_evaluator = EmbeddingSimilarityEvaluator.from_input_examples(dev_samples, batch_size=train_batch_size, name='sts-dev')
-        # else:
-        #     raise Exception('Unknown dataset')
-        # print("[MMloader] dev dataset loaded, length: ", len(dev_samples))
-
         if test_dataset_name == "sts":
             sts_dataset = self.get_sts_dataset()
             test_samples = sts_dataset.test_samples
@@ -152,7 +140,7 @@ class MMloader(object):
             self.test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, drop_last=True, **kwargs) 
         elif test_dataset_name == "sp":
             test_dataset = self.get_sp_dataset(directory=conf.sp_path,  traintest="test",  load_full=self.load_full, device=self.device)
-            self.test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, drop_last=True, **kwargs)
+            self.test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True, drop_last=True, **kwargs)
         else:
             raise Exception('Unknown dataset')
         self.test_dataset = test_dataset
@@ -173,7 +161,6 @@ class spDatasetNoMemory(datautil.Dataset):
         h5py_files = list(Path(directory).glob('*.h5'))
         print("[spDataset] found {} h5py files".format(len(h5py_files)))
         self.max_embed_dim = 0
-        counter = 0
         self.device = device
         idx2file = {}
         self.h5py_idx2file = h5py_files
@@ -284,11 +271,43 @@ class TextEncoder(nn.Module):
         # we are using the CLS token hidden representation as the sentence's embedding
         self.target_token_idx = 0
 
+        self.pooling = CFG.text_pooling
+        print("[del] Pooling used: ", self.pooling)
+
     def forward(self, input_ids, attention_mask):
-        # print("[textencoder] Forward input: ", input_ids, attention_mask)
-        output = self.model(input_ids=input_ids, attention_mask=attention_mask)
-        last_hidden_state = output.last_hidden_state
-        return last_hidden_state[:, self.target_token_idx, :]
+        ######### LEAVE FOR DEBUG
+        if self.pooling == 'original':
+            # This is what it was OG
+            output = self.model(input_ids=input_ids, attention_mask=attention_mask)
+            last_hidden_state = output.last_hidden_state
+            return last_hidden_state[:, self.target_token_idx, :]
+
+
+        elif self.pooling == 'cls':
+            # This is same as mm2
+            output = self.model(input_ids=input_ids, attention_mask=attention_mask)
+            output_tokens = output[0]
+            # features.update({'token_embeddings': output_tokens, 'attention_mask': features['attention_mask']}) # dit heb ik dus al
+            cls_token = output_tokens[:, 0]  # Take first token by default
+            return cls_token
+
+        elif self.pooling == 'mean':
+            #print("[mean] pooling")
+            # This is same as mm2
+            output = self.model(input_ids=input_ids, attention_mask=attention_mask)
+            output_tokens = output[0]
+
+            input_mask_expanded = attention_mask.unsqueeze(-1).expand(output_tokens.size()).float()
+            sum_embeddings = torch.sum(output_tokens * input_mask_expanded, 1)
+
+            sum_mask = input_mask_expanded.sum(1)
+            sum_mask = torch.clamp(sum_mask, min=1e-9)
+            pooled_output = sum_embeddings / sum_mask
+
+            return pooled_output
+        
+
+        
 
 ################################################################################
 # Audiomodules
@@ -299,7 +318,7 @@ class SequentialAudioModel(nn.Module):
         self.hidden_dim = CFG.audio_hidden_dim
         self.layer_dim = CFG.layer_dim
         self.device = CFG.device
-        self.audio_model = CFG.proj_head
+        self.audio_model = CFG.audio_proj_head
 
         # RNN layers
         if self.audio_model == 'rnn':
@@ -422,36 +441,48 @@ class CLIPModel(nn.Module):
         self.batch_size = CFG.batch_size
         self.device = CFG.device
 
-        self.loss_type = FullCfg.loss_type
+        self.loss_type = CFG.loss_type
 
-        if CFG.proj_head in ['rnn', 'gru']:
+        if CFG.audio_proj_head in ['rnn', 'gru']:
             self.audio_encoder = SequentialAudioModel(CFG)
             self.audio_projection = ProjectionHead(CFG)
         else: 
             self.audio_encoder = simple_ProjectionHead(CFG)
             self.audio_projection = None
 
-        self.text_encoder = TextEncoder(CFG)
-        
-        self.text_projection = ProjectionHead(CFG)
+        # TODO: TEXT PROJECTION EENS UITZETTEN
+        if CFG.text_proj_head == 'simple_projection_head':
+            print("[del] using text proj head!")
+            self.text_encoder = TextEncoder(CFG)
+            self.text_projection = ProjectionHead(CFG)
+        elif CFG.text_proj_head == 'None':
+            print("[del] No text proj head")
+            self.text_encoder = TextEncoder(CFG)
+            self.text_projection = None
+
         self.temperature = temperature
 
         if self.loss_type == 'clip_loss_simple':
             self.loss1 = nn.CrossEntropyLoss()
             self.loss2 = nn.CrossEntropyLoss()
+
+        if self.loss_type == 'simcse_loss':
+            self.fixed_scale = 20.0
+            self.similarity_func = dek_cos_sim
+            self.cross_entropy_loss = nn.CrossEntropyLoss()
         
     def forward(self, batch):
         audio_embeddings, lengths, text_embeds  = batch
 
         # Getting Audio and Text Features
-        
         audio_embeddings = self.audio_encoder(audio_embeddings, lengths)
-        text_features = self.text_encoder(input_ids=text_embeds["input_ids"], attention_mask=text_embeds["attention_mask"])
+        text_embeddings = self.text_encoder(input_ids=text_embeds["input_ids"], attention_mask=text_embeds["attention_mask"])
 
         # Getting Audio and Text Embeddings (with same dimension)
         if self.audio_projection:
             audio_embeddings = self.audio_projection(audio_embeddings)
-        text_embeddings = self.text_projection(text_features)
+        if self.text_projection:
+            text_embeddings = self.text_projection(text_embeddings)
 
         # Calculating the Loss
 
@@ -478,10 +509,37 @@ class CLIPModel(nn.Module):
             text_logits = audio_logits.t()
 
             loss = (self.loss1(audio_logits, labels) + self.loss2(text_logits, labels))/2
-            metrics = get_metrics(audio_logits.detach(), text_logits.t().detach(), labels)
+            metrics = get_metrics(audio_logits.detach(), text_logits.detach(), labels)
 
+        elif self.loss_type == 'simcse_loss':
+            scores = self.similarity_func(text_embeddings, audio_embeddings) * self.fixed_scale
+            labels = torch.tensor(range(len(scores)), dtype=torch.long, device=scores.device)  # Example a[i] should match with b[i]
+
+            loss = self.cross_entropy_loss(scores, labels)
+            metrics = get_metrics(scores.detach(), scores.detach(), labels)
 
         return loss.mean(), metrics
+
+def dek_cos_sim(a: Tensor, b: Tensor):
+    """
+    Computes the cosine similarity cos_sim(a[i], b[j]) for all i and j.
+    :return: Matrix with res[i][j]  = cos_sim(a[i], b[j])
+    """
+    if not isinstance(a, torch.Tensor):
+        a = torch.tensor(a)
+
+    if not isinstance(b, torch.Tensor):
+        b = torch.tensor(b)
+
+    if len(a.shape) == 1:
+        a = a.unsqueeze(0)
+
+    if len(b.shape) == 1:
+        b = b.unsqueeze(0)
+
+    a_norm = torch.nn.functional.normalize(a, p=2, dim=1)
+    b_norm = torch.nn.functional.normalize(b, p=2, dim=1)
+    return torch.mm(a_norm, b_norm.transpose(0, 1))
 
 
 def get_metrics(audio_logits, text_logits, ground_truth):
@@ -531,8 +589,6 @@ def to_plot(filename, column='accuracy2', title="Test accuracy"):
     plt.savefig(output_name)
     plt.close()
 
-
-
 class Optimization:
     def __init__(self, fullCFG, model, optimizer, lr_scheduler):
         self.model = model
@@ -547,7 +603,8 @@ class Optimization:
         self.batch_size = fullCFG.batch_size
         self.device = fullCFG.device
 
-        self.total_len = 100
+        self.total_len = 6
+        # self.total_len = 1
 
         self.loss1 = nn.CrossEntropyLoss()
         self.loss2 = nn.CrossEntropyLoss()
@@ -555,6 +612,8 @@ class Optimization:
     def train_epoch(self, epoch, train_loader, val_loader):
         self.model.train()
         steps = len(train_loader)
+        total_steps = epoch * steps
+        t1 = time()
 
         # Fixed length training:
         # iterator = iter(train_loader)
@@ -565,9 +624,9 @@ class Optimization:
         for step, batch in enumerate(iter(train_loader)):
             if step % self.eval_every == 0:
                 mean_loss, metrics = self.evaluate(val_loader)
-                self.add_logging(epoch, step, mean_loss, metrics, train=False)
+                self.add_logging(epoch, total_steps, mean_loss, metrics, train=False)
                 
-                print("[eval] Epoch {} Step {}/{} \t loss {} \t acc {}".format(epoch, step, steps, mean_loss, metrics['mean_acc']))
+                print("[eval] Epoch {} Step {}/{} \t loss {} \t acc {}".format(epoch, total_steps, steps, mean_loss, metrics['mean_acc']))
                 if mean_loss < self.best_loss:
                     print("[eval] better model found")
                     self.best_loss = mean_loss 
@@ -575,6 +634,9 @@ class Optimization:
                         self.save_model()
                     elif args.save_checkpoint:
                         self.save_checkpoint(epoch)
+
+                if step > self.print_every:
+                    self.output_all_plots()
 
             #padded_audio_embeds, lengths, text_embeds  = batch
             loss, metrics = self.model(batch)
@@ -584,27 +646,30 @@ class Optimization:
             self.lr_scheduler.step(loss)
 
             if step % self.print_every == 0:
-                print("[train] Epoch {} Step {}/{} \t loss {} \t acc {}".format(epoch, step, steps, loss.item(), metrics['mean_acc']))
-                self.add_logging(epoch, step, loss.item(), metrics, train=True)
+                print("[train] Epoch {} Step {}/{} \t loss {} \t acc {}".format(epoch, total_steps, steps, loss.item(), metrics['mean_acc']))
+                self.add_logging(epoch, total_steps, loss.item(), metrics, train=True)
+            
+            total_steps += 1
                 
         self.output_all_plots()
+        t2 = time()
+        print("[train] epoch duration {} seconds".format(int(t2-t1)))
         return metrics
 
     def evaluate(self, val_loader):
         self.model.eval()
         losses = []
-    
+        validation_len = len(val_loader)
         with torch.no_grad():
 
             # fixed number of steps
-            iterator = iter(val_loader)
-            for step in range(self.total_len):
-                batch = next(iterator)
+            # iterator = iter(val_loader)
+            # for step in range(self.total_len):
+            #     batch = next(iterator)
 
             # full learning
-            # for step, batch in enumerate(iter(val_loader)):
-
-                #padded_audio_embeds, lengths, text_embeds  = batch
+            for step, batch in enumerate(iter(val_loader)):
+                # padded_audio_embeds, lengths, text_embeds  = batch
                 loss, metrics = self.model(batch)
                 losses.append(loss.item())
                 if step == 0:
@@ -612,8 +677,9 @@ class Optimization:
                 else:
                     #metrics_sum = {k: metrics_sum.get(k, 0) + metrics.get(k, 0) for k in set(metrics_sum)}
                     met_sum.update(Counter(metrics))
+                # print("\t\t\t[del] loss: ", loss.item())
 
-        mean_metrics = {k: value / self.total_len  for k, value in met_sum.items()}
+        mean_metrics = {k: value / validation_len  for k, value in met_sum.items()}
         mean_loss = np.mean(losses)
         self.model.train()
         return mean_loss, mean_metrics
@@ -623,7 +689,8 @@ class Optimization:
         self.model.text_encoder.to(self.device)
         if self.model.audio_projection:
             self.model.audio_projection.to(self.device)
-        self.model.text_projection.to(self.device)
+        if self.model.text_projection:
+            self.model.text_projection.to(self.device)
 
         for epoch in range(startepoch, FullCfg.epochs):
             self.train_epoch(epoch, train_loader, val_loader)
@@ -666,12 +733,10 @@ class Optimization:
             writer.writerow([epoch, total_step, loss] + metric_vals)
 
     def save_model(self):
-        print("[save_model]")
         output_dir = os.path.join(self.model_save_path, 'full_model_weights.pth')
         torch.save(self.model.state_dict(), output_dir)
 
     def save_checkpoint(self, epoch):
-        print("[save_checkpoint]")
         checkpoint = { 
             'epoch': epoch,
             'full_model': self.model,
@@ -683,6 +748,8 @@ class Optimization:
 
 @dataclass
 class FullCfg:
+    batch_size: int
+    loss_type: str
     debug = False
     head_lr = 1e-3
     audio_encoder_lr = 1e-4
@@ -690,7 +757,7 @@ class FullCfg:
     weight_decay = 1e-3
     patience = 1
     factor = 0.8
-    epochs = 40
+    epochs = 32
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     audio_encoder_input = 1024
@@ -711,6 +778,8 @@ class FullCfg:
     # final_projection_dim = 768  # [256 or 768]
     audio_dropout = 0.1
     text_dropout = 0.1
+    text_pooling: str = 'mean'   #['original', 'cls', 'mean']
+    
 
 ######### This stays in MAIN
 def main(args):
@@ -726,12 +795,20 @@ def main(args):
     num_epochs = args.num_epochs # original 1
 
     # Adjust configurations
+    FullCfg.num_epochs = args.num_epochs
     FullCfg.final_projection_dim = args.final_projection_dim
-    FullCfg.proj_head = args.proj_head
+    FullCfg.audio_proj_head = args.audio_proj_head
+    FullCfg.text_proj_head = args.text_proj_head
     FullCfg.audio_activation = args.audio_activation
     FullCfg.device = device
     FullCfg.batch_size = args.batch_size
     FullCfg.loss_type = args.loss_type
+    FullCfg.text_pooling = args.text_pooling
+
+    if args.use_lr:
+        FullCfg.head_lr = 2e-5
+        FullCfg.audio_encoder_lr = 2e-5
+        FullCfg.text_encoder_lr = 2e-5
     log_name = setup_config(args, [FullCfg])
     FullCfg.log_name = log_name
 
@@ -752,7 +829,7 @@ def main(args):
     warmup_steps =  math.ceil(len(train_loader) * num_epochs * 0.1)  # 10% of train data for warm-up
 
     FullCfg.eval_every = int(math.ceil(len(train_loader) * 0.1)) #Evaluate every 10% of the data
-    FullCfg.print_every = int(math.ceil(len(train_loader) * 0.001)) #Print results every 0.1% of the data
+    FullCfg.print_every = int(math.ceil(len(train_loader) * 0.1)) #Print results every 10% of the data
     print("[main] print_every {} eval_every {} ".format(FullCfg.print_every, FullCfg.eval_every))
 
     if args.load_model: 
@@ -769,7 +846,7 @@ def main(args):
 
     else:
         print("[Main] training from scratch ")
-        if full_model.audio_projection:
+        if full_model.audio_projection and full_model.text_projection:
             params = [
                 {"params": full_model.audio_encoder.parameters(), "lr": FullCfg.audio_encoder_lr},
                 {"params": full_model.text_encoder.parameters(), "lr": FullCfg.text_encoder_lr},
@@ -777,14 +854,29 @@ def main(args):
                     full_model.audio_projection.parameters(), full_model.text_projection.parameters()
                 ), "lr": FullCfg.head_lr, "weight_decay": FullCfg.weight_decay}
             ]
-        else:
-             params = [
+        elif full_model.audio_projection and not full_model.text_projection:
+            params = [
+                {"params": full_model.audio_encoder.parameters(), "lr": FullCfg.audio_encoder_lr},
+                {"params": full_model.text_encoder.parameters(), "lr": FullCfg.text_encoder_lr},
+                {"params": itertools.chain(
+                    full_model.audio_projection.parameters()
+                ), "lr": FullCfg.head_lr, "weight_decay": FullCfg.weight_decay}
+            ]
+        elif not full_model.audio_projection and full_model.text_projection:
+            params = [
                 {"params": full_model.audio_encoder.parameters(), "lr": FullCfg.audio_encoder_lr},
                 {"params": full_model.text_encoder.parameters(), "lr": FullCfg.text_encoder_lr},
                 {"params": itertools.chain(
                     full_model.text_projection.parameters()
                 ), "lr": FullCfg.head_lr, "weight_decay": FullCfg.weight_decay}
             ]
+        elif not full_model.audio_projection and not full_model.text_projection: # TODO: weight decay over alles?
+            params = [
+                {"params": full_model.audio_encoder.parameters(), "lr": FullCfg.audio_encoder_lr},
+                {"params": full_model.text_encoder.parameters(), "lr": FullCfg.text_encoder_lr},
+                {"params": itertools.chain(), "lr": FullCfg.head_lr, "weight_decay": FullCfg.weight_decay}
+            ]
+
         optimizer = torch.optim.AdamW(params, weight_decay=0.)
         lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
             optimizer, mode="min", patience=FullCfg.patience, factor=FullCfg.factor
@@ -841,9 +933,16 @@ if __name__ == "__main__":
                     help='Name of scale_type (default: %(default)s)')
 
     # parser.add_argument('--normalize', action='store_true')
-    parser.add_argument('--proj_head', default='simple_projection_head', const='simple_projection_head',
+    parser.add_argument('--audio_proj_head', default='simple_projection_head', const='simple_projection_head',
                     nargs='?', choices=['simple_projection_head', 'rnn', 'gru'],
                     help='Activation to use in simple proj head (default: %(default)s)')
+    parser.add_argument('--text_proj_head', default='simple_projection_head', const='simple_projection_head',
+                    nargs='?', choices=['simple_projection_head', 'None'],
+                    help='Activation to use in simple proj head (default: %(default)s)')
+    parser.add_argument('--text_pooling', default='original', const='original',
+                    nargs='?', choices=['original', 'cls', 'mean'],
+                    help='Pooling method to use for text model (default: %(default)s)')
+
     parser.add_argument('--audio_activation', default='relu', const='relu',
                     nargs='?', choices=['relu', 'gelu'],
                     help='Activation to use in simple proj head (default: %(default)s)')
@@ -863,6 +962,8 @@ if __name__ == "__main__":
     parser.add_argument('--fp16', action='store_true', default=False,
                         help='enables fp16 training')
 
+    parser.add_argument('--use_lr', dest='use_lr', action='store_true',
+                        help="Changer the learning rate")
 
     parser.add_argument('--save_model', dest='save_model', action='store_true',
                         help="Save the model weights.")
