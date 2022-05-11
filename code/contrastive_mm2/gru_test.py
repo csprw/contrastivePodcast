@@ -603,7 +603,7 @@ class Optimization:
         self.batch_size = fullCFG.batch_size
         self.device = fullCFG.device
 
-        self.total_len = 6
+        self.total_len = 10000
         # self.total_len = 1
 
         self.loss1 = nn.CrossEntropyLoss()
@@ -660,29 +660,46 @@ class Optimization:
         self.model.eval()
         losses = []
         validation_len = len(val_loader)
+
+        full_validation = False
         with torch.no_grad():
 
             # fixed number of steps
-            # iterator = iter(val_loader)
-            # for step in range(self.total_len):
-            #     batch = next(iterator)
+            if not full_validation:
+                iterator = iter(val_loader)
+                for step in range(self.total_len):
+                    batch = next(iterator)
+                    # padded_audio_embeds, lengths, text_embeds  = batch
+                    loss, metrics = self.model(batch)
+                    losses.append(loss.item())
+                    if step == 0:
+                        met_sum = Counter(metrics.copy())
+                    else:
+                        #metrics_sum = {k: metrics_sum.get(k, 0) + metrics.get(k, 0) for k in set(metrics_sum)}
+                        met_sum.update(Counter(metrics))
+                              
+                mean_metrics = {k: value / self.total_len  for k, value in met_sum.items()}
+                mean_loss = np.mean(losses)
+                self.model.train()
+                return mean_loss, mean_metrics
 
-            # full learning
-            for step, batch in enumerate(iter(val_loader)):
-                # padded_audio_embeds, lengths, text_embeds  = batch
-                loss, metrics = self.model(batch)
-                losses.append(loss.item())
-                if step == 0:
-                    met_sum = Counter(metrics.copy())
-                else:
-                    #metrics_sum = {k: metrics_sum.get(k, 0) + metrics.get(k, 0) for k in set(metrics_sum)}
-                    met_sum.update(Counter(metrics))
-                # print("\t\t\t[del] loss: ", loss.item())
-
-        mean_metrics = {k: value / validation_len  for k, value in met_sum.items()}
-        mean_loss = np.mean(losses)
-        self.model.train()
-        return mean_loss, mean_metrics
+            
+            else: 
+                # full learning
+                for step, batch in enumerate(iter(val_loader)):
+                    # padded_audio_embeds, lengths, text_embeds  = batch
+                    loss, metrics = self.model(batch)
+                    losses.append(loss.item())
+                    if step == 0:
+                        met_sum = Counter(metrics.copy())
+                    else:
+                        #metrics_sum = {k: metrics_sum.get(k, 0) + metrics.get(k, 0) for k in set(metrics_sum)}
+                        met_sum.update(Counter(metrics))
+                        
+                mean_metrics = {k: value / validation_len  for k, value in met_sum.items()}
+                mean_loss = np.mean(losses)
+                self.model.train()
+                return mean_loss, mean_metrics
 
     def train(self, train_loader, val_loader, startepoch=0):
         self.model.audio_encoder.to(self.device)
