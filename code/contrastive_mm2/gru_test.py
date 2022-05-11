@@ -828,8 +828,8 @@ def main(args):
 
     warmup_steps =  math.ceil(len(train_loader) * num_epochs * 0.1)  # 10% of train data for warm-up
 
-    FullCfg.eval_every = int(math.ceil(len(train_loader) * 0.1)) #Evaluate every 10% of the data
-    FullCfg.print_every = int(math.ceil(len(train_loader) * 0.1)) #Print results every 10% of the data
+    FullCfg.eval_every = int(math.ceil(len(train_loader) * 0.05)) #Evaluate every 5% of the data
+    FullCfg.print_every = int(math.ceil(len(train_loader) * 0.05)) #Print results every 5% of the data
     print("[main] print_every {} eval_every {} ".format(FullCfg.print_every, FullCfg.eval_every))
 
     if args.load_model: 
