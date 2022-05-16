@@ -7,7 +7,8 @@ dataset_processed_path: ../data/sp/yamnet/processed/
 yamnet_embed_dir: /Users/casper/Library/CloudStorage/Box-Box/Spotify-Podcasts/yamnet/embedding
 yamnet_score_dir: ../data/sp/yamnet/score
 
-yamnet_query_embed_path: /Users/casper/Documents/UvAmaster/b23456_thesis/msc_thesis/code/data/sp/yamnet/query_embedding/query/fast
+yamnet_query_embed_path: ../data/sp/yamnet/query_embedding/query/fast
+yamnet_topic_embed_path: ../data/sp/yamnet/query_embedding/processed
 
 ########################################
 # Paths for contrastive training
