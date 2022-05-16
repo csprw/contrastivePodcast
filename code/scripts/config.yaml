@@ -1,0 +1,55 @@
+########################################
+# Paths for reading yamnet embeddings 
+dataset_path: ../data/sp/podcasts-no-audio-13GB/
+dataset_processed_path: ../data/sp/yamnet/processed/
+
+# yamnet_embed_dir: ../data/sp/yamnet/embedding
+yamnet_embed_dir: /Users/casper/Library/CloudStorage/Box-Box/Spotify-Podcasts/yamnet/embedding
+yamnet_score_dir: ../data/sp/yamnet/score
+
+yamnet_query_embed_path: /Users/casper/Documents/UvAmaster/b23456_thesis/msc_thesis/code/data/sp/yamnet/query_embedding/query/fast
+
+########################################
+# Paths for contrastive training
+# sp_path: ../data/sp/yamnet/sp_yamnet.h5
+sp_path: ../data/sp/yamnet/processed/
+# sp_sample_path: ../data/sp/yamnet/sp_yamnet_sample.h5
+sp_sample_path: ../data/sp/yamnet/processed_sample/
+sp_train_test_split: ../data/sp/yamnet/sp_train_test_split.json
+output_dir: ./output
+
+########################################
+#### Feature Extraction Configuration ####
+# Path to list of podcast episode uri's to extract features from
+features_uri_path: ./data/uri_list_2.txt
+
+# Output location for extracted features. This should just be the base output location
+# as the extraction code creates feature specific folders within this directory (e.g. opensmile)
+features_output_path: ./features
+
+# Number of worker threads to use for feature extraction
+features_num_workers: 8
+
+
+#########
+### Text to speech
+query_audio_dir: ../data/sp/podcasts-no-audio-13GB/topic_task/query_audio
+query_embed_dir: ../data/sp/podcasts-no-audio-13GB/topic_task/query_embedding
+# query_embed_dir: /Users/casper/Library/CloudStorage/Box-Box/Spotify-Podcasts/yamnet/embedding
+# features_output_path
+
+
+##################################
+#### Search Configuration ####
+# Elasticsearch cluster UCL
+search_es_url: http://localhost:9200/segments/_search
+search_knn_url: http://localhost:9200/segments/_knn_search
+
+# Num of segments to return from the Elasticsearch query
+search_es_num: 100
+
+# Directory to cache transformer model in
+search_cache_dir: ./transformers
+
+# BERT Rerank model to use
+search_rerank_model: amberoad/bert-multilingual-passage-reranking-msmarco
