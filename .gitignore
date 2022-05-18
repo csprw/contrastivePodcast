@@ -3,6 +3,10 @@
 */checkpoints/*
 */logs/*
 
+# Files to ignore, regardless of where they are
+# NOTE: remove in final version
+**/config.yaml
+
 # These files are usually too big
 # *.pkl
 *.h5
