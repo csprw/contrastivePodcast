@@ -101,6 +101,8 @@ class Indexer:
         self.device = CFG.device
         self.layer_dim = CFG.layer_dim
         self.audio_hidden_dim = CFG.audio_hidden_dim
+
+        self.model.to(self.device)
         
     def tokenize_text(self, sentences):
         # Tokenize text
@@ -174,7 +176,7 @@ class Indexer:
                 out = self.model.audio_encoder.fc(test)
                 
             #embeds = self.model.audio_encoder(inbetween_yamnet_embeds)
-            return out[0], audio_type
+            return out[0].detach().cpu(), audio_type
 
     
     def get_yamnet_embeds(self, segment_id):
@@ -460,9 +462,9 @@ def topic_task_embeddings(transcripts_path, metadata_subset, save_path='output.h
     delcount = 0
     for index, row in tqdm(metadata_subset.iterrows()):
         delcount += 1
-        print("delcount: ", delcount)
-        if delcount > 2:
-            break
+        # print("delcount: ", delcount)
+        # if delcount > 2:
+        #     break
         # if delcount < 300:
         #     print("continue")
         #     continue
@@ -479,28 +481,16 @@ def topic_task_embeddings(transcripts_path, metadata_subset, save_path='output.h
             seg_base = os.path.splitext(os.path.basename(transcript_path))[0] + "_"
 
             # Get the transcript and find out how long it is
-            transcript = src.data.retrieve_timestamped_transcript(transcript_path)
-            
+            transcript = src.data.retrieve_timestamped_transcript(transcript_path)       
             last_word_time = math.ceil(transcript["starts"][-1])
-
-
-            # todo: func
-            # for st, end in zip(transcript)
-            
-            print("TOdo: lijst met sentence timestamps")
-            print(transcript)
-            print("same? ", len(transcript["words"]), len(transcript['starts']), len(transcript['ends']))
-
 
             # Generate the segments from the start to the end of the podcasrt
             count = 0
             for seg_start in range(0, last_word_time, seg_step):
                 count += 1
-                print("Del: Seg_start", seg_start)
-                if count > 3:
-                    exit()
-                # if count < 10:
-                #     continue
+                # if count > 3:
+                #     exit()
+
                 # Generate the segment name
                 seg_id = seg_base + str(seg_start)
 
@@ -554,37 +544,18 @@ def topic_task_embeddings(transcripts_path, metadata_subset, save_path='output.h
                     # Get yamnet embeds for current timestamps
                     sent_inbetween_yamnet_embeds = indexer.get_yamnets_from_timestamps(sent_time_start, sent_time_stop, seg_id)
                     
-
                     if len(sent_inbetween_yamnet_embeds) > 0:
                         # Add yamnet embeds and text embeddings for the current sentence to database
                         sent_yamnet_embeds, audio_type = indexer.process_yamnet_embeds(sent_inbetween_yamnet_embeds)
                         # sent_yamnet_embeds = sent_yamnet_embeds
                         grp_slvl = grp2.create_group(cur_seg_id)
                         grp_slvl.create_dataset("sent_words", data=np.array(sent_words, dtype=h5py.special_dtype(vlen=str)))
-                        grp_slvl.create_dataset("audio", data=np.array(sent_yamnet_embeds, dtype=h5py.special_dtype(vlen=str)))
-                        grp_slvl.create_dataset("text", data=np.array(embed, dtype=h5py.special_dtype(vlen=str)))
+                        grp_slvl.create_dataset("audio", data=np.array(sent_yamnet_embeds, dtype=np.float32))
+                        grp_slvl.create_dataset("text", data=np.array(embed, dtype=np.float32))
 
                     words_so_far += len(sent_words)
-
-
-                continue
-                grp2 = grp.create_group('sentencelevel')
-                for idx, embed in enumerate(embeds):
-                    cur_seg_id = seg_id + '_' + str(idx)
-                    print("NEW: Also add SENTENCE id: ", cur_seg_id)
-
-                    seg_words = sentences[idx]
-                    grp2.create_dataset(cur_seg_id + "_audio", data=np.array(todo, dtype=h5py.special_dtype(vlen=str)))
-                    grp2.create_dataset(cur_seg_id + "_text", data=np.array(embed, dtype=h5py.special_dtype(vlen=str)))
-
-
-                print(count)
-                if count > 2:
-                    break
-                
             print("saved")
             f.close()
-            exit(1)
 
     # Close failed file
     failed_file.close()
@@ -664,10 +635,14 @@ if __name__ == "__main__":
     model_path = '/Users/casper/Documents/UvAmaster/b23456_thesis/msc_thesis/code/contrastive_mm2/logs/load_test'
     # RNN
     model_path = '/Users/casper/Documents/UvAmaster/b23456_thesis/msc_thesis/code/contrastive_mm2/logs/lisa_v2-simcse_loss_rnn_relu_768_0.001_2022-05-12_15-58-03'
+    model_path = "E:\msc_thesis\code\contrastive_mm2\logs\lisa_v2-simcse_loss_rnn_relu_768_0.001_2022-05-12_15-58-03"
+
     # SIMPLE PROJ head
     # model_path = '/Users/casper/Documents/UvAmaster/b23456_thesis/msc_thesis/code/contrastive_mm2/logs/lisa_v2-simcse_loss_simple_projection_head_relu_768_2e-05_2022-05-12_15-56-09'
 
     transcripts_path = '/Users/casper/Documents/UvAmaster/b23456_thesis/msc_thesis/code/data/sp/podcasts-no-audio-13GB/podcasts-transcripts'
+    transcripts_path = 'E:/msc_thesis/code/data/sp/podcasts-no-audio-13GB/podcasts-transcripts'
+
     traintest = 'test'
 
     Path(conf.yamnet_topic_embed_path).mkdir(parents=True, exist_ok=True)
