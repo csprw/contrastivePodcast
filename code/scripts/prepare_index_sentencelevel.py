@@ -462,15 +462,17 @@ def topic_task_embeddings(transcripts_path, metadata_subset, save_path='output.h
     delcount = 0
     for index, row in tqdm(metadata_subset.iterrows()):
         delcount += 1
-        # print("delcount: ", delcount)
-        # if delcount > 2:
-        #     break
-        # if delcount < 300:
+        print("delcount: ", delcount)
+        if delcount > 100:
+            break
+        # if delcount < 6:
         #     print("continue")
         #     continue
 
         try:
-        
+            print("[del]: failed_uris: ",failed_uris)
+            # TODO: THIS IS HACKY
+            failed_uris  = []
             if (failed_uris and str(row["episode_filename_prefix"]) in failed_uris) or not failed_uris:
                 transcript_path = os.path.join(
                     transcripts_path,
@@ -491,7 +493,7 @@ def topic_task_embeddings(transcripts_path, metadata_subset, save_path='output.h
                 for seg_start in range(0, last_word_time, seg_step):
                     count += 1
                     # if count > 3:
-                    #     exit()
+                    #     break
 
                     # Generate the segment name
                     seg_id = seg_base + str(seg_start)
@@ -538,25 +540,33 @@ def topic_task_embeddings(transcripts_path, metadata_subset, save_path='output.h
                     words_so_far = 0
                     grp2 = grp.create_group('sentencelevel')
                     for idx, embed in enumerate(embeds):
-                        cur_seg_id = seg_id + '_' + str(idx)
-                        sent_words = sentences[idx]
-                        sent_time_start = transcript['starts'][words_so_far]
-                        sent_time_stop = transcript['starts'][words_so_far + len(sent_words)]
+                        try:
+                            cur_seg_id = seg_id + '_' + str(idx)
+                            sent_words = sentences[idx]
+                            sent_time_start = transcript['starts'][words_so_far]
+                            sent_time_stop = transcript['starts'][words_so_far + len(sent_words)]
 
-                        # Get yamnet embeds for current timestamps
-                        sent_inbetween_yamnet_embeds = indexer.get_yamnets_from_timestamps(sent_time_start, sent_time_stop, seg_id)
-                        
-                        if len(sent_inbetween_yamnet_embeds) > 0:
-                            # Add yamnet embeds and text embeddings for the current sentence to database
-                            sent_yamnet_embeds, audio_type = indexer.process_yamnet_embeds(sent_inbetween_yamnet_embeds)
-                            # sent_yamnet_embeds = sent_yamnet_embeds
-                            grp_slvl = grp2.create_group(cur_seg_id)
-                            grp_slvl.create_dataset("sent_words", data=np.array(sent_words, dtype=h5py.special_dtype(vlen=str)))
-                            grp_slvl.create_dataset("audio", data=np.array(sent_yamnet_embeds, dtype=np.float32))
-                            grp_slvl.create_dataset("text", data=np.array(embed, dtype=np.float32))
+                            # Get yamnet embeds for current timestamps
+                            sent_inbetween_yamnet_embeds = indexer.get_yamnets_from_timestamps(sent_time_start, sent_time_stop, seg_id)
+                            
+                            if len(sent_inbetween_yamnet_embeds) > 0:
+                                # Add yamnet embeds and text embeddings for the current sentence to database
+                                sent_yamnet_embeds, audio_type = indexer.process_yamnet_embeds(sent_inbetween_yamnet_embeds)
+                                # sent_yamnet_embeds = sent_yamnet_embeds
+                                grp_slvl = grp2.create_group(cur_seg_id)
+                                grp_slvl.create_dataset("sent_words", data=np.array(sent_words, dtype=h5py.special_dtype(vlen=str)))
+                                grp_slvl.create_dataset("audio", data=np.array(sent_yamnet_embeds, dtype=np.float32))
+                                grp_slvl.create_dataset("text", data=np.array(embed, dtype=np.float32))
+                        except Exception as e:
+                            print("Something wrong in sentence leval adding to database?")
+                            print(e)
+                            
 
                         words_so_far += len(sent_words)
-
+            
+                print("if success")
+            else:
+                print("Why in this else?")
         except Exception as e:
             print("Exception: ", e)
             print("Failed row: ", str(row["episode_filename_prefix"]))
