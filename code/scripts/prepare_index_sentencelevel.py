@@ -469,93 +469,100 @@ def topic_task_embeddings(transcripts_path, metadata_subset, save_path='output.h
         #     print("continue")
         #     continue
 
-        if (failed_uris and str(row["episode_filename_prefix"]) in failed_uris) or not failed_uris:
-            transcript_path = os.path.join(
-                transcripts_path,
-                src.data.relative_file_path(
-                    row["show_filename_prefix"], row["episode_filename_prefix"]
-                )
-                + ".json",
-            )
-
-            seg_base = os.path.splitext(os.path.basename(transcript_path))[0] + "_"
-
-            # Get the transcript and find out how long it is
-            transcript = src.data.retrieve_timestamped_transcript(transcript_path)       
-            last_word_time = math.ceil(transcript["starts"][-1])
-
-            # Generate the segments from the start to the end of the podcasrt
-            count = 0
-            for seg_start in range(0, last_word_time, seg_step):
-                count += 1
-                # if count > 3:
-                #     exit()
-
-                # Generate the segment name
-                seg_id = seg_base + str(seg_start)
-
-                # Find the words in the segment
-                word_indices = np.where(
-                    np.logical_and(
-                        transcript["starts"] >= seg_start,
-                        transcript["starts"] <= seg_start + seg_length,
+        try:
+        
+            if (failed_uris and str(row["episode_filename_prefix"]) in failed_uris) or not failed_uris:
+                transcript_path = os.path.join(
+                    transcripts_path,
+                    src.data.relative_file_path(
+                        row["show_filename_prefix"], row["episode_filename_prefix"]
                     )
-                )[0]
-                seg_words = transcript["words"][word_indices]
-                seg_words = " ".join(seg_words)
+                    + ".json",
+                )
 
-                # Find the number of speakers in the segments
-                seg_speakers = transcript["speaker"][word_indices]
-                num_speakers = len(np.unique(seg_speakers))
-                
-                ## Retreiving text embeddings
-                # Mean of embeds
-                sentences = tokenize.sent_tokenize(seg_words)
-                tokenized_text = indexer.tokenize_text(sentences)
-                embeds = indexer.get_embeds(tokenized_text)
-                text_mean_embed = np.mean(embeds, axis=0)
+                seg_base = os.path.splitext(os.path.basename(transcript_path))[0] + "_"
 
-                # Embeds based on first 512 chars
-                #tokenized_text_full = indexer.tokenize_text(seg_words)
-                #text_begin_embed = indexer.get_embeds(tokenized_text_full)[0]
-                
-                ## Retreiving audio embeddings
-                # TODO!! ook nog audio embeds per sentence
-                audio_embed, method = indexer.get_yamnet_embeds(seg_id)
-                
-                grp = f.create_group(seg_id)
-                grp.create_dataset('text_embed', data=text_mean_embed, dtype=np.float32)
-                #grp.create_dataset('text_begin_embed', data=text_begin_embed, dtype=np.float32)
-                grp.create_dataset('audio_embed', data=audio_embed, dtype=np.float32)
+                # Get the transcript and find out how long it is
+                transcript = src.data.retrieve_timestamped_transcript(transcript_path)       
+                last_word_time = math.ceil(transcript["starts"][-1])
 
-                grp.create_dataset("seg_words", data=np.array(seg_words, dtype=h5py.special_dtype(vlen=str)))
-                grp.attrs['num_speakers'] = num_speakers
-                grp.attrs['audio_method'] = method
+                # Generate the segments from the start to the end of the podcasrt
+                count = 0
+                for seg_start in range(0, last_word_time, seg_step):
+                    count += 1
+                    # if count > 3:
+                    #     exit()
 
-                # Also calculate embeddings on sentencelevel
-                words_so_far = 0
-                grp2 = grp.create_group('sentencelevel')
-                for idx, embed in enumerate(embeds):
-                    cur_seg_id = seg_id + '_' + str(idx)
-                    sent_words = sentences[idx]
-                    sent_time_start = transcript['starts'][words_so_far]
-                    sent_time_stop = transcript['starts'][words_so_far + len(sent_words)]
+                    # Generate the segment name
+                    seg_id = seg_base + str(seg_start)
 
-                    # Get yamnet embeds for current timestamps
-                    sent_inbetween_yamnet_embeds = indexer.get_yamnets_from_timestamps(sent_time_start, sent_time_stop, seg_id)
+                    # Find the words in the segment
+                    word_indices = np.where(
+                        np.logical_and(
+                            transcript["starts"] >= seg_start,
+                            transcript["starts"] <= seg_start + seg_length,
+                        )
+                    )[0]
+                    seg_words = transcript["words"][word_indices]
+                    seg_words = " ".join(seg_words)
+
+                    # Find the number of speakers in the segments
+                    seg_speakers = transcript["speaker"][word_indices]
+                    num_speakers = len(np.unique(seg_speakers))
                     
-                    if len(sent_inbetween_yamnet_embeds) > 0:
-                        # Add yamnet embeds and text embeddings for the current sentence to database
-                        sent_yamnet_embeds, audio_type = indexer.process_yamnet_embeds(sent_inbetween_yamnet_embeds)
-                        # sent_yamnet_embeds = sent_yamnet_embeds
-                        grp_slvl = grp2.create_group(cur_seg_id)
-                        grp_slvl.create_dataset("sent_words", data=np.array(sent_words, dtype=h5py.special_dtype(vlen=str)))
-                        grp_slvl.create_dataset("audio", data=np.array(sent_yamnet_embeds, dtype=np.float32))
-                        grp_slvl.create_dataset("text", data=np.array(embed, dtype=np.float32))
+                    ## Retreiving text embeddings
+                    # Mean of embeds
+                    sentences = tokenize.sent_tokenize(seg_words)
+                    tokenized_text = indexer.tokenize_text(sentences)
+                    embeds = indexer.get_embeds(tokenized_text)
+                    text_mean_embed = np.mean(embeds, axis=0)
 
-                    words_so_far += len(sent_words)
-            print("saved")
-            f.close()
+                    # Embeds based on first 512 chars
+                    #tokenized_text_full = indexer.tokenize_text(seg_words)
+                    #text_begin_embed = indexer.get_embeds(tokenized_text_full)[0]
+                    
+                    ## Retreiving audio embeddings
+                    # TODO!! ook nog audio embeds per sentence
+                    audio_embed, method = indexer.get_yamnet_embeds(seg_id)
+                    
+                    grp = f.create_group(seg_id)
+                    grp.create_dataset('text_embed', data=text_mean_embed, dtype=np.float32)
+                    #grp.create_dataset('text_begin_embed', data=text_begin_embed, dtype=np.float32)
+                    grp.create_dataset('audio_embed', data=audio_embed, dtype=np.float32)
+
+                    grp.create_dataset("seg_words", data=np.array(seg_words, dtype=h5py.special_dtype(vlen=str)))
+                    grp.attrs['num_speakers'] = num_speakers
+                    grp.attrs['audio_method'] = method
+
+                    # Also calculate embeddings on sentencelevel
+                    words_so_far = 0
+                    grp2 = grp.create_group('sentencelevel')
+                    for idx, embed in enumerate(embeds):
+                        cur_seg_id = seg_id + '_' + str(idx)
+                        sent_words = sentences[idx]
+                        sent_time_start = transcript['starts'][words_so_far]
+                        sent_time_stop = transcript['starts'][words_so_far + len(sent_words)]
+
+                        # Get yamnet embeds for current timestamps
+                        sent_inbetween_yamnet_embeds = indexer.get_yamnets_from_timestamps(sent_time_start, sent_time_stop, seg_id)
+                        
+                        if len(sent_inbetween_yamnet_embeds) > 0:
+                            # Add yamnet embeds and text embeddings for the current sentence to database
+                            sent_yamnet_embeds, audio_type = indexer.process_yamnet_embeds(sent_inbetween_yamnet_embeds)
+                            # sent_yamnet_embeds = sent_yamnet_embeds
+                            grp_slvl = grp2.create_group(cur_seg_id)
+                            grp_slvl.create_dataset("sent_words", data=np.array(sent_words, dtype=h5py.special_dtype(vlen=str)))
+                            grp_slvl.create_dataset("audio", data=np.array(sent_yamnet_embeds, dtype=np.float32))
+                            grp_slvl.create_dataset("text", data=np.array(embed, dtype=np.float32))
+
+                        words_so_far += len(sent_words)
+
+        except Exception as e:
+            print("Exception: ", e)
+            print("Failed row: ", str(row["episode_filename_prefix"]))
+            failed_file.write(str(row["episode_filename_prefix"]) + "\n")
+    
+    f.close()
 
     # Close failed file
     failed_file.close()
@@ -653,6 +660,8 @@ if __name__ == "__main__":
     """READ METADATA (new func)"""
     metadata_subset, topics_df, topics_df_targets = read_metadata_subset(conf, traintest='test')
 
+    # Remove duplicate rows
+    metadata_subset = metadata_subset.drop_duplicates(subset=['episode_filename_prefix'])
 
     """LOAD MODEL (new func)"""
     print("[Load model] from ", model_path)
