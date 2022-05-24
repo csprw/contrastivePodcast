@@ -242,8 +242,8 @@ class spDatasetNoMemory(datautil.Dataset):
         text_embeds = self.tokenizer(
             text_embeds, padding=True, truncation=True, max_length=self.text_max_length, return_tensors='pt'
         ).to(self.device)
-        
-        return padded_audio_embeds.float(), lengths, text_embeds
+
+        return text_embeds, padded_audio_embeds.float(), lengths
 
     def mean_batching_collate(self, batch):
         """ Return a batch """
@@ -309,7 +309,7 @@ class TextEncoder(nn.Module):
         # input_ids=text_embeds["input_ids"]
         # attention_mask=text_embeds["attention_mask"]
         # print(input_ids,attention_mask )
-        # hiero
+
         ######### LEAVE FOR DEBUG
         # Forward passes with different pooling strategies. 
         # if self.pooling == 'original':
@@ -609,16 +609,67 @@ class ProjectionHead(nn.Module):
         x = self.layer_norm(x)
         return x
 
-class CLIPModel(nn.Module):
+
+# DELETE
+#  temperature=CFG.temperature
+#         self.batch_size = CFG.batch_size
+#         self.device = CFG.device
+
+#         self.loss_type = CFG.loss_type
+
+#         if CFG.text_proj_head == 'simple_projection_head':
+#             self.text_encoder = TextEncoder(CFG)
+#             self.text_projection = ProjectionHead(CFG)
+
+#             text_modules = [self.text_encoder, self.text_projection]
+#         elif CFG.text_proj_head.lower() == 'none':
+#             text_encoder = TextEncoder(CFG)
+#             pooling_model = Pooling(text_encoder.get_word_embedding_dimension())
+#             text_modules = [text_encoder, pooling_model]
+
+#         if CFG.audio_proj_head in ['rnn', 'gru']:
+#             audio_encoder = SequentialAudioModel(CFG)
+#             audio_modules = [audio_encoder]
+        
+#         # Create the full model
+#         if text_modules is not None and not isinstance(text_modules, OrderedDict):
+#             text_modules = OrderedDict([(str(idx), module) for idx, module in enumerate(text_modules)])
+#         if audio_modules is not None and not isinstance(audio_modules, OrderedDict):
+#             audio_modules = OrderedDict([(str(idx), module) for idx, module in enumerate(audio_modules)])
+
+#         self.temperature = temperature
+        
+#         self.text_model = nn.Sequential(text_modules)
+#         self.audio_model = nn.Sequential(audio_modules)
+
+#         # self.lr_scheduler = lr_scheduler
+#         # self.optimizer = optimizer
+
+#         self.eval_every = CFG.eval_every
+#         self.print_every = CFG.print_every
+#         self.best_loss = float('inf')
+#         self.log_name = CFG.log_name
+#         self.init_logging()
+#         self.batch_size = CFG.batch_size
+#         self.device = CFG.device
+
+#         self.total_len = 1000
+#         self.total_len = 100
+
+#         self.loss1 = nn.CrossEntropyLoss()
+#         self.loss2 = nn.CrossEntropyLoss()
+
+#         self.max_grad_norm = 1 # magic number for now
+class mmModule(nn.Module):
+    # HIERO1
     def __init__(self, CFG):
         super().__init__()
-        temperature=CFG.temperature
+        self.temperature=CFG.temperature
         self.batch_size = CFG.batch_size
         self.device = CFG.device
 
         self.loss_type = CFG.loss_type
 
-        # TODO: TEXT PROJECTION EENS UITZETTEN
         if CFG.text_proj_head == 'simple_projection_head':
             self.text_encoder = TextEncoder(CFG)
             self.text_projection = ProjectionHead(CFG)
@@ -626,20 +677,8 @@ class CLIPModel(nn.Module):
             text_modules = [self.text_encoder, self.text_projection]
         elif CFG.text_proj_head.lower() == 'none':
             text_encoder = TextEncoder(CFG)
-            text_projection = None
-
             pooling_model = Pooling(text_encoder.get_word_embedding_dimension())
             text_modules = [text_encoder, pooling_model]
-
-        # old
-        # if CFG.audio_proj_head in ['rnn', 'gru']:
-        #     self.audio_encoder = SequentialAudioModel(CFG)
-        #     self.audio_projection = ProjectionHead(CFG)
-        #     audio_modules = [self.audio_encoder, self.audio_projection]
-        # else: 
-        #     self.audio_encoder = simple_ProjectionHead(CFG)
-        #     self.audio_projection = None
-        #     audio_modules = [self.audio_encoder]
 
         if CFG.audio_proj_head in ['rnn', 'gru']:
             audio_encoder = SequentialAudioModel(CFG)
@@ -651,65 +690,259 @@ class CLIPModel(nn.Module):
         if audio_modules is not None and not isinstance(audio_modules, OrderedDict):
             audio_modules = OrderedDict([(str(idx), module) for idx, module in enumerate(audio_modules)])
 
-        self.temperature = temperature
-        
         self.text_model = nn.Sequential(text_modules)
         self.audio_model = nn.Sequential(audio_modules)
 
-        if self.loss_type == 'clip_loss_simple':
-            self.loss1 = nn.CrossEntropyLoss()
-            self.loss2 = nn.CrossEntropyLoss()
+        self.temperature = CFG.temperature
+        self.eval_every = CFG.eval_every
+        self.print_every = CFG.print_every
+        self.batch_size = CFG.batch_size
+        self.device = CFG.device
 
-        if self.loss_type == 'simcse_loss':
-            self.fixed_scale = 20.0
-            self.similarity_func = dek_cos_sim
-            self.cross_entropy_loss = nn.CrossEntropyLoss()
+        self.log_name = CFG.log_name
+        self.init_logging()
+
+        self.best_loss = float('inf')
+        # self.loss1 = nn.CrossEntropyLoss()
+        # self.loss2 = nn.CrossEntropyLoss()
+        self.max_grad_norm = 1 # magic number for now
+
+    @staticmethod
+    def _get_scheduler(optimizer, scheduler: str, warmup_steps: int, t_total: int):
+        """
+        Returns the correct learning rate scheduler. Available scheduler: constantlr, warmupconstant, warmuplinear, warmupcosine, warmupcosinewithhardrestarts
+        """
+        scheduler = scheduler.lower()
+        if scheduler == 'constantlr':
+            return get_constant_schedule(optimizer)
+        elif scheduler == 'warmupconstant':
+            return get_constant_schedule_with_warmup(optimizer, num_warmup_steps=warmup_steps)
+        elif scheduler == 'warmuplinear':
+            return get_linear_schedule_with_warmup(optimizer, num_warmup_steps=warmup_steps, num_training_steps=t_total)
+        else:
+            raise ValueError("Unknown scheduler {}".format(scheduler))
+
+    def _get_optimizer(self, loss_model):
+        # Prepare optimizers
+        param_optimizer = list(loss_model.named_parameters())
+        no_decay = ['bias', 'LayerNorm.bias', 'LayerNorm.weight']
+        optimizer_grouped_parameters = [
+            {'params': [p for n, p in param_optimizer if not any(nd in n for nd in no_decay)], 'weight_decay': self.weight_decay},
+            {'params': [p for n, p in param_optimizer if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
+        ]
+        optimizer_params = self.optimizer_params
+        optimizer = self.optimizer_class(optimizer_grouped_parameters, **optimizer_params)
+
+        return optimizer
+
+    def fit(self,
+        CFG,
+        train_loader,
+        test_loader,
+        loss_model,
+        start_epoch=1,
+        optimizer_class: Type[Optimizer] = AdamW,
+        optimizer_params={'lr': 5e-5}):
+
+        print(CFG)
+        print("in fit")
+        self.text_model.to(self.device)
+        self.audio_model.to(self.device)
+        loss_model.to(self.device)
+
+        self.test_loader = test_loader
+
+        steps_per_epoch = len(train_loader)
+        num_train_steps = int(steps_per_epoch * CFG.num_epochs)
+        warmup_steps =  math.ceil(len(train_loader) *  CFG.num_epochs * 0.1)  # 10% of train data for warm-up
+        self.weight_decay = CFG.weight_decay
+        self.optimizer_class = optimizer_class
+        self.optimizer_params =optimizer_params
+        scheduler_method='WarmupLinear' 
+
+        print("[del] ", steps_per_epoch, num_train_steps, warmup_steps)
+        total_steps = 0
+        self.num_train_steps = num_train_steps
+        optimizer = self._get_optimizer(loss_model)
+        scheduler = self._get_scheduler(optimizer, scheduler=scheduler_method, warmup_steps=warmup_steps, t_total=num_train_steps)
+
+        memory_test_delete = 1000
+
+        if loss_model.scale_type != 'learned':
+            update_scale = False
+        else:
+            update_scale = True
+
+
         
-    def forward(self, batch):
-        audio_embeddings, lengths, text_embeds  = batch
+        for epoch in range(start_epoch, CFG.num_epochs):
+            t1 = time()
+            loss_model.zero_grad()
+            loss_model.train()
+            # Fixed length training:
+            # iterator = iter(train_loader)
+            # for step in range(self.total_len):
+            #     batch = next(iterator)
 
-        # Get  sentence Representations (shape [batchsize, 768])
-        text_embeddings = self.text_model(text_embeds)['sentence_embedding']
-        # print("[clipmodel] text_embeddings: ", text_embeddings[0])
-        audio_embeddings = self.audio_model((audio_embeddings, lengths))
-        # print("[clipmodel] audio_embeddings: ", audio_embeddings[0][0])
-        # print("------------------")
+            # Full training
+            for step, batch in enumerate(iter(train_loader)):
+                if  step % self.eval_every == 0 and step < 1: # del last statement
+                    # Todo: uncommen
+                    print("[del] doing an EVAL")
+                    metrics = self.evaluate(loss_model)
+                    mean_loss = 0 # TODO: check of mean loss terug kan komen uit eval
+                    self.add_logging(epoch, total_steps, mean_loss, metrics, train=False)
+                    
+                    print("[eval] Epoch {} Step {}/{} \t loss {} \t acc {}".format(epoch, total_steps, step, mean_loss, metrics['mean_acc']))
+                    # if mean_loss < self.best_loss:
+                    #     print("[eval] better model found")
+                    #     self.best_loss = mean_loss 
+                    #     if args.save_model:
+                    #         self.save_model()
+                    #     elif args.save_checkpoint:
+                    #         self.save_checkpoint(epoch, step)
+                    # if step > self.print_every:
+                    #     self.output_all_plots()
 
-        # Calculating the Loss
-        if self.loss_type == 'clip_loss':
-            logits = (text_embeddings @ audio_embeddings.T) / self.temperature
-            audio_similarity = audio_embeddings @ audio_embeddings.T
-            texts_similarity = text_embeddings @ text_embeddings.T
-            targets = F.softmax(
-                (audio_similarity + texts_similarity) / 2 * self.temperature, dim=-1
-            )
-            texts_loss = cross_entropy(logits, targets, reduction='none')
-            audio_loss = cross_entropy(logits.T, targets.T, reduction='none')
-            loss =  (audio_loss + texts_loss) / 2.0 # shape: (batch_size)
+                sent_features, audio_features, seq_len = batch
+                loss_value, metrics = loss_model(sent_features, audio_features, seq_len)
 
-            labels = torch.arange(self.batch_size, dtype=torch.long, device=self.device)
-            metrics = get_metrics(logits.detach(), logits.t().detach(), labels)
-        elif self.loss_type == 'clip_loss_simple':
-            text_embeddings = torch.nn.functional.normalize(text_embeddings, p=2, dim=1)
-            audio_embeddings = torch.nn.functional.normalize(audio_embeddings, p=2, dim=1)
+                loss_value.backward()
+                torch.nn.utils.clip_grad_norm_(loss_model.parameters(), self.max_grad_norm)
+                optimizer.step()
+                optimizer.zero_grad()
 
-            labels = torch.arange(self.batch_size, dtype=torch.long, device=self.device)
+                scheduler.step()
+                total_steps += 1
 
-            audio_logits =  (audio_embeddings @ text_embeddings.t())
-            text_logits = audio_logits.t()
+                print("[metrics] ", loss_value.item(), metrics['mean_acc'])
+                if step >= 0:
+                    print("[del] break")
+                    break   
 
-            loss = (self.loss1(audio_logits, labels) + self.loss2(text_logits, labels))/2
-            metrics = get_metrics(audio_logits.detach(), text_logits.detach(), labels)
+                # # [del]
+                # if step % memory_test_delete == 0:
+                #     process = psutil.Process(os.getpid())
+                #     print("[del] [mem] training memory              : ", process.memory_info().rss)
+                #     gc.collect()
+                #     print("[del] [mem] training memory after collect: ", process.memory_info().rss)
 
-        elif self.loss_type == 'simcse_loss':
-            # print(text_embeddings.shape, audio_embeddings.shape)
-            scores = self.similarity_func(text_embeddings, audio_embeddings) * self.fixed_scale
-            labels = torch.tensor(range(len(scores)), dtype=torch.long, device=scores.device)  # Example a[i] should match with b[i]
+            # self.output_all_plots()
+            t2 = time()
+            print("[train] epoch duration {} seconds".format(int(t2-t1)))
 
-            loss = self.cross_entropy_loss(scores, labels)
-            metrics = get_metrics(scores.detach(), scores.t().detach(), labels)
+        print("[fit] Done training")
 
-        return loss, metrics
+    def evaluate(self, loss_model):
+
+        # Set evaluation mode on
+        self.eval()
+        # losses = []
+        # validation_len = len(self.test_loader)
+
+        # Iterate over data and calculate accuracies
+        self.to(self.device)
+
+        full_validation = False
+        with torch.no_grad():
+
+            # fixed number of steps
+            if not full_validation:
+                iterator = iter(self.test_loader)
+
+                total_len = 1
+                for step in range(total_len):
+                    batch = next(iterator)
+
+                    sent_features, audio_features, seq_len  = batch
+                    with torch.no_grad():
+                        loss_value, metrics = loss_model(sent_features, audio_features, seq_len)
+                        if step == 0:
+                            #metrics_sum = metrics.copy()
+                            met_sum = Counter(metrics.copy())
+                        else:
+                            #metrics_sum = {k: metrics_sum.get(k, 0) + metrics.get(k, 0) for k in set(metrics_sum)}
+                            met_sum.update(Counter(metrics))
+
+        mean_metrics = {k: value / total_len  for k, value in met_sum.items()}
+        del met_sum
+        return mean_metrics
+
+            #         loss, metrics = self.model(batch)
+            #         losses.append(loss.item())
+            #         if step == 0:
+            #             met_sum = Counter(metrics.copy())
+            #         else:
+            #             #metrics_sum = {k: metrics_sum.get(k, 0) + metrics.get(k, 0) for k in set(metrics_sum)}
+            #             met_sum.update(Counter(metrics))
+                    
+            #         # TODO: uncomment
+            #         break
+            #     mean_metrics = {k: value / self.total_len  for k, value in met_sum.items()}
+            #     del met_sum
+
+            #     mean_loss = np.mean(losses)
+            #     self.model.train()
+            #     return mean_loss, mean_metrics
+
+            
+            # else: 
+            #     raise NotImplementedError
+
+
+
+    def output_all_plots(self):
+        to_plot(self.train_csv_filename, column='audio_acc', title="Train accuracy (audio)")
+        to_plot(self.train_csv_filename, column='text_acc', title="Train accuracy (text)")
+        to_plot(self.train_csv_filename, column='loss', title="Train loss")
+        to_plot(self.eval_csv_filename, column='mean_acc', title="Test accuracy (mean)")
+  
+    def init_logging(self):
+        self.model_save_path = '{}/output'.format(self.log_name)
+        os.makedirs(self.model_save_path, exist_ok=True)
+        self.train_csv_filename = os.path.join(self.model_save_path, "train.csv")
+        self.eval_csv_filename = os.path.join(self.model_save_path, "test.csv")
+
+    def add_logging(self, epoch, steps, loss, metrics, train=True):
+        if train:
+            filename = self.train_csv_filename
+        else:
+            filename = self.eval_csv_filename
+        total_step = (self.num_train_steps * epoch) + steps
+        output_file_exists = os.path.isfile(filename)
+
+        if not output_file_exists:
+            self.metric_headers = [metric for metric in metrics.keys()]
+            self.train_csv_headers = ["epoch", "steps", "loss"] + self.metric_headers
+            with open(filename, newline='', mode="a" if output_file_exists else 'w', encoding="utf-8") as f:
+                writer = csv.writer(f)
+                writer.writerow(self.train_csv_headers)
+
+        # Add metrics to CSV
+        metric_vals = [metrics[header] for header in self.metric_headers]
+        with open(filename, newline='', mode="a", encoding="utf-8") as f:
+            writer = csv.writer(f)
+            writer.writerow([epoch, total_step, loss] + metric_vals)
+
+    def save_model(self):
+        output_dir = os.path.join(self.model_save_path, 'full_model_weights.pth')
+        torch.save(self.model.state_dict(), output_dir)
+
+    def save_checkpoint(self, epoch, step):
+        checkpoint = { 
+            'epoch': epoch,
+            'step': step,
+            'full_model': self.model,
+            'optimizer': self.optimizer,
+            'lr_sched': self.lr_scheduler
+        }
+        output_dir = os.path.join(self.model_save_path, 'checkpoint.pth')
+        torch.save(checkpoint, output_dir)
+
+
+
+
+
 
 def dek_cos_sim(a: Tensor, b: Tensor):
     """
@@ -733,7 +966,132 @@ def dek_cos_sim(a: Tensor, b: Tensor):
     return torch.mm(a_norm, b_norm.transpose(0, 1))
 
 
+class multimodal_loss(nn.Module):
+    """
+        This loss expects as input a batch consisting of ... etc
+    """
+    def __init__(self, full_model, scale: float = 20.0, device=None, loss_type='clip_loss', normalize=False, scale_type="fixed"):
+        """
+        test
+        """
+        super(multimodal_loss, self).__init__()
+
+        self.text_model = full_model.text_model
+        self.audio_model = full_model.audio_model
+
+        self.normalize = normalize
+        self.loss_type = loss_type
+        self.scale_type = scale_type
+        if self.scale_type == 'fixed':
+            self.fixed_scale = scale
+        elif self.scale_type == 'learned':
+            # self.logit_scale = nn.Parameter(torch.ones([]) * np.log(1 / 0.07))
+            # self.init_parameters_logtiscale()
+            self.logit_scale = nn.Parameter(torch.log(torch.ones([]) * 100))
+            self.logit_scale.requires_grad = True
+
+        self.similarity_fct = dek_cos_sim
+        self.cross_entropy_loss = nn.CrossEntropyLoss()
+
+        self._target_device = torch.device(device)
+        self.batch_size = full_model.batch_size
+
+    def init_parameters_logtiscale(self):
+        # nn.init.normal_(self.token_embedding.weight, std=0.02)
+        # nn.init.normal_(self.positional_embedding, std=0.01)
+        nn.init.constant_(self.logit_scale, np.log(1 / 0.07))
+
+    def forward(self, sentence_features: Iterable[Dict[str, Tensor]], audio_features: Tensor, seq_len):
+        # Get sentence Representations (shape [batchsize, 768])
+        reps_sentences = self.text_model(sentence_features)['sentence_embedding']
+        # print("[clipmodel] text_embeddings: ", reps_sentences[0])
+        
+        # Get Audio representations
+        reps_audio = self.audio_model((audio_features, seq_len))
+        # print("[clipmodel] audio_embeddings: ", reps_audio[0])
+        # print("------------------")
+
+        # ['simcse_loss', 'clip_loss', 'clip_loss_simple'] 
+        if self.loss_type == 'clip_loss':
+            # Loss function from CLIP paper
+            if self.scale_type == 'fixed':
+                audio_logits =  (reps_audio @ reps_sentences.t()) * self.fixed_scale
+            elif self.scale_type == 'learned':
+                cur_logit_scale = torch.clamp(self.logit_scale.exp(), min=1.0, max=100.0)
+                audio_logits =  (reps_audio @ reps_sentences.t()) * cur_logit_scale.exp()
+
+            text_logits = audio_logits.t()
+
+            if self.normalize:
+                audio_logits = audio_logits / audio_logits.norm(dim=1, keepdim=True)
+                text_logits = text_logits / text_logits.norm(dim=1, keepdim=True)
+
+            # ground_truth = torch.tensor(range(len(scores)), dtype=torch.long, device=scores.device)  
+            ground_truth = torch.arange(self.batch_size, dtype=torch.long, device=self._target_device)
+            # total_loss = (self.cross_entropy_loss(audio_logits,ground_truth) + self.cross_entropy_loss(text_logits,ground_truth))/2
+
+            # TODO: werkt dit beter?
+            total_loss = F.cross_entropy(audio_logits,ground_truth, weight=None) + F.cross_entropy(text_logits.transpose(-1, -2), ground_truth, weight=None)
+
+            #audio_acc = torch.mean((audio_logits.detach().argmax(dim=-1) == ground_truth).float()).item()
+            #text_acc = torch.mean((text_logits.detach().argmax(dim=-1) == ground_truth).float()).item()
+
+            metrics = get_metrics(audio_logits.detach(), text_logits.detach(), ground_truth)
+   
+            return total_loss, metrics
+    
+        if self.loss_type == 'clip_loss_simple':
+            # Loss function from CLIP paper
+            if self.scale_type == 'fixed':
+                # temp = 40.0
+                logits =  (reps_sentences @ reps_audio.t()) / self.fixed_scale
+                audio_logits = reps_audio @ reps_audio.T
+                text_logits = reps_sentences @ reps_sentences.T
+                ground_truth = F.softmax((audio_logits + text_logits) / 2 * self.fixed_scale, dim=-1)
+
+            elif self.scale_type == 'learned':
+                cur_logit_scale = torch.clamp(self.logit_scale.exp(), min=1.0, max=100.0)
+                logits =  (reps_sentences @ reps_audio.t()) / cur_logit_scale.exp()
+                audio_logits = reps_audio @ reps_audio.T
+                text_logits = reps_sentences @ reps_sentences.T
+                ground_truth = F.softmax((audio_logits + text_logits) / 2 * cur_logit_scale.exp(), dim=-1)
+                
+            if self.normalize:
+                audio_logits = audio_logits / audio_logits.norm(dim=1, keepdim=True)
+                text_logits = text_logits / text_logits.norm(dim=1, keepdim=True)
+
+            texts_loss = cross_entropy(logits, ground_truth, reduction='none')
+            images_loss = cross_entropy(logits.T, ground_truth.T, reduction='none')
+            total_loss =  ((images_loss + texts_loss) / 2.0).mean() 
+ 
+            #audio_acc = torch.mean((audio_logits.argmax(dim=-1) == ground_truth).float()).item()
+            #text_acc = torch.mean((text_logits.argmax(dim=-1) == ground_truth).float()).item()
+            metrics = get_metrics(audio_logits.detach(), text_logits.detach(), ground_truth)
+            return total_loss, metrics
+
+        elif self.loss_type == 'simcse_loss':
+            # SIMCSE-based NCE loss
+            if self.scale_type == 'fixed':
+                # audio_logits =  (reps_audio @ reps_sentences.t()) * self.fixed_scale
+                scores = self.similarity_fct(reps_sentences, reps_audio) * self.fixed_scale
+            elif self.scale_type == 'learned':
+                cur_logit_scale = torch.clamp(self.logit_scale.exp(), min=1.0, max=100.0)
+                # audio_logits =  (reps_audio @ reps_sentences.t()) * self.logit_scale.exp()
+                scores = self.similarity_fct(reps_sentences, reps_audio) * cur_logit_scale.exp()
+
+            labels = torch.tensor(range(len(scores)), dtype=torch.long, device=scores.device)  # Example a[i] should match with b[i]
+            loss = self.cross_entropy_loss(scores, labels)
+            #acc = torch.mean((scores.argmax(dim=-1) == labels).float()).item()
+
+            metrics = get_metrics(scores.detach(), scores.t().detach(), labels)
+
+            return loss, metrics
+
+    def get_config_dict(self):
+        return {'scale_type': self.scale_type, 'similarity_fct': self.similarity_fct.__name__}
+
 def get_metrics(audio_logits, text_logits, ground_truth):
+    # tODO: naar self.multimodal_loss
     metrics ={}
     logits = {"audio": audio_logits, "text": text_logits}
 
@@ -769,6 +1127,7 @@ def cross_entropy(preds, targets, reduction='none'):
         return loss.mean()
 
 def to_plot(filename, column='accuracy2', title="Test accuracy"):
+    print("[del] to plot: ", filename, column)
     csv_file = pd.read_csv(filename)
 
     ax = sns.lineplot(x=csv_file.steps, y=csv_file[column])
@@ -781,18 +1140,49 @@ def to_plot(filename, column='accuracy2', title="Test accuracy"):
     plt.close()
 
 class Optimization:
-    def __init__(self, fullCFG, model):
-        self.model = model
+    #HIERO2
+    def __init__(self, CFG, text_modules, audio_modules):
+        self.temperature=CFG.temperature
+        self.batch_size = CFG.batch_size
+        self.device = CFG.device
+
+        self.loss_type = CFG.loss_type
+
+        if CFG.text_proj_head == 'simple_projection_head':
+            self.text_encoder = TextEncoder(CFG)
+            self.text_projection = ProjectionHead(CFG)
+
+            text_modules = [self.text_encoder, self.text_projection]
+        elif CFG.text_proj_head.lower() == 'none':
+            text_encoder = TextEncoder(CFG)
+            pooling_model = Pooling(text_encoder.get_word_embedding_dimension())
+            text_modules = [text_encoder, pooling_model]
+
+        if CFG.audio_proj_head in ['rnn', 'gru']:
+            audio_encoder = SequentialAudioModel(CFG)
+            audio_modules = [audio_encoder]
+        
+        # Create the full model
+        if text_modules is not None and not isinstance(text_modules, OrderedDict):
+            text_modules = OrderedDict([(str(idx), module) for idx, module in enumerate(text_modules)])
+        if audio_modules is not None and not isinstance(audio_modules, OrderedDict):
+            audio_modules = OrderedDict([(str(idx), module) for idx, module in enumerate(audio_modules)])
+
+        # self.temperature = temperature
+        
+        self.text_model = nn.Sequential(text_modules)
+        self.audio_model = nn.Sequential(audio_modules)
+
         # self.lr_scheduler = lr_scheduler
         # self.optimizer = optimizer
 
-        self.eval_every = fullCFG.eval_every
-        self.print_every = fullCFG.print_every
+        self.eval_every = CFG.eval_every
+        self.print_every = CFG.print_every
         self.best_loss = float('inf')
-        self.log_name = fullCFG.log_name
+        self.log_name = CFG.log_name
         self.init_logging()
-        self.batch_size = fullCFG.batch_size
-        self.device = fullCFG.device
+        self.batch_size = CFG.batch_size
+        self.device = CFG.device
 
         self.total_len = 1000
         self.total_len = 100
@@ -818,7 +1208,6 @@ class Optimization:
 
         # Full training
         for step, batch in enumerate(iter(train_loader)):
-            # print("[del]: continue eval")
             if  step % self.eval_every == 0 and step < 1: # del last statement
                 # Todo: uncommen
                 mean_loss, metrics = self.evaluate(val_loader)
@@ -846,9 +1235,9 @@ class Optimization:
             self.optimizer.zero_grad()
             self.lr_scheduler.step()
 
-            if step % self.print_every == 0:
-                print("[train] Epoch {} Step {}/{} \t loss {} \t acc {}".format(epoch, total_steps, steps, loss.item(), metrics['mean_acc']))
-                self.add_logging(epoch, total_steps, loss.item(), metrics, train=True)
+            # if step % self.print_every == 0:
+            #     print("[train] Epoch {} Step {}/{} \t loss {} \t acc {}".format(epoch, total_steps, steps, loss.item(), metrics['mean_acc']))
+            #     self.add_logging(epoch, total_steps, loss.item(), metrics, train=True)
             
             total_steps += 1
             print("[metrics] ", loss.item(), metrics['mean_acc'])
@@ -1103,6 +1492,8 @@ class FullCfg:
     text_pooling: str = 'mean'   #['original', 'cls', 'mean']
     text_model_name : str = 'distilbert-base-uncased'
     text_max_length: int = 32
+    weight_decay: float = 0.01
+    
     
 
 ######### This stays in MAIN
@@ -1126,6 +1517,7 @@ def main(args):
     FullCfg.batch_size = args.batch_size
     FullCfg.loss_type = args.loss_type
     FullCfg.text_pooling = args.text_pooling
+    FullCfg.scale_type = args.scale_type
 
     # if args.use_lr:
     #     FullCfg.head_lr = 2e-5
@@ -1139,10 +1531,6 @@ def main(args):
     train_loader = data_loader.train_loader
     test_loader = data_loader.test_loader
 
-    full_model = CLIPModel(FullCfg).to(device)
-    # tokenizer = DistilBertTokenizer.from_pretrained(FullCfg.text_tokenizer)
-    # print("This is self.tokenizer: ", tokenizer)
-
     tokenizer = AutoTokenizer.from_pretrained(FullCfg.text_model_name, cache_dir=None)
 
     # TODO: dit ergens in init dataloader doen
@@ -1151,12 +1539,23 @@ def main(args):
     data_loader.train_dataset.text_max_length = FullCfg.text_max_length
     data_loader.test_dataset.text_max_length = FullCfg.text_max_length
 
-    warmup_steps =  math.ceil(len(train_loader) * num_epochs * 0.1)  # 10% of train data for warm-up
-    num_train_steps = int(len(train_loader) * num_epochs)
+    # warmup_steps =  math.ceil(len(train_loader) * num_epochs * 0.1)  # 10% of train data for warm-up
+    # num_train_steps = int(len(train_loader) * num_epochs)
 
     FullCfg.eval_every = int(math.ceil(len(train_loader) * 0.1)) #Evaluate every 5% of the data
     FullCfg.print_every = int(math.ceil(len(train_loader) * 0.02)) #Print results every 2% of the data
     print("[main] print_every {} eval_every {} ".format(FullCfg.print_every, FullCfg.eval_every))
+
+
+    full_model = mmModule(FullCfg)
+
+    # TODO: deze args verplaatsen / weghalen
+    scale=args.scale
+    loss_type = FullCfg.loss_type 
+    normalize=args.normalize             # TODO: dit kan weg in zijn geheel
+    scale_type=FullCfg.scale_type
+
+    loss_func = multimodal_loss(full_model, scale=scale, device=device, loss_type=loss_type, normalize=normalize, scale_type=scale_type)
 
     if args.load_model: 
         print("[Main] loading model ", args.load_model_path)
@@ -1173,46 +1572,46 @@ def main(args):
 
     else:
         print("[Main] training from scratch ")
-        use_old_opt = args.use_old_opt
-        use_old_opt = False
-        print("[TODO] old opt always set to TRUE")
-        if use_old_opt:
-            print("[del] us_old_opt ON")
-            if full_model.audio_projection and full_model.text_projection:
-                params = [
-                    {"params": full_model.audio_encoder.parameters(), "lr": FullCfg.audio_encoder_lr},
-                    {"params": full_model.text_encoder.parameters(), "lr": FullCfg.text_encoder_lr},
-                    {"params": itertools.chain(
-                        full_model.audio_projection.parameters(), full_model.text_projection.parameters()
-                    ), "lr": FullCfg.head_lr, "weight_decay": FullCfg.weight_decay}
-                ]
-            elif full_model.audio_projection and not full_model.text_projection:
-                params = [
-                    {"params": full_model.audio_encoder.parameters(), "lr": FullCfg.audio_encoder_lr},
-                    {"params": full_model.text_encoder.parameters(), "lr": FullCfg.text_encoder_lr},
-                    {"params": itertools.chain(
-                        full_model.audio_projection.parameters()
-                    ), "lr": FullCfg.head_lr, "weight_decay": FullCfg.weight_decay}
-                ]
-            elif not full_model.audio_projection and full_model.text_projection:
-                params = [
-                    {"params": full_model.audio_encoder.parameters(), "lr": FullCfg.audio_encoder_lr},
-                    {"params": full_model.text_encoder.parameters(), "lr": FullCfg.text_encoder_lr},
-                    {"params": itertools.chain(
-                        full_model.text_projection.parameters()
-                    ), "lr": FullCfg.head_lr, "weight_decay": FullCfg.weight_decay}
-                ]
-            elif not full_model.audio_projection and not full_model.text_projection: # TODO: weight decay over alles?
-                params = [
-                    {"params": full_model.audio_encoder.parameters(), "lr": FullCfg.audio_encoder_lr},
-                    {"params": full_model.text_encoder.parameters(), "lr": FullCfg.text_encoder_lr},
-                    {"params": itertools.chain(), "lr": FullCfg.head_lr, "weight_decay": FullCfg.weight_decay}
-                ]
+        # use_old_opt = args.use_old_opt
+        # use_old_opt = False
+        # print("[TODO] old opt always set to TRUE")
+        # if use_old_opt:
+        #     print("[del] us_old_opt ON")
+        #     if full_model.audio_projection and full_model.text_projection:
+        #         params = [
+        #             {"params": full_model.audio_encoder.parameters(), "lr": FullCfg.audio_encoder_lr},
+        #             {"params": full_model.text_encoder.parameters(), "lr": FullCfg.text_encoder_lr},
+        #             {"params": itertools.chain(
+        #                 full_model.audio_projection.parameters(), full_model.text_projection.parameters()
+        #             ), "lr": FullCfg.head_lr, "weight_decay": FullCfg.weight_decay}
+        #         ]
+        #     elif full_model.audio_projection and not full_model.text_projection:
+        #         params = [
+        #             {"params": full_model.audio_encoder.parameters(), "lr": FullCfg.audio_encoder_lr},
+        #             {"params": full_model.text_encoder.parameters(), "lr": FullCfg.text_encoder_lr},
+        #             {"params": itertools.chain(
+        #                 full_model.audio_projection.parameters()
+        #             ), "lr": FullCfg.head_lr, "weight_decay": FullCfg.weight_decay}
+        #         ]
+        #     elif not full_model.audio_projection and full_model.text_projection:
+        #         params = [
+        #             {"params": full_model.audio_encoder.parameters(), "lr": FullCfg.audio_encoder_lr},
+        #             {"params": full_model.text_encoder.parameters(), "lr": FullCfg.text_encoder_lr},
+        #             {"params": itertools.chain(
+        #                 full_model.text_projection.parameters()
+        #             ), "lr": FullCfg.head_lr, "weight_decay": FullCfg.weight_decay}
+        #         ]
+        #     elif not full_model.audio_projection and not full_model.text_projection: # TODO: weight decay over alles?
+        #         params = [
+        #             {"params": full_model.audio_encoder.parameters(), "lr": FullCfg.audio_encoder_lr},
+        #             {"params": full_model.text_encoder.parameters(), "lr": FullCfg.text_encoder_lr},
+        #             {"params": itertools.chain(), "lr": FullCfg.head_lr, "weight_decay": FullCfg.weight_decay}
+        #         ]
 
-            optimizer = torch.optim.AdamW(params, weight_decay=0.)
-        else:
-            print("[del] us_old_opt OFF")
-            # TODO: beter in init van Optimization ++ verget @staticmethod dan niet!
+        #     optimizer = torch.optim.AdamW(params, weight_decay=0.)
+        # else:
+        #     print("[del] us_old_opt OFF")
+        #     # TODO: beter in init van Optimization ++ verget @staticmethod dan niet!
             # optimizer = _get_optimizer(full_model)
             # scheduler: str = 'WarmupLinear'
             # scheduler = _get_scheduler(optimizer, scheduler=scheduler, warmup_steps=warmup_steps, t_total=num_train_steps)
@@ -1222,13 +1621,23 @@ def main(args):
         # )
         epoch = 0
 
-    opt = Optimization(FullCfg, model=full_model)
-    opt.train(train_loader, test_loader, epoch)
+    # opt = Optimization(FullCfg, model=full_model)
+    # opt.train(train_loader, test_loader, epoch)
+
+    full_model.fit(
+        CFG = FullCfg,
+        train_loader=train_loader,
+        test_loader = test_loader,
+        loss_model=loss_func,
+        start_epoch=epoch,
+        optimizer_class=AdamW,
+        optimizer_params={'lr': 5e-5},
+    )
 
     t_end = time()
     print("[main] ------------------------------------------------------------")
     print("[main] Done, total duration {} seconds ".format(int(t_end - t_start)))
-    csv_file = pd.read_csv(opt.eval_csv_filename)
+    csv_file = pd.read_csv(full_model.eval_csv_filename)
     print("[main] Maximum text acc step={} acc={}".format(csv_file['text_acc'].idxmax(), csv_file['text_acc'].max()))
     print("[main] Maximum audio acc step={} acc={}".format(csv_file['audio_acc'].idxmax(), csv_file['audio_acc'].max()))
     best_idx = csv_file['mean_acc'].idxmax()
@@ -1270,7 +1679,7 @@ if __name__ == "__main__":
                     nargs='?', choices=['simcse_loss', 'clip_loss', 'clip_loss_simple'],
                     help='Name of scale_type (default: %(default)s)')
 
-    # parser.add_argument('--normalize', action='store_true')
+    parser.add_argument('--normalize', action='store_true')
     parser.add_argument('--audio_proj_head', default='gru', const='gru',
                     nargs='?', choices=['simple_projection_head', 'rnn', 'gru'],
                     help='Activation to use in simple proj head (default: %(default)s)')
