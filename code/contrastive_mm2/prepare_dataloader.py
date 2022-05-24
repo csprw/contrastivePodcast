@@ -4,7 +4,8 @@ Author: Casper Wortmann
 Usage: python main.py
 """
 import os
-import pickle 
+import pickle
+from re import sub 
 
 import pandas as pd
 # from IPython.display import display
@@ -182,18 +183,19 @@ def get_embed_transcript_paths(transcripts_paths):
     return outer_folders, e_filenames, t_filenames
 
 def save_all(save_path, all_mean_embeddings, filenames, in_train_set, all_sentences, all_full_embeddings):
+    comp_lvl = 9
     f = h5py.File(save_path, "w")  
     all_mean_embeddings = torch.stack(all_mean_embeddings, dim=0)
 
     # Create a new group to the dataset and add embeddings and sentences.
     dset0 = f.create_dataset("filenames", data=np.array(filenames, dtype='S'))
-    dset1 = f.create_dataset("mean_embeddings", data=all_mean_embeddings)
+    dset1 = f.create_dataset("mean_embeddings", data=all_mean_embeddings, compression="gzip", compression_opts=comp_lvl)
     dset2 = f.create_dataset("sentences", data=np.array(all_sentences, dtype=h5py.special_dtype(vlen=str)))
-    dset3 = f.create_dataset("train_split", data=np.array(in_train_set))
+    dset3 = f.create_dataset("train_split", data=np.array(in_train_set), compression="gzip", compression_opts=comp_lvl)
 
     max_embed_dim = 0
     for embed_idx, full_embeds in enumerate(all_full_embeddings):
-        dset = f.create_dataset(str(embed_idx), data=full_embeds)
+        dset = f.create_dataset(str(embed_idx), data=full_embeds, compression="gzip", compression_opts=comp_lvl)
         max_embed_dim = max(max_embed_dim, len(full_embeds))
     f.attrs['max_embed_dim'] = max_embed_dim
     f.close()
@@ -205,16 +207,19 @@ if __name__ == "__main__":
 
     # Load metadata
     metadata = load_metadata(conf.dataset_input_path)
-    print("[main] total lenght of metadata: ", len(metadata))
+    print("[main] total length of metadata: ", len(metadata))
 
     # Check how many yamnet embeddings are stored on local disk
-    subset_shows = set([h5file.parts[-2] for h5file in Path(conf.yamnet_embed_dir).glob('**/*.h5')])
+    subset_shows = [h5file.parts[-2] for h5file in Path(conf.yamnet_embed_dir).glob('**/*.h5')]
+    print('subset shows: ', len(subset_shows))
+    subset_shows = set(subset_shows)
+    print("now subset_shows: ", len(subset_shows))
     subset = metadata[(metadata['show_filename_prefix'].isin(subset_shows))]
     print("[main] number of data found on local disk: ", len(subset)) 
 
     # Determine train/test set
     tmp = subset.drop_duplicates(subset='show_filename_prefix', keep="last")
-    train = tmp.sample(frac=0.8, random_state=200) #random state is a seed value
+    train = tmp.sample(frac=0.9, random_state=200) #random state is a seed value
     train_shownames = train.show_filename_prefix.tolist()
     test = tmp.drop(train.index)
     subset["train"] = np.where(subset["show_filename_prefix"].isin(train_shownames), True, False)
@@ -250,9 +255,8 @@ if __name__ == "__main__":
     test_filenames = []
     test_in_train_set = []
 
-
     for idx, outer_folder in enumerate(outer_folders):
-        if idx < 41541:
+        if idx < 40086:
             last_output_folder = outer_folders[idx+1]
             continue
         filename = os.path.split(e_filenames[idx])[-1].split('.')[0]
