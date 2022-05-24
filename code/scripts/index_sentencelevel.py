@@ -321,10 +321,61 @@ def clean_text(text):
     return text
 
 
+# def already_indexed(es_url):
+#     json = { 
+#         "query" : { 
+#             "match_all" : {} 
+#         },
+#         "stored_fields": ['_id'],
+#         "size": 10000,
+#     }
 
-def add_df_to_elasticsearch(transcripts_path, metadata_subset, processed_topic_path):
+#     # json = {"query": {"match_all": {}}, "size": 30000, "fields": ["_id"]}
+
+#     # Attempt the Elasticsearch query
+#     try:
+#         response = requests.get(url=es_url, json=json)
+#     except Exception:
+#         raise ConnectionError("Could not connect to Elasticsearch.")
+
+#     # print("respose: ", response.json())
+#     # Unpack the response segments and scores and return
+#     response = response.json()["hits"]["hits"]
+#     # print(response)
+#     ids = []
+
+#     for r in response:
+#         ids.append(r["_id"].split('_')[0])
+#     ids = list(set(ids))
+    
+#     return ids
+
+
+def in_index(seg_id, es_url='http://localhost:9200/segments/_search'):
+
+    json = {
+        "query": {
+            "term": {
+               "_id": seg_id
+            }
+        },
+        "size" : 0
+    }
+
+     # Attempt the Elasticsearch query
+    try:
+        response = requests.post(url=es_url, json=json)
+    except Exception:
+        raise ConnectionError("Could not connect to Elasticsearch.")
+
+    response = response.json()["hits"]["total"]['value']
+    return bool(response)
+
+def add_df_to_elasticsearch(transcripts_path, metadata_subset, processed_topic_path, overwrite_existing = False):
     seg_length=120
     seg_step=60
+    es_url='http://localhost:9200/segments/_search'
+
 
     # See if there are any failed segments
     failed_uris = None
@@ -337,22 +388,31 @@ def add_df_to_elasticsearch(transcripts_path, metadata_subset, processed_topic_p
     # Open file to write failed uri's to
     failed_file = open("index_failed.txt", "w")
     print("reading: ", processed_topic_path)
-    f = h5py.File(processed_topic_path, 'r')
-    print(list(f.keys()))
 
     delcount = 0
     for index, row in tqdm(metadata_subset.iterrows()):
+        filename = str(row["episode_filename_prefix"])
+        cur_save_file = os.path.join(processed_topic_path, filename + '.h5')
+
+        # Only process new podcasts
+        already_indexed = in_index(filename + '_0')
+        if (not overwrite_existing) and already_indexed:
+            print("{} was already processed, continue".format(filename))
+            continue
+
+        else:
+            print("[del] not processed: ", filename)
 
         delcount += 1
-        print("delcount: ", delcount)
-        if delcount > 2:
-            print("break2")
-            break
-        # if delcount < 300:
-        #     print("continue")
-        #     continue
+        # print("delcount: ", delcount)
+        # if delcount > 2:
+        #     print("break2")
+        #     break
 
-        if (failed_uris and str(row["episode_filename_prefix"]) in failed_uris) or not failed_uris:
+        if Path(cur_save_file).exists():
+            print("[del] Processed file exists!! open it ")
+            f = h5py.File(cur_save_file, 'r')  
+
             transcript_path = os.path.join(
                 transcripts_path,
                 src.data.relative_file_path(
@@ -391,17 +451,13 @@ def add_df_to_elasticsearch(transcripts_path, metadata_subset, processed_topic_p
                     # Generate the segment name
                     seg_id = seg_base + str(seg_start)
                     dset = f[seg_id]
-                    # print("[del] This is dset: ", dset)
-                    # print("[del] keys: ", dset.keys(), dset.attrs.keys())
-
                     num_speakers = dset.attrs['num_speakers']
                     audio_method = dset.attrs['audio_method']
 
-                    text_embed = np.array(dset['text_mean_embed']).tolist()
-                    #text_begin_embed = np.array(dset['text_begin_embed']).tolist()
+                    text_embed = np.array(dset['text_embed']).tolist()
                     audio_embed = np.array(dset['audio_embed']).tolist()
 
-                    seg_words = dset['seg_words'].value
+                    seg_words = dset['seg_words'][()]
 
                     segment = PodcastSegment(
                         meta={"id": seg_id, "audio_method": audio_method},
@@ -412,107 +468,51 @@ def add_df_to_elasticsearch(transcripts_path, metadata_subset, processed_topic_p
                         seg_words=seg_words,
                         seg_speakers=num_speakers,
                         text_embed=text_embed,
-                        #text_begin_embed = text_begin_embed,
                         audio_embed = audio_embed
                     )
 
                     try:
-                        print("[del] add to index full")
+                        print("Will save as id: ", seg_id)
                         segment.save()
 
                     except Exception as e:
                         raise ConnectionError("Indexing error: {}".format(e))
 
-                    print("And now sentencelevel segment")
-
-                    print("Keys of dset: ", dset.keys())
-
                     grp2 = dset['sentencelevel']
-                    print("keys of grp2: ", grp2.keys())
 
                     for cur_seg_id in grp2.keys():
-                        print("Cur seg id: ", cur_seg_id)
                         grp_slvl = grp2[cur_seg_id]
 
-                        sent_words = grp_slvl['sent_words'].value
+                        sent_words = grp_slvl['sent_words'][()]
                         text_embed = np.array(grp_slvl['text']).tolist()
                         audio_embed = np.array(grp_slvl['audio']).tolist()
 
                         segment_sentecelevel = PodcastSegment_sentencelevel(
-                            #meta={"id": cur_seg_id, "audio_method": audio_method},
-                            meta={"id": cur_seg_id},
+                            meta={"id": cur_seg_id, "audio_method": audio_method},
+                            # meta={"id": cur_seg_id},
                             sent_words=sent_words,
                             text_embed = text_embed,
                             audio_embed = audio_embed
                         )
                         
                         try:
-                            print("[del[ and dnow sentenceclele add to index")
                             segment_sentecelevel.save()
 
                         except Exception as e:
                             raise ConnectionError("Indexing error: {}".format(e))
-                        print("exit")
-                        exit(1)
+
 
                     
                 except Exception as e:
                     print("EXCEPTION: ", e)
-                    print("There is an exception")
-                    exit(1)
                     pass
                     failed_file.write(str(row["episode_filename_prefix"]) + "\n")
 
-    # Close input file and failed file
-    f.close()
+            # Close input file and failed file
+            f.close()
+        else:
+            print("File does not exist, process first: ", cur_save_file)
     failed_file.close()
-
-
-
-# def read_metadata_subset(conf):
-#     metadata = src.data.load_metadata(conf.dataset_path)
-#     print("[main] metadata loaded ", len(metadata))
-
-#     # Read target data
-#     target_dir = os.path.join(conf.dataset_path, 'topic_task')
-#     topics_train_path = os.path.join(target_dir, 'podcasts_2020_topics_train.xml')
-    
-#     ## Read dataframe with 8 query topics
-#     topics_train = pd.read_xml(topics_train_path)
-#     print("[main] topics_train loaded ", len(topics_train))
-
-#     ## Read annotations
-#     colnames = ['num', 'unk', 'episode_uri_time', 'score']
-#     topics_train_targets_path = os.path.join(target_dir, '2020_train_qrels.list.txt')
-#     topics_train_targets = pd.read_csv(topics_train_targets_path, sep='\t', lineterminator='\n', names=colnames)
-#     print("[main] topics_train_targets loaded ", len(topics_train_targets))
-
-#     # remove float '.0' from column string
-#     topics_train_targets['episode_uri_time'] = topics_train_targets['episode_uri_time'].str.replace(r'.0$', '', regex=True)
-
-#     # Add a binary score (not ranked)
-#     ## scores [1,2,3,4] will be considered relevant
-#     ## scores [0 will be consisdered as irrelevant]
-#     topics_train_targets['bin_score'] = topics_train_targets['score'] > 0
-#     topics_train_targets.bin_score.replace((True, False), (1, 0), inplace=True)
-
-#     # Add column with only episode_uri and only_time
-#     topics_train_targets[['episode_uri','time']] = topics_train_targets.episode_uri_time.str.split(pat='_',expand=True)
-
-#     # Remove all podcasts that do not have an annotation
-#     metadata_subset = pd.merge(metadata, topics_train_targets, how='left', indicator='Exist')
-#     metadata_subset['Exist'] = np.where(metadata_subset.Exist == 'both', True, False)
-#     metadata_subset = metadata_subset[metadata_subset['Exist']==True].drop(['Exist','episode_uri'], axis=1)
-#     print("[main] metadata_subset loaded ", len(metadata_subset))
-
-#     # remove 'spotify:episode:' from column so we can match items
-#     topics_train_targets['episode_uri_time'] = topics_train_targets.episode_uri_time.str.replace(r'spotify:episode:', '')
-#     topics_train_targets['episode_uri'] = topics_train_targets.episode_uri_time.str.replace(r'spotify:episode:', '')
-
-#     # TODO: DELETE THESE TWO LINES
-#     metadata_subset = metadata_subset.sort_values('score')
-
-#     return metadata_subset, topics_train, topics_train_targets
 
 
 def read_metadata_subset(conf, traintest='test'):
@@ -577,6 +577,10 @@ def read_metadata_subset(conf, traintest='test'):
     topics_df_targets['episode_uri_time'] = topics_df_targets.episode_uri_time.str.replace(r'spotify:episode:', '')
     topics_df_targets['episode_uri'] = topics_df_targets.episode_uri_time.str.replace(r'spotify:episode:', '')
 
+    # Remove timestamps from episode uri
+    topics_df_targets['episode_uri'] = topics_df_targets['episode_uri'].str.split('_').str[0]
+
+
     # TODO: DELETE THESE TWO LINES
     metadata_subset = metadata_subset.sort_values('score')
 
@@ -587,20 +591,25 @@ def read_metadata_subset(conf, traintest='test'):
 if __name__ == "__main__":
     print("[main]")
     """TO ARGS"""
-    model_path = '/Users/casper/Documents/UvAmaster/b23456_thesis/msc_thesis/code/contrastive_mm2/logs/load_test'
-    # RNN
-    model_path = '/Users/casper/Documents/UvAmaster/b23456_thesis/msc_thesis/code/contrastive_mm2/logs/v2-simcse_loss_rnn_relu_768_0.001_2022-05-12_15-58-03'
+    # model_path = '/Users/casper/Documents/UvAmaster/b23456_thesis/msc_thesis/code/contrastive_mm2/logs/load_test'
+    # # RNN
+    # model_path = '/Users/casper/Documents/UvAmaster/b23456_thesis/msc_thesis/code/contrastive_mm2/logs/v2-simcse_loss_rnn_relu_768_0.001_2022-05-12_15-58-03'
     # SIMPLE PROJ head
     # model_path = '/Users/casper/Documents/UvAmaster/b23456_thesis/msc_thesis/code/contrastive_mm2/logs/v2-simcse_loss_simple_projection_head_relu_768_2e-05_2022-05-12_15-56-09'
 
     transcripts_path = '/Users/casper/Documents/UvAmaster/b23456_thesis/msc_thesis/code/data/sp/podcasts-no-audio-13GB/podcasts-transcripts'
-    processed_topic_path = '/Users/casper/Documents/UvAmaster/b23456_thesis/msc_thesis/code/data/sp/yamnet/processed_topictask/lisa_v2-simcse_loss_rnn_relu_768_0.001_2022-05-12_15-58-03_test.h5'
+    # processed_topic_path = '/Users/casper/Documents/UvAmaster/b23456_thesis/msc_thesis/code/data/sp/yamnet/processed_topictask/lisa_v2-simcse_loss_rnn_relu_768_0.001_2022-05-12_15-58-03_test'
+    processed_topic_path = '/Users/casper/Documents/UvAmaster/b23456_thesis/msc_thesis/code/data/sp/yamnet/processed_topictask/lisa_v2-simcse_loss_rnn_relu_768_2e-05_2022-05-17_06-58-44_test'
+
     # processed_topic_path = '../data/sp/yamnet/query_embedding/processed/win_v2-simcse_loss_simple_projection_head_relu_768_2e-05_2022-05-12_08-07-49.h5'
     traintest = 'test'
 
     # Read Metadata
     metadata_subset, topics_train, topics_train_targets = read_metadata_subset(conf, traintest)
     print("loaded: ", len(metadata_subset), len(topics_train), len(topics_train_targets))
+    # Remove duplicate rows
+    metadata_subset = metadata_subset.drop_duplicates(subset=['episode_filename_prefix']).sort_values('episode_filename_prefix')
+    print("[main] Metadata length: ", len(metadata_subset))
 
 
     # Define client connection and setup index

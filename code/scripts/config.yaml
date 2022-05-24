@@ -8,7 +8,7 @@ yamnet_embed_dir: /Users/casper/Library/CloudStorage/Box-Box/Spotify-Podcasts/ya
 yamnet_score_dir: ../data/sp/yamnet/score
 
 yamnet_query_embed_path: ../data/sp/yamnet/query_embedding/query/fast
-yamnet_topic_embed_path: ../data/sp/yamnet/query_embedding/processed
+yamnet_topic_embed_path: ../data/sp/yamnet/processed_topictask
 
 ########################################
 # Paths for contrastive training
@@ -35,8 +35,9 @@ features_num_workers: 8
 #########
 ### Text to speech
 query_audio_dir: ../data/sp/podcasts-no-audio-13GB/topic_task/query_audio
-query_embed_dir: ../data/sp/podcasts-no-audio-13GB/topic_task/query_embedding
-# query_embed_dir: /Users/casper/Library/CloudStorage/Box-Box/Spotify-Podcasts/yamnet/embedding
+# query_audio_dir: ../data/sp/yamnet/query_embedding
+# query_embed_dir: ../data/sp/podcasts-no-audio-13GB/topic_task/query_embedding
+query_embed_dir: ../data/sp/yamnet/query_embedding
 # features_output_path
 
 

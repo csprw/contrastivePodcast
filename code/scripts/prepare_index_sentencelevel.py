@@ -360,11 +360,13 @@ def topic_task_embeddings(transcripts_path, metadata_subset, save_path='output')
                 ## Retreiving audio embeddings
                 # TODO!! ook nog audio embeds per sentence
                 audio_embed, method = indexer.get_yamnet_embeds(seg_id)
+
+                clvl = 4
                 
                 grp = f.create_group(seg_id)
-                grp.create_dataset('text_embed', data=text_mean_embed, dtype=np.float32)
+                grp.create_dataset('text_embed', data=text_mean_embed, dtype=np.float32, compression="gzip", compression_opts=clvl)
                 #grp.create_dataset('text_begin_embed', data=text_begin_embed, dtype=np.float32)
-                grp.create_dataset('audio_embed', data=audio_embed, dtype=np.float32)
+                grp.create_dataset('audio_embed', data=audio_embed, dtype=np.float32, compression="gzip", compression_opts=clvl)
 
                 grp.create_dataset("seg_words", data=np.array(seg_words, dtype=h5py.special_dtype(vlen=str)))
                 grp.attrs['num_speakers'] = num_speakers
@@ -391,8 +393,8 @@ def topic_task_embeddings(transcripts_path, metadata_subset, save_path='output')
                         # sent_yamnet_embeds = sent_yamnet_embeds
                         grp_slvl = grp2.create_group(cur_seg_id)
                         grp_slvl.create_dataset("sent_words", data=np.array(sent_words, dtype=h5py.special_dtype(vlen=str)))
-                        grp_slvl.create_dataset("audio", data=np.array(sent_yamnet_embeds, dtype=np.float32))
-                        grp_slvl.create_dataset("text", data=np.array(embed, dtype=np.float32))
+                        grp_slvl.create_dataset("audio", data=np.array(sent_yamnet_embeds, dtype=np.float32), compression="gzip", compression_opts=clvl)
+                        grp_slvl.create_dataset("text", data=np.array(embed, dtype=np.float32), compression="gzip", compression_opts=clvl)
 
                     words_so_far += len(sent_words)
             f.close()
@@ -466,6 +468,9 @@ def read_metadata_subset(conf, traintest='test'):
     # remove 'spotify:episode:' from column so we can match items
     topics_df_targets['episode_uri_time'] = topics_df_targets.episode_uri_time.str.replace(r'spotify:episode:', '')
     topics_df_targets['episode_uri'] = topics_df_targets.episode_uri_time.str.replace(r'spotify:episode:', '')
+
+    # Remove timestamps from episode uri
+    topics_df_targets['episode_uri'] = topics_df_targets['episode_uri'].str.split('_').str[0]
 
     # TODO: DELETE THESE TWO LINES
     metadata_subset = metadata_subset.sort_values('score')

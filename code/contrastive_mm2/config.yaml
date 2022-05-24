@@ -28,6 +28,9 @@ features_output_path: ./features
 features_num_workers: 8
 
 
+######## QUERY audio
+query_audio_dir: ../query_audio
+
 ##################################
 #### Search Configuration ####
 # Elasticsearch cluster UCL

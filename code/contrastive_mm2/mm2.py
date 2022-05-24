@@ -579,13 +579,7 @@ class Pooling(nn.Module):
         super(Pooling, self).__init__()
 
         self.config_keys = ['word_embedding_dimension',  'pooling_mode_cls_token', 'pooling_mode_mean_tokens', 'pooling_mode_max_tokens', 'pooling_mode_mean_sqrt_len_tokens']
-        print("pooling mode: ", pooling_mode)
-        print(pooling_mode_cls_token)
-        print(pooling_mode_max_tokens)
-        print(pooling_mode_mean_tokens)
-        print(pooling_mode_mean_sqrt_len_tokens)
 
-        exit(1)
         if pooling_mode is not None:        #Set pooling mode by string
             pooling_mode = pooling_mode.lower()
             assert pooling_mode in ['mean', 'max', 'cls']
@@ -719,12 +713,18 @@ class textModule(nn.Module):
             "attention_dropout": my_dropout,
             "dropout": my_dropout,
         }
+
+        print("[del] same: ", model_args)
+        print("[del] same: ", config_kwargs)
         
         config = AutoConfig.from_pretrained(model_name_or_path, **model_args, **config_kwargs)
         self.hidden_dim = config.dim
         print("[Transformer_multimodal] Configurations used: \n", config)
-        self._load_model(model_name_or_path, config, cache_dir)
 
+        self._load_model(model_name_or_path, config, cache_dir)
+        print("[del] model: ", self.auto_model)
+
+        # I removed self.tokenizer
         self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_name_or_path if tokenizer_name_or_path is not None else model_name_or_path, cache_dir=cache_dir, **tokenizer_args)
         
         #No max_seq_length set. Try to infer from model
@@ -762,8 +762,6 @@ class textModule(nn.Module):
             trans_features['token_type_ids'] = features['token_type_ids']
 
         output_states = self.auto_model(**trans_features, return_dict=False)
-        
-        print("[del] output_states :", output_states)
         
         # Original was like this
         output_tokens = output_states[0]
@@ -921,6 +919,8 @@ class mmModule(nn.Module):
         self._target_device = device
         self.batch_size = batch_size
 
+
+
     def tokenize(self, texts: Union[List[str], List[Dict], List[Tuple[str, str]]]):
         """
         Tokenizes the texts
@@ -1065,7 +1065,7 @@ class mmModule(nn.Module):
 
         optimizer = self._get_optimizer(loss_model)
         scheduler = self._get_scheduler(optimizer, scheduler=scheduler, warmup_steps=warmup_steps, t_total=num_train_steps)
-        
+
         skip_scheduler = False
         losses = []
         training_steps = 0
@@ -1081,6 +1081,7 @@ class mmModule(nn.Module):
         self.perform_matrix_evaluation(loss_model, -1, -1)
 
         for epoch in trange(epochs, desc="Epoch", disable=not show_progress_bar):
+            t1 = time()
             loss_model.zero_grad()
             loss_model.train()
 
@@ -1124,6 +1125,9 @@ class mmModule(nn.Module):
                 #     print("[del] break")
                 #     break            
             # Plot loss and accuracy curves
+            t2 = time()
+            print("[train] epoch duration {} seconds".format(int(t2-t1)))
+        
             
             
        
@@ -1210,27 +1214,49 @@ class mmModule(nn.Module):
         # Iterate over data and calculate accuracies
         self.to(device)
         total_len = len(self.eval_dataloader)
-        
-        for idx, batch in enumerate(iter(self.eval_dataloader)):
-            sent_features, audio_features, seq_len = batch
 
-            if self.use_amp:
-                print("Adjested by Casp, not yet fully implemented")
-                raise NotImplementedError
-            else:
-                # loss_value = loss_model(sent_features, audio_features, labels)
-                with torch.no_grad():
-                    loss_value, metrics = loss_model(sent_features, audio_features, seq_len)
-                    if idx == 0:
-                        #metrics_sum = metrics.copy()
-                        met_sum = Counter(metrics.copy())
-                    else:
-                        #metrics_sum = {k: metrics_sum.get(k, 0) + metrics.get(k, 0) for k in set(metrics_sum)}
-                        met_sum.update(Counter(metrics))
+        full_validation = False
+        if full_validation:
+            for idx, batch in enumerate(iter(self.eval_dataloader)):
+                sent_features, audio_features, seq_len = batch
 
-                    print("\t\t\t[del] loss: ", loss_value.item())
+                if self.use_amp:
+                    print("Adjested by Casp, not yet fully implemented")
+                    raise NotImplementedError
+                else:
+                    # loss_value = loss_model(sent_features, audio_features, labels)
+                    with torch.no_grad():
+                        loss_value, metrics = loss_model(sent_features, audio_features, seq_len)
+                        if idx == 0:
+                            #metrics_sum = metrics.copy()
+                            met_sum = Counter(metrics.copy())
+                        else:
+                            #metrics_sum = {k: metrics_sum.get(k, 0) + metrics.get(k, 0) for k in set(metrics_sum)}
+                            met_sum.update(Counter(metrics))
+        else:
+            print("[del] not full validation!")
+            total_len = 1000
+            iterator = iter(self.eval_dataloader)
+            for idx in range(total_len):
+                batch = next(iterator)
+                sent_features, audio_features, seq_len = batch
+
+                if self.use_amp:
+                    print("Adjested by Casp, not yet fully implemented")
+                    raise NotImplementedError
+                else:
+                    # loss_value = loss_model(sent_features, audio_features, labels)
+                    with torch.no_grad():
+                        loss_value, metrics = loss_model(sent_features, audio_features, seq_len)
+                        if idx == 0:
+                            #metrics_sum = metrics.copy()
+                            met_sum = Counter(metrics.copy())
+                        else:
+                            #metrics_sum = {k: metrics_sum.get(k, 0) + metrics.get(k, 0) for k in set(metrics_sum)}
+                            met_sum.update(Counter(metrics))
 
         mean_metrics = {k: value / total_len  for k, value in met_sum.items()}
+        del met_sum
         return mean_metrics
 
 
@@ -1351,7 +1377,7 @@ class multimodal_loss(nn.Module):
 
             #acc = torch.mean((scores.argmax(dim=-1) == labels).float()).item()
 
-            metrics = get_metrics(scores.detach(), scores.detach(), labels)
+            metrics = get_metrics(scores.detach(), scores.t().detach(), labels)
 
             return loss, metrics
 
@@ -1514,13 +1540,6 @@ def main(args):
     print("[main] Done, total duration {} seconds ".format(int(t_end - t_start)))
 
 if __name__ == "__main__":
-
-    # del
-    # test= torch.Tensor([0.1, 0.1, 0.1, 0.1]).reshape(-1,1)
-    # # mean_embeds = torch.Tensor(f['mean_embeddings'][sent_idx])
-    # print("test :", test.shape)
-    # exit(1)
-
     # Parse flags in command line arguments
     parser = ArgumentParser()
 

@@ -14,6 +14,7 @@ from datetime import datetime
 import h5py
 import json, csv
 import os
+import psutil, gc
 from pathlib import Path
 import math
 import pandas as pd
@@ -28,6 +29,8 @@ import gzip
 from typing import List, Dict, Optional, Union, Tuple, Iterable, Type, Callable
 from dataclasses import dataclass, fields, asdict
 from tqdm.autonotebook import trange
+
+
 
 import torch 
 from torch.utils import data as datautil
@@ -47,7 +50,7 @@ from torch.nn.utils.rnn import pad_sequence, pad_packed_sequence, pack_padded_se
 # Load static configuration variables. 
 conf = OmegaConf.load("./config.yaml")
 print("[cudacheck] Is cuda available? ", torch.cuda.is_available())
-# exit(1)
+
 ################################################################################
 # move to Utils
 def set_seed(args):
@@ -198,7 +201,9 @@ class spDatasetNoMemory(datautil.Dataset):
 
             f = h5py.File(h5py_file, 'r')
 
-            sent = f['sentences'][sent_idx].decode("utf-8")
+            # TODO: FIND OUT WHY IT SOMETIMES IS LIKE THIS:
+            # sent = f['sentences'][sent_idx].decode("utf-8")
+            sent = f['sentences'][sent_idx]
             full_embeds = torch.Tensor(np.array(f[str(sent_idx)]))
             sample = (sent, full_embeds)
             f.close()
@@ -208,8 +213,11 @@ class spDatasetNoMemory(datautil.Dataset):
             h5py_file = self.h5py_idx2file[h5py_idx]
 
             f = h5py.File(h5py_file, 'r')
+            
+            # TODO: FIND OUT WHY IT SOMETIMES IS LIKE THIS:
+            # sent = f['sentences'][sent_idx].decode("utf-8")
+            sent = f['sentences'][sent_idx]
 
-            sent = f['sentences'][sent_idx].decode("utf-8")
             mean_embeds = torch.Tensor(f['mean_embeddings'][sent_idx])
             sample = (sent, mean_embeds)
             f.close()
@@ -270,9 +278,7 @@ class TextEncoder(nn.Module):
 
         # we are using the CLS token hidden representation as the sentence's embedding
         self.target_token_idx = 0
-
         self.pooling = CFG.text_pooling
-        print("[del] Pooling used: ", self.pooling)
 
     def forward(self, input_ids, attention_mask):
         ######### LEAVE FOR DEBUG
@@ -305,9 +311,6 @@ class TextEncoder(nn.Module):
             pooled_output = sum_embeddings / sum_mask
 
             return pooled_output
-        
-
-        
 
 ################################################################################
 # Audiomodules
@@ -337,13 +340,13 @@ class SequentialAudioModel(nn.Module):
     def forward(self, x, length=None):
         # Initializing hidden state for first input with zeros
         h0 = torch.zeros(self.layer_dim, x.size(0), self.hidden_dim).requires_grad_().to(self.device)
-        # print("[rnn] in forward: [bs, sl, hidden]", x.shape)
 
         if length != None:
             # print("lengths: ", length)
             # print("should be [BS* SL * ?] ", x.shape)
             embedded = torch.nn.utils.rnn.pack_padded_sequence(x, length, batch_first=True, enforce_sorted=False)
             #packed_output, h0 = self.rnn(embedded, h0.detach())
+
             packed_output, h0 = self.seq_model(embedded, h0.detach())
             out, output_lengths = torch.nn.utils.rnn.pad_packed_sequence(packed_output, batch_first=True)
             do_trick = True
@@ -352,7 +355,7 @@ class SequentialAudioModel(nn.Module):
             # Forward propagation by passing in the input and hidden state into the model
             #out, h0 = self.rnn(x, h0.detach())
             out, h0 = self.seq_model(x, h0.detach())
-            print("[rnn] out forward: [bs, sl, hidden]", out.shape)
+            # print("[rnn] out forward: [bs, sl, hidden]", out.shape)
             do_trick=False
 
         # Convert the final state to our desired output shape (batch_size, output_dim)
@@ -452,11 +455,9 @@ class CLIPModel(nn.Module):
 
         # TODO: TEXT PROJECTION EENS UITZETTEN
         if CFG.text_proj_head == 'simple_projection_head':
-            print("[del] using text proj head!")
             self.text_encoder = TextEncoder(CFG)
             self.text_projection = ProjectionHead(CFG)
-        elif CFG.text_proj_head == 'None':
-            print("[del] No text proj head")
+        elif CFG.text_proj_head.lower() == 'none':
             self.text_encoder = TextEncoder(CFG)
             self.text_projection = None
 
@@ -516,7 +517,7 @@ class CLIPModel(nn.Module):
             labels = torch.tensor(range(len(scores)), dtype=torch.long, device=scores.device)  # Example a[i] should match with b[i]
 
             loss = self.cross_entropy_loss(scores, labels)
-            metrics = get_metrics(scores.detach(), scores.detach(), labels)
+            metrics = get_metrics(scores.detach(), scores.t().detach(), labels)
 
         return loss.mean(), metrics
 
@@ -604,7 +605,7 @@ class Optimization:
         self.device = fullCFG.device
 
         self.total_len = 1000
-        # self.total_len = 1
+        # self.total_len = 2
 
         self.loss1 = nn.CrossEntropyLoss()
         self.loss2 = nn.CrossEntropyLoss()
@@ -614,6 +615,8 @@ class Optimization:
         steps = len(train_loader)
         total_steps = epoch * steps
         t1 = time()
+
+        memory_test_delete = 1000
 
         # Fixed length training:
         # iterator = iter(train_loader)
@@ -633,11 +636,10 @@ class Optimization:
                     if args.save_model:
                         self.save_model()
                     elif args.save_checkpoint:
-                        self.save_checkpoint(epoch)
+                        self.save_checkpoint(epoch, step)
 
                 if step > self.print_every:
                     self.output_all_plots()
-
             #padded_audio_embeds, lengths, text_embeds  = batch
             loss, metrics = self.model(batch)
             self.optimizer.zero_grad()
@@ -650,6 +652,15 @@ class Optimization:
                 self.add_logging(epoch, total_steps, loss.item(), metrics, train=True)
             
             total_steps += 1
+
+            # # [del]
+            # if step % memory_test_delete == 0:
+            #     process = psutil.Process(os.getpid())
+            #     print("[del] [mem] training memory              : ", process.memory_info().rss)
+            #     gc.collect()
+            #     print("[del] [mem] training memory after collect: ", process.memory_info().rss)
+
+
                 
         self.output_all_plots()
         t2 = time()
@@ -679,6 +690,8 @@ class Optimization:
                         met_sum.update(Counter(metrics))
                               
                 mean_metrics = {k: value / self.total_len  for k, value in met_sum.items()}
+                del met_sum
+
                 mean_loss = np.mean(losses)
                 self.model.train()
                 return mean_loss, mean_metrics
@@ -753,9 +766,10 @@ class Optimization:
         output_dir = os.path.join(self.model_save_path, 'full_model_weights.pth')
         torch.save(self.model.state_dict(), output_dir)
 
-    def save_checkpoint(self, epoch):
+    def save_checkpoint(self, epoch, step):
         checkpoint = { 
             'epoch': epoch,
+            'step': step,
             'full_model': self.model,
             'optimizer': self.optimizer,
             'lr_sched': self.lr_scheduler
@@ -846,7 +860,7 @@ def main(args):
     warmup_steps =  math.ceil(len(train_loader) * num_epochs * 0.1)  # 10% of train data for warm-up
 
     FullCfg.eval_every = int(math.ceil(len(train_loader) * 0.05)) #Evaluate every 5% of the data
-    FullCfg.print_every = int(math.ceil(len(train_loader) * 0.05)) #Print results every 5% of the data
+    FullCfg.print_every = int(math.ceil(len(train_loader) * 0.02)) #Print results every 2% of the data
     print("[main] print_every {} eval_every {} ".format(FullCfg.print_every, FullCfg.eval_every))
 
     if args.load_model: 
@@ -857,6 +871,7 @@ def main(args):
         print("[Main] training from checkpoint ", args.load_checkoint_path)
         checkpoint = torch.load(args.load_model_path)
         epoch = checkpoint['epoch']
+        step = checkpoint['step']
         full_model = checkpoint['full_model']
         optimizer = checkpoint['optimizer']
         lr_scheduler = checkpoint['lr_sched']
@@ -932,8 +947,7 @@ if __name__ == "__main__":
                         help='Seet to use')
     parser.add_argument('--num_epochs', type=int, default=5,
                         help='Number of epochs to train')
-    parser.add_argument('--scale', type=float, default=20,
-                        help='Fixed scale to use')
+    
 
     parser.add_argument('--log_dir', type=str, default="./logs",
                         help='Folder where so save logs.')
@@ -966,13 +980,12 @@ if __name__ == "__main__":
     parser.add_argument('--scale_type', default='fixed', const='fixed',
                     nargs='?', choices=['fixed', 'learned'],
                     help='Name of scale_type (default: %(default)s)')
+    parser.add_argument('--scale', type=float, default=20,
+                        help='Fixed scale to use')
 
     # GPU device number as in "cuda:0". Defaul is 0.
     parser.add_argument("-cuda", "--cuda_number", type=str, default='0')
     parser.add_argument('--eval_every', type=int, default=100)
-    # parser.add_argument('--log_interval', type=int, default=500)
-    # parser.add_argument('--audio_window', type=int, default=20480, 
-    #                     help='window length to sample from each utterance')
 
     parser.add_argument('--no-cuda', action='store_true', default=False,
                         help='disables CUDA training')
