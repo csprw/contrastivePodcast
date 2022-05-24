@@ -836,7 +836,7 @@ class mmModule(nn.Module):
     def evaluate(self, loss_model):
 
         # Set evaluation mode on
-        self.eval()
+        # self.eval()
         # losses = []
         # validation_len = len(self.test_loader)
 
