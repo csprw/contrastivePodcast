@@ -13,6 +13,7 @@ import sched
 import time
 from time import time
 from datetime import datetime
+from tkinter import E
 import h5py
 import json, csv
 import os
@@ -786,7 +787,8 @@ class mmModule(nn.Module):
 
             # Full training
             for step, batch in enumerate(iter(train_loader)):
-                if  step % self.eval_every == 0 and step < 1: # del last statement
+
+                if  step % self.eval_every == 0 and epoch < 1: # del last statement
                     # Todo: uncommen
                     print("[del] doing an EVAL")
                     metrics = self.evaluate(loss_model)
