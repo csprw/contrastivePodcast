@@ -514,7 +514,8 @@ if __name__ == "__main__":
     model_path = '/Users/casper/Documents/UvAmaster/b23456_thesis/msc_thesis/code/contrastive_mm2/logs/load_test'
     # RNN
     model_path = '/Users/casper/Documents/UvAmaster/b23456_thesis/msc_thesis/code/contrastive_mm2/logs/lisa_v2-simcse_loss_rnn_relu_768_0.001_2022-05-12_15-58-03'
-    model_path = "E:\msc_thesis\code\contrastive_mm2\logs\lisa_v2-simcse_loss_rnn_relu_768_0.001_2022-05-12_15-58-03"
+    # model_path = "E:\msc_thesis\code\contrastive_mm2\logs\lisa_v2-simcse_loss_rnn_relu_768_0.001_2022-05-12_15-58-03"
+    model_path = "E:\msc_thesis\code\contrastive_mm2\logs\lisa_v2-simcse_loss_rnn_relu_768_2e-05_2022-05-17_06-58-44"
 
     # SIMPLE PROJ head
     # model_path = '/Users/casper/Documents/UvAmaster/b23456_thesis/msc_thesis/code/contrastive_mm2/logs/lisa_v2-simcse_loss_simple_projection_head_relu_768_2e-05_2022-05-12_15-56-09'
