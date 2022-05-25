@@ -919,13 +919,10 @@ class mmModule(nn.Module):
         if audio_modules is not None and not isinstance(audio_modules, OrderedDict):
             audio_modules = OrderedDict([(str(idx), module) for idx, module in enumerate(audio_modules)])
 
-
         self.text_model = nn.Sequential(text_modules)
         self.audio_model = nn.Sequential(audio_modules)
         self._target_device = device
         self.batch_size = batch_size
-
-
 
     def tokenize(self, texts: Union[List[str], List[Dict], List[Tuple[str, str]]]):
         """
@@ -992,13 +989,14 @@ class mmModule(nn.Module):
         seq_lens = [em.shape[0] for em in full_embeds]
         padded_full_embeds = pad_sequence(full_embeds, batch_first=True).to(self._target_device)
 
-        # Tokenize sentences and send to tarket device
+        # Tokenize sentences and send to target device
         tokenized = self.tokenize(texts)
         sentence_features = []
         for key in tokenized:
             if isinstance(tokenized[key], torch.Tensor):
                 tokenized[key] = tokenized[key].to(self._target_device)
         sentence_features.append(tokenized)
+
         return sentence_features, padded_full_embeds, seq_lens
 
     @staticmethod
@@ -1068,6 +1066,7 @@ class mmModule(nn.Module):
 
         steps_per_epoch = len(train_dataloader)
         num_train_steps = int(steps_per_epoch * epochs)
+        print("[del] ", steps_per_epoch, num_train_steps, warmup_steps)
 
         optimizer = self._get_optimizer(loss_model)
         scheduler = self._get_scheduler(optimizer, scheduler=scheduler, warmup_steps=warmup_steps, t_total=num_train_steps)
@@ -1083,7 +1082,7 @@ class mmModule(nn.Module):
         else:
             update_scale = True
 
-        print("[fit] Performance before training:")
+        print("[fit] Performance before training: ")
         # TODO: uncomment
         self.perform_matrix_evaluation(loss_model, -1, -1)
 
@@ -1096,13 +1095,13 @@ class mmModule(nn.Module):
                 loss_value, metrics = loss_model(sent_features, audio_features, seq_len)
                 running_loss += loss_value.item()
 
-                # if new_train_index > 0 and training_steps % loss_freq == 0:
-                #     mean_loss = running_loss / loss_freq
-                #     # print("\t\t\t[del] mean loss: ", mean_loss)
-                #     self.add_train_logging(epoch, training_steps, mean_loss, metrics)
-                #     losses.append(mean_loss)
-                #     to_plot(self.train_csv_filename, column='loss', title="Train loss")
-                #     running_loss = 0
+                if new_train_index > 0 and training_steps % loss_freq == 0:
+                    mean_loss = running_loss / loss_freq
+                    # print("\t\t\t[del] mean loss: ", mean_loss)
+                    self.add_train_logging(epoch, training_steps, mean_loss, metrics)
+                    losses.append(mean_loss)
+                    to_plot(self.train_csv_filename, column='loss', title="Train loss")
+                    running_loss = 0
 
                 loss_value.backward()
                 torch.nn.utils.clip_grad_norm_(loss_model.parameters(), max_grad_norm)
@@ -1120,19 +1119,17 @@ class mmModule(nn.Module):
 
 
                 if new_train_index > 0 and new_train_index % evaluation_steps == 0:
-                    print("[del]: continue eval")
-                    continue
                     # self._eval_during_training(evaluator, output_path, save_best_model, epoch, training_steps, callback) #TODO: add sts
                     self.perform_matrix_evaluation(loss_model, epoch, training_steps)
                     loss_model.zero_grad()
                     loss_model.train()
                     to_plot(self.eval_csv_filename, column='mean_acc', title="Test accuracy (mean)")
 
-                # [del] check on one batch
-                print("[metrics] ", loss_value.item(), metrics['mean_acc'])
-                if new_train_index >= 0:
-                    print("[del] break")
-                    break            
+                # # [del] check on one batch
+                # print("[metrics] ", loss_value.item(), metrics['mean_acc'])
+                # if new_train_index >= 0:
+                #     print("[del] break")
+                #     break            
             # Plot loss and accuracy curves
             t2 = time()
             print("[train] epoch duration {} seconds".format(int(t2-t1)))
@@ -1241,7 +1238,7 @@ class mmModule(nn.Module):
                             #metrics_sum = {k: metrics_sum.get(k, 0) + metrics.get(k, 0) for k in set(metrics_sum)}
                             met_sum.update(Counter(metrics))
         else:
-            total_len = 1
+            total_len = 100
             iterator = iter(self.eval_dataloader)
             for idx in range(total_len):
                 batch = next(iterator)
@@ -1503,7 +1500,6 @@ def main(args):
     full_model.setup_matrix_evaluation(data_loader.test_loader, log_name=log_name)
 
     print("[main] model setup complete, model: \n", full_model)
-
     train_loss = multimodal_loss(full_model, scale=args.scale, device=device, loss_type=loss_type, normalize=normalize, scale_type=scale_type)
     warmup_steps =  math.ceil(len(train_dataloader) * num_epochs * 0.1)  # 10% of train data for warm-up
     evaluation_steps = int(math.ceil(len(train_dataloader) * 0.1)) #Evaluate every 10% of the data
@@ -1523,7 +1519,8 @@ def main(args):
         use_amp=support_FP16,        #Set to True, if your GPU supports FP16 cores
         show_progress_bar=False
     )
-
+    print("[del] done")
+    exit(1)
     to_plot(full_model.train_csv_filename, column='audio_acc', title="Train accuracy (audio)")
     to_plot(full_model.train_csv_filename, column='text_acc', title="Train accuracy (text)")
     to_plot(full_model.train_csv_filename, column='loss', title="Train loss")

@@ -1,0 +1,38 @@
+
+
+#####################################################################
+TODO
+#####################################################################
+#Save and load
+Alles runnen beneden
+
+Alle laagstreepjes verwijderen
+
+
+
+#####################################################################
+Runnen
+#####################################################################
+# Check if everything works
+python mm3.py --num_epochs 1 --train_dataset sp --test_dataset sp
+python gru_test2.py --num_epochs 1  --train_dataset sp --test_dataset sp
+
+# Check if everything works with eval mode on
+python gru_test2.py --num_epochs 1 --test_evalchange
+
+# Change code such that eval returns loss
+# and run again to see if same result
+python gru_test2.py --num_epochs 1 
+
+
+# Validate simple proj head
+python gru_test2.py --num_epochs 1 --audio_proj_head simple_projection_head
+python mm3.py --num_epochs 1 --proj_head simple_projection_head
+
+# Run the different losses
+python gru_test2.py --num_epochs 1 --loss_type clip_loss
+python gru_test2.py --num_epochs 1 --loss_type clip_loss_simple
+
+
+
+
