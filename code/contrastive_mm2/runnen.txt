@@ -14,8 +14,8 @@ Alle laagstreepjes verwijderen
 Runnen
 #####################################################################
 # Check if everything works
-python mm3.py --num_epochs 1 --train_dataset sp --test_dataset sp
-python gru_test2.py --num_epochs 1  --train_dataset sp --test_dataset sp
+python mm3.py --num_epochs 1 
+python gru_test2.py --num_epochs 1 
 
 # Check if everything works with eval mode on
 python gru_test2.py --num_epochs 1 --test_evalchange

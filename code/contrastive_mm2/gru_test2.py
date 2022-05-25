@@ -874,7 +874,7 @@ class mmModule(nn.Module):
             writer.writerow([epoch, total_step, loss] + metric_vals)
 
     def save_model(self):
-        print("[del] will save model")
+        # print("[del] will save model")
         for idx, name in enumerate(self._modules):
             module = self._modules[name]
             print("---ANOTHER MODULE: ", name)

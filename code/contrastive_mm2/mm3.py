@@ -1519,8 +1519,7 @@ def main(args):
         use_amp=support_FP16,        #Set to True, if your GPU supports FP16 cores
         show_progress_bar=False
     )
-    print("[del] done")
-    exit(1)
+   
     to_plot(full_model.train_csv_filename, column='audio_acc', title="Train accuracy (audio)")
     to_plot(full_model.train_csv_filename, column='text_acc', title="Train accuracy (text)")
     to_plot(full_model.train_csv_filename, column='loss', title="Train loss")
