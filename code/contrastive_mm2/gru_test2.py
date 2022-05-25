@@ -483,12 +483,12 @@ class SequentialAudioModel(nn.Module):
         # RNN layers
         if self.audio_model == 'rnn':
             self.seq_model = nn.RNN(CFG.audio_encoder_input, 
-                    CFG.audio_hidden_dim, CFG.layer_dim, 
+                    CFG.audio_hidden_dim, CFG.audio_layer_dim, 
                     batch_first=True, dropout=CFG.audio_dropout)
         elif self.audio_model == 'gru':
             self.seq_model = nn.GRU(
                     input_size=CFG.audio_encoder_input, 
-                    hidden_size=CFG.audio_hidden_dim, num_layers=CFG.layer_dim, 
+                    hidden_size=CFG.audio_hidden_dim, num_layers=CFG.audio_layer_dim, 
                     batch_first=True, dropout=CFG.audio_dropout)
 
         # Fully connected layer
