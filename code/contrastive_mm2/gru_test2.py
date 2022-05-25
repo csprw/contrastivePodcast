@@ -204,8 +204,8 @@ class spDatasetNoMemory(datautil.Dataset):
             f = h5py.File(h5py_file, 'r')
 
             # TODO: FIND OUT WHY IT SOMETIMES IS LIKE THIS:
-            # sent = f['sentences'][sent_idx].decode("utf-8")
-            sent = f['sentences'][sent_idx]
+            sent = f['sentences'][sent_idx].decode("utf-8")
+            # sent = f['sentences'][sent_idx]
             full_embeds = torch.Tensor(np.array(f[str(sent_idx)]))
             sample = (sent, full_embeds)
             f.close()
@@ -217,8 +217,8 @@ class spDatasetNoMemory(datautil.Dataset):
             f = h5py.File(h5py_file, 'r')
             
             # TODO: FIND OUT WHY IT SOMETIMES IS LIKE THIS:
-            # sent = f['sentences'][sent_idx].decode("utf-8")
-            sent = f['sentences'][sent_idx]
+            sent = f['sentences'][sent_idx].decode("utf-8")
+            # sent = f['sentences'][sent_idx]
 
             mean_embeds = torch.Tensor(f['mean_embeddings'][sent_idx])
             sample = (sent, mean_embeds)
@@ -1490,8 +1490,8 @@ def main(args):
     data_loader.train_dataset.text_max_length = FullCfg.text_max_length
     data_loader.test_dataset.text_max_length = FullCfg.text_max_length
 
-    FullCfg.eval_every = int(math.ceil(len(train_loader) * 0.1)) #Evaluate every 5% of the data
-    FullCfg.print_every = int(math.ceil(len(train_loader) * 0.02)) #Print results every 2% of the data
+    FullCfg.eval_every = int(math.ceil(len(train_loader) * 0.1)) #Evaluate every 10% of the data
+    FullCfg.print_every = int(math.ceil(len(train_loader) * 0.02)) #Print results every 2% f the data
     print("[main] print_every {} eval_every {} ".format(FullCfg.print_every, FullCfg.eval_every))
 
     # Setup the full model
