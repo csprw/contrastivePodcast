@@ -66,7 +66,7 @@ def set_logconfig():
 
 def get_log_name(args, dataclasses):
     log_name = "gru2-{}_{}_{}_{}_{}_{}".format(args.loss_type, args.audio_proj_head, 
-            args.audio_activation, args.final_projection_dim, dataclasses[0].head_lr,
+            args.audio_activation, args.final_projection_dim, dataclasses[0].lr,
             datetime.now().strftime("%Y-%m-%d_%H-%M-%S"))
     log_name = os.path.join(args.log_dir, log_name)
     return log_name
@@ -204,8 +204,8 @@ class spDatasetNoMemory(datautil.Dataset):
             f = h5py.File(h5py_file, 'r')
 
             # TODO: FIND OUT WHY IT SOMETIMES IS LIKE THIS:
-            sent = f['sentences'][sent_idx].decode("utf-8")
-            # sent = f['sentences'][sent_idx]
+            # sent = f['sentences'][sent_idx].decode("utf-8")
+            sent = f['sentences'][sent_idx]
             full_embeds = torch.Tensor(np.array(f[str(sent_idx)]))
             sample = (sent, full_embeds)
             f.close()
@@ -217,8 +217,8 @@ class spDatasetNoMemory(datautil.Dataset):
             f = h5py.File(h5py_file, 'r')
             
             # TODO: FIND OUT WHY IT SOMETIMES IS LIKE THIS:
-            sent = f['sentences'][sent_idx].decode("utf-8")
-            # sent = f['sentences'][sent_idx]
+            # sent = f['sentences'][sent_idx].decode("utf-8")
+            sent = f['sentences'][sent_idx]
 
             mean_embeds = torch.Tensor(f['mean_embeddings'][sent_idx])
             sample = (sent, mean_embeds)
@@ -259,11 +259,12 @@ class spDatasetNoMemory(datautil.Dataset):
         audio_embeds = torch.stack(audio_embeds).to(self.device)
 
         # Tokenize text
+        max_length = 32 # TODO: is dit nodig?
         text_embeds = self.tokenizer(
-            text_embeds, padding=True, truncation=True, max_length=self.max_length, return_tensors='pt'
+            text_embeds, padding=True, truncation=True, max_length=max_length, return_tensors='pt'
         ).to(self.device)
         
-        return audio_embeds, lengths, text_embeds
+        return text_embeds, audio_embeds, lengths
 
 ################################################################################
 # Textmodules
@@ -475,7 +476,7 @@ class SequentialAudioModel(nn.Module):
         super(SequentialAudioModel, self).__init__()
         # Defining the number of layers and the nodes in each layer
         self.hidden_dim = CFG.audio_hidden_dim
-        self.layer_dim = CFG.layer_dim
+        self.layer_dim = CFG.audio_layer_dim
         self.device = CFG.device
         self.audio_model = CFG.audio_proj_head
 
@@ -494,7 +495,7 @@ class SequentialAudioModel(nn.Module):
         self.fc = nn.Linear(CFG.audio_hidden_dim, CFG.mutual_embedding_dim)
         self.softmax = nn.Softmax(dim=1)
 
-        pad_pack = False
+        pad_pack = args.pad_pack
         self.pad_pack = pad_pack
         self.use_softmax = True
         # TODO: print("[TODO] pad_pack is set to false")
@@ -509,7 +510,7 @@ class SequentialAudioModel(nn.Module):
             # print("lengths: ", length)
             # print("should be [BS* SL * ?] ", x.shape)
             if self.pad_pack:
-                print("PACK PAD ON!!")
+                print("!! PACK PAD ON!!")
                 # Pack the features such that we do not compute zero products
                 features = pack_padded_sequence(features, length, batch_first=True, enforce_sorted=False)
 
@@ -578,11 +579,14 @@ class simple_ProjectionHead(nn.Module):
 
     def __repr__(self):
         return "Simple_projection_head({}) ".format(self.get_config_dict())
+
     def get_config_dict(self):
         return {key: self.__dict__[key] for key in self.config_keys}
 
-    def forward(self, features, lengths):
+    def forward(self, feat_len):
         """Returns token_embeddings, cls_token"""
+
+        features, _ = feat_len
         features = self.simple_model(features)
 
         return features
@@ -632,6 +636,9 @@ class mmModule(nn.Module):
 
         if CFG.audio_proj_head in ['rnn', 'gru']:
             audio_encoder = SequentialAudioModel(CFG)
+            audio_modules = [audio_encoder]
+        elif CFG.audio_proj_head in ['simple_projection_head']:
+            audio_encoder = simple_ProjectionHead(CFG)
             audio_modules = [audio_encoder]
         
         # Create the full model
@@ -709,7 +716,7 @@ class mmModule(nn.Module):
         warmup_steps =  math.ceil(len(train_loader) *  CFG.num_epochs * 0.1)  # 10% of train data for warm-up
         self.weight_decay = CFG.weight_decay
         self.optimizer_class = optimizer_class
-        self.optimizer_params = optimizer_params
+        self.optimizer_params = {'lr': CFG.lr}
         scheduler_method='WarmupLinear' 
 
         print("[del] ", steps_per_epoch, num_train_steps, warmup_steps)
@@ -752,12 +759,12 @@ class mmModule(nn.Module):
             # Full training
             for step, batch in enumerate(iter(train_loader), start=fstep):
                 if  step % self.eval_every == 0 and epoch < 1: # del last statement
-                    # Todo: uncommen
-                    metrics = self.evaluate(loss_model)
-                    mean_loss = 0 # TODO: check of mean loss terug kan komen uit eval
+                    print("[del] start evaluation")
+                    mean_loss, metrics = self.evaluate(loss_model)
+                    # mean_loss = 0 # TODO: check of mean loss terug kan komen uit eval
                     self.add_logging(epoch, total_steps, mean_loss, metrics, train=False)
                     
-                    print("[eval] Epoch {} Step {}/{} \t loss {} \t acc {}".format(epoch, total_steps, step, mean_loss, metrics['mean_acc']))
+                    print("[eval] Epoch {} Step {}/{} \t loss {} \t acc {}".format(epoch, step, len(train_loader), mean_loss, metrics['mean_acc']))
                     if mean_loss < self.best_loss:
                         print("[eval] better model found")
                         self.best_loss = mean_loss 
@@ -780,7 +787,7 @@ class mmModule(nn.Module):
                 total_steps += 1
 
                 if step % self.print_every == 0:
-                    print("[train] Epoch {} Step {}/{} \t loss {} \t acc {}".format(epoch, total_steps, step, loss_value.item(), metrics['mean_acc']))
+                    print("[train] Epoch {} Step {}/{} \t loss {} \t acc {}".format(epoch, step, len(train_loader), loss_value.item(), metrics['mean_acc']))
                     self.add_logging(epoch, total_steps, loss_value.item(), metrics, train=True)
                 
                 # # [del] check on one batch
@@ -804,9 +811,9 @@ class mmModule(nn.Module):
 
     def evaluate(self, loss_model):
         # Set evaluation mode on
-        if args.test_evalchange:
-            loss_model.eval()
-        # losses = []
+        # if args.test_evalchange:
+        loss_model.eval()
+        losses = 0
         # validation_len = len(self.test_loader)
 
         # Iterate over data and calculate accuracies
@@ -826,6 +833,7 @@ class mmModule(nn.Module):
                     sent_features, audio_features, seq_len  = batch
                     with torch.no_grad():
                         loss_value, metrics = loss_model(sent_features, audio_features, seq_len)
+                        losses += loss_value
                         if step == 0:
                             #metrics_sum = metrics.copy()
                             met_sum = Counter(metrics.copy())
@@ -834,11 +842,12 @@ class mmModule(nn.Module):
                             met_sum.update(Counter(metrics))
 
         mean_metrics = {k: value / total_len  for k, value in met_sum.items()}
+        mean_loss = loss_value / total_len
         del met_sum
 
-        if args.test_evalchange:
-            loss_model.train()
-        return mean_metrics
+        # if args.test_evalchange:
+        loss_model.train()
+        return mean_loss, mean_metrics
 
     def output_all_plots(self):
         to_plot(self.train_csv_filename, column='audio_acc', title="Train accuracy (audio)")
@@ -874,30 +883,23 @@ class mmModule(nn.Module):
             writer.writerow([epoch, total_step, loss] + metric_vals)
 
     def save_model(self):
-        # print("[del] will save model")
-        for idx, name in enumerate(self._modules):
-            module = self._modules[name]
-            print("---ANOTHER MODULE: ", name)
-            print(module)
-            output_dir = os.path.join(self.model_save_path, '{}_weights.pth'.format(name))
-            torch.save(module.state_dict(), output_dir)
+        # Debug: saves all models seperately
+        # for idx, name in enumerate(self._modules):
+        #     module = self._modules[name]
+        #     print(module)
+        #     output_dir = os.path.join(self.model_save_path, '{}_weights.pth'.format(name))
+        #     torch.save(module.state_dict(), output_dir)
 
-        # NOw also just save the full model (see if this works)
+        # Save the model
         output_dir = os.path.join(self.model_save_path, '{}_weights.pth'.format('full_model'))
         torch.save(self.state_dict(), output_dir)
 
     def save_checkpoint(self, epoch, step, optimizer, scheduler):
-        print("[del] saving CHECkpoint")
-
-        print("This is scheduler: ", scheduler)
-        print(scheduler.state_dict())
-
         checkpoint = { 
             'epoch': epoch,
             'step': step,
             'full_model': self,
             'optimizer': optimizer,
-            # 'lr_sched': scheduler
             'lr_sched': scheduler.state_dict()
         }
         output_dir = os.path.join(self.model_save_path, 'checkpoint.pth')
@@ -970,8 +972,6 @@ class multimodal_loss(nn.Module):
         
         # Get Audio representations
         reps_audio = self.audio_model((audio_features, seq_len))
-        # print("[clipmodel] audio_embeddings: ", reps_audio[0])
-        # print("------------------")
 
         # ['simcse_loss', 'clip_loss', 'clip_loss_simple'] 
         if self.loss_type == 'clip_loss':
@@ -1421,26 +1421,30 @@ def to_plot(filename, column='accuracy2', title="Test accuracy"):
 class FullCfg:
     batch_size: int
     loss_type: str
-    debug = False
-    head_lr = 5e-5
+    # debug = False
+    lr = 5e-5
 
-    factor = 0.8
-    epochs = 32
+    # factor = 0.8
+    # epochs = 32
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+    # For the audio module
     audio_encoder_input = 1024
     audio_hidden_dim = 768
-    layer_dim = 2
+    audio_layer_dim = 2
 
+    # For the text module
     text_encoder_model = "distilbert-base-uncased"
-    
-    text_embedding = 768
-    mutual_embedding_dim = 768
     text_tokenizer = "distilbert-base-uncased"
+    # text_embedding_dim = 768
+
+    # For the simple_projection_head module
+    mutual_embedding_dim = 768
+    
     max_length = 200
 
-    pretrained = True # for both image encoder and text encoder
-    trainable = True # for both image encoder and text encoder
+    # pretrained = True # for both image encoder and text encoder
+    # trainable = True # for both image encoder and text encoder
     temperature = 1.0
     # for projection head; used for both image and text encoders
     num_projection_layers = 1
@@ -1575,7 +1579,7 @@ if __name__ == "__main__":
     parser.add_argument('--batch_size', type=int, default=128, 
                         help='batch_size')
 
-    parser.add_argument('--final_projection_dim', type=int, default=256, 
+    parser.add_argument('--final_projection_dim', type=int, default=768, 
                     nargs='?', choices=[256, 768],
                     help='Final output dimensions of the embeddings')
 
@@ -1633,6 +1637,8 @@ if __name__ == "__main__":
     parser.add_argument('--use_old_opt', dest='use_old_opt', action='store_true',
                         help="test: use old or new opt.")
     parser.add_argument('--test_evalchange', dest='test_evalchange', action='store_true',
+                        help="test: use old or new opt.")
+    parser.add_argument('--pad_pack', dest='pad_pack', action='store_true',
                         help="test: use old or new opt.")
     args, unparsed = parser.parse_known_args()
 

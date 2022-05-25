@@ -687,7 +687,7 @@ class mmAudioCfg:
 class mmTextCfg:
     proj_head: str = 'distilbert-base-uncased'
     text_model_name: str = 'distilbert-base-uncased'
-    max_length: int = 200
+    # max_length: int = 200
     add_pooling: bool = False
     pooling_mode : str = 'cls'
 
