@@ -510,7 +510,7 @@ class SequentialAudioModel(nn.Module):
             # print("lengths: ", length)
             # print("should be [BS* SL * ?] ", x.shape)
             if self.pad_pack:
-                print("!! PACK PAD ON!!")
+                # print("!! PACK PAD ON!!")
                 # Pack the features such that we do not compute zero products
                 features = pack_padded_sequence(features, length, batch_first=True, enforce_sorted=False)
 
