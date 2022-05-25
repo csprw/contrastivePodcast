@@ -3,5 +3,5 @@
 import sys
 import subprocess
 
-for cmd in ['bash_func.py', 'bash_func.py', 'bash_func.py']:
+for cmd in ['gru_test2.py --num_epochs 1', 'bash_func.py', 'gru_test2.py --num_epochs 1 --test_evalchange']:
     subprocess.run([sys.executable, cmd], shell=False)
