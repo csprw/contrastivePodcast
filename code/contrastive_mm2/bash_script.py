@@ -11,7 +11,7 @@ import subprocess
 print("second")
 time.sleep(1)
 
-cmd = ['gru_test2.py', ' --num_epochs 1']
+cmd = ['gru_test2.py', ' --num_epochs 1', ' --train_dataset sp_sample', ' --test_dataset sp_sample']
 subprocess.run([sys.executable, cmd], shell=False)
 
 # print("third")
@@ -21,5 +21,5 @@ subprocess.run([sys.executable, cmd], shell=False)
 # subprocess.run(['gru_test2.py', ' --num_epochs 1'], shell=False)
 
 print("----------------------------DONE part 1")
-cmd = ['gru_test2.py', ' --num_epochs 1', ' --test_evalchange']
+cmd = ['gru_test2.py', ' --num_epochs 1', ' --train_dataset sp_sample', ' --test_dataset sp_sample', ' --test_evalchange']
 subprocess.run([sys.executable, cmd], shell=False)
