@@ -20,4 +20,6 @@ subprocess.run([sys.executable, cmd], shell=False)
 
 # subprocess.run(['gru_test2.py', ' --num_epochs 1'], shell=False)
 
-print("DONE")
+print("----------------------------DONE part 1")
+cmd = ['gru_test2.py', ' --num_epochs 1', ' --test_evalchange']
+subprocess.run([sys.executable, cmd], shell=False)
