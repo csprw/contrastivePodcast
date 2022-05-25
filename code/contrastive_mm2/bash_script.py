@@ -11,11 +11,11 @@ import subprocess
 print("second")
 time.sleep(1)
 
-cmd = ['gru_test2.py', ' --num_epochs 1']
-subprocess.run([sys.executable, cmd], shell=False)
+# cmd = ['gru_test2.py', ' --num_epochs 1']
+# subprocess.run([sys.executable, cmd], shell=False)
 
-print("third")
-time.sleep(1)
+# print("third")
+# time.sleep(1)
 
 
 subprocess.run(['gru_test2.py', ' --num_epochs 1'], shell=False)
