@@ -586,6 +586,21 @@ class mmModule(nn.Module):
             text_modules = [self.text_encoder, self.text_projection]
         elif CFG.text_proj_head.lower() == 'none':
             text_encoder = TextEncoder(CFG)
+            # pooling_mode_cls_token: bool = False,
+            #  pooling_mode_max_tokens: bool = False,
+            #  pooling_mode_mean_tokens: bool = True,
+            #  pooling_mode_mean_sqrt_len_tokens: bool = False,
+            print("hiero")
+            print(CFG.text_pooling)
+
+            if CFG.text_pooling == 'mean':
+                pooling_model = Pooling(text_encoder.get_word_embedding_dimension(),
+                pooling_mode_mean_tokens = True)
+            elif CFG.text_pooling == 'cls':
+                pooling_model = Pooling(text_encoder.get_word_embedding_dimension(),
+                pooling_mode_mean_tokens = False,
+                pooling_mode_cls_token = True)
+
             pooling_model = Pooling(text_encoder.get_word_embedding_dimension())
             text_modules = [text_encoder, pooling_model]
 
@@ -1076,7 +1091,7 @@ class FullCfg:
     # text_encoder_model: str = "distilbert-base-uncased"
     text_model_name : str = 'distilbert-base-uncased'
     text_tokenizer: str = "distilbert-base-uncased"
-    text_pooling: str = 'mean'   #['original', 'cls', 'mean']
+    text_pooling: str = 'mean'   #['cls', 'mean']
     text_max_length: int = 32
 
     # For the projection_head modules
@@ -1256,8 +1271,8 @@ if __name__ == "__main__":
     parser.add_argument('--text_proj_head', default='None', const='None',
                     nargs='?', choices=['simple_projection_head', 'None'],
                     help='Activation to use in simple proj head (default: %(default)s)')
-    parser.add_argument('--text_pooling', default='original', const='original',
-                    nargs='?', choices=['original', 'cls', 'mean'],
+    parser.add_argument('--text_pooling', default='mean', const='mean',
+                    nargs='?', choices=['cls', 'mean'],
                     help='Pooling method to use for text model (default: %(default)s)')
 
     parser.add_argument('--audio_activation', default='relu', const='relu',
