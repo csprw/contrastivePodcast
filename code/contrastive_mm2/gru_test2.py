@@ -735,7 +735,7 @@ class mmModule(nn.Module):
                         self.best_loss = mean_loss 
                         if args.save_model:
                             self.save_model()
-                        elif args.save_checkpoint:
+                        if args.save_checkpoint:
                             self.save_checkpoint(epoch, step, optimizer, scheduler)
                     if step > self.print_every:
                         self.output_all_plots()
