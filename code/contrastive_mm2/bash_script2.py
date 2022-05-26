@@ -14,26 +14,26 @@ def process_args(string):
     return cmd
 
 
-job = "gru_test2.py --num_epochs 1 --audio_proj_head RNN"
+job = "gru_test2.py --num_epochs 1 --audio_proj_head rnn"
 cmd = process_args(job)
 print("1---------------------------- Starting: ", cmd)
 subprocess.run(cmd, shell=False)
 
 
-job = "gru_test2.py --num_epochs 1 --audio_proj_head RNN --pad_pack"
+job = "gru_test2.py --num_epochs 1 --audio_proj_head rnn --pad_pack"
 cmd = process_args(job)
 print("2---------------------------- Starting: ", cmd)
 time.sleep(1)
 subprocess.run(cmd, shell=False)
 
 
-job = "gru_test2.py --num_epochs 1 --audio_proj_head RNN --pad_pack --loss_type clip_loss"
+job = "gru_test2.py --num_epochs 1 --audio_proj_head rnn --pad_pack --loss_type clip_loss"
 cmd = process_args(job)
 print("3---------------------------- Starting: ", cmd)
 time.sleep(1)
 subprocess.run(cmd, shell=False)
 
-# job = "gru_test2.py --num_epochs 1 --audio_proj_head RNN --pad_pack --scale_type learned"
+# job = "gru_test2.py --num_epochs 1 --audio_proj_head rnn --pad_pack --scale_type learned"
 # cmd = process_args(job)
 # print("4---------------------------- Starting: ", cmd)
 # time.sleep(1)
