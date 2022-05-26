@@ -3,13 +3,8 @@ Contrastive multimodal learning
 Author: Casper Wortmann
 Usage: python main.py
 """
-from doctest import OutputChecker
-from email.mime import audio
 import logging
 from argparse import ArgumentParser
-import itertools
-import sched 
-
 import time
 from time import time
 from datetime import datetime
@@ -17,7 +12,6 @@ from tkinter import E
 import h5py
 import json, csv
 import os
-import psutil, gc
 from pathlib import Path
 import math
 import pandas as pd
@@ -27,11 +21,8 @@ import seaborn as sns
 from collections import Counter, OrderedDict
 from pprint import pprint
 
-from omegaconf import OmegaConf
-import gzip
 from typing import List, Dict, Optional, Union, Tuple, Iterable, Type, Callable
-from dataclasses import dataclass, fields, asdict
-from tqdm.autonotebook import trange
+from dataclasses import dataclass
 
 import torch 
 from torch.utils import data as datautil
@@ -47,6 +38,9 @@ from torch import nn, Tensor
 from torch.optim import Optimizer
 import torch.nn.functional as F
 from torch.nn.utils.rnn import pad_sequence, pad_packed_sequence, pack_padded_sequence
+
+import psutil, gc
+from omegaconf import OmegaConf
 
 # Load static configuration variables. 
 conf = OmegaConf.load("./config.yaml")
@@ -271,82 +265,33 @@ class spDatasetNoMemory(datautil.Dataset):
 class TextEncoder(nn.Module):
     def __init__(self, CFG):
         super().__init__()
-        # if CFG.pretrained:
-        #     self.model = DistilBertModel.from_pretrained(CFG.text_encoder_model)
-        # else:
-        #     self.model = DistilBertModel(config=DistilBertConfig())
-            
-        # for p in self.model.parameters():
-        #     p.requires_grad = CFG.trainable
-
         model_name_or_path = CFG.text_model_name
         self.config_keys = ['max_seq_length', 'do_lower_case']
         
 
-        model_args: Dict = {}
+        # model_args: Dict = {}
         self.do_lower_case = None
-        my_dropout = 0.1
-        cache_dir = None
-        config_kwargs = {
-            "attention_dropout": my_dropout,
-            "dropout": my_dropout,
-        }
+        # my_dropout = 0.1
+        # cache_dir = None
+        # config_kwargs = {
+        #     "attention_dropout": my_dropout,
+        #     "dropout": my_dropout,
+        # }
 
-        config = AutoConfig.from_pretrained(model_name_or_path, **model_args, **config_kwargs)
+        config = AutoConfig.from_pretrained(model_name_or_path)
         self.hidden_dim = config.dim
         print("[Transformer_multimodal] Configurations used: \n", config)
         
         # This is self._load_model in mm2
-        self.auto_model = AutoModel.from_pretrained(model_name_or_path, config=config, cache_dir=cache_dir)
+        self.auto_model = AutoModel.from_pretrained(model_name_or_path, config=config)
 
         self.max_seq_length = CFG.text_max_length
 
-
         # we are using the CLS token hidden representation as the sentence's embedding
         self.target_token_idx = 0
-        self.pooling = CFG.text_pooling
+        self.pooling = CFG.text_pooling # TODO: delete this line?
 
     def forward(self, text_embeds):
-        # print("nieuwe poging, in forward: ")
-        # input_ids=text_embeds["input_ids"]
-        # attention_mask=text_embeds["attention_mask"]
-        # print(input_ids,attention_mask )
-
-        ######### LEAVE FOR DEBUG
-        # Forward passes with different pooling strategies. 
-        # if self.pooling == 'original':
-        #     # This is what it was OG
-        #     output = self.model(input_ids=input_ids, attention_mask=attention_mask)
-        #     last_hidden_state = output.last_hidden_state
-        #     return last_hidden_state[:, self.target_token_idx, :]
-
-
-        # elif self.pooling == 'cls':
-        #     output = self.model(input_ids=input_ids, attention_mask=attention_mask)
-        #     output_tokens = output[0]
-        #     # features.update({'token_embeddings': output_tokens, 'attention_mask': features['attention_mask']}) # dit heb ik dus al
-        #     cls_token = output_tokens[:, 0]  # Take first token by default
-        #     return cls_token
-
-        # elif self.pooling == 'mean':
-        #     #print("[mean] pooling")
-        #     # This is same as mm2
-        #     print("[del] before output! input_ids :", input_ids)
-        #     print("[del] before output! input_ids :", attention_mask)
-        #     output = self.model(input_ids=input_ids, attention_mask=attention_mask)
-        #     print("[del] thorugh model ", type(output))
-        #     exit(1)
-        #     output_tokens = output[0]
-
-        #     input_mask_expanded = attention_mask.unsqueeze(-1).expand(output_tokens.size()).float()
-        #     sum_embeddings = torch.sum(output_tokens * input_mask_expanded, 1)
-
-        #     sum_mask = input_mask_expanded.sum(1)
-        #     sum_mask = torch.clamp(sum_mask, min=1e-9)
-        #     pooled_output = sum_embeddings / sum_mask
-
-        #     return pooled_output
-
         trans_features = {'input_ids': text_embeds['input_ids'], 'attention_mask': text_embeds['attention_mask']}
         output = self.auto_model(**trans_features, return_dict=False)
 
@@ -722,7 +667,7 @@ class mmModule(nn.Module):
 
         steps_per_epoch = len(train_loader)
         num_train_steps = int(steps_per_epoch * CFG.num_epochs)
-        warmup_steps =  math.ceil(len(train_loader) *  CFG.num_epochs * 0.1)  # 10% of train data for warm-up
+        warmup_steps =  math.ceil(len(train_loader) *  CFG.num_epochs * 0.1)  
         self.weight_decay = CFG.weight_decay
         self.optimizer_class = optimizer_class
         self.optimizer_params = {'lr': CFG.lr}
@@ -743,18 +688,14 @@ class mmModule(nn.Module):
             scheduler = self._get_scheduler(optimizer, scheduler=scheduler_method, warmup_steps=warmup_steps, t_total=num_train_steps)
         else:
             scheduler = self._get_scheduler(optimizer, scheduler=scheduler_method, warmup_steps=warmup_steps, t_total=num_train_steps)
-            print("[del] created sched: ", scheduler)
-            print("[del] created sched: ", scheduler.state_dict())
             scheduler.load_state_dict(loaded_sched_dict)
-            print("[del] loaded sched: ", scheduler)
-            print("[del] loaded sched: ", scheduler.state_dict())
 
         # TODO: this is a test: does it help to learn the scale?
-        if loss_model.scale_type != 'learned':
-            update_scale = False
-        else:
-            update_scale = True
-        memory_test_delete = 1000
+        # if loss_model.scale_type != 'learned':
+        #     update_scale = False
+        # else:
+        #     update_scale = True
+        # memory_test_delete = 1000
 
         for epoch in range(start_epoch, CFG.num_epochs):
             t1 = time()
@@ -844,7 +785,8 @@ class mmModule(nn.Module):
                     sent_features, audio_features, seq_len  = batch
                     with torch.no_grad():
                         loss_value, metrics = loss_model(sent_features, audio_features, seq_len)
-                        losses += loss_value.item()
+                        losses += loss_value.detach().cpu().item()
+    
                         if step == 0:
                             #metrics_sum = metrics.copy()
                             met_sum = Counter(metrics.copy())
@@ -1061,7 +1003,10 @@ class multimodal_loss(nn.Module):
             return loss, metrics
 
     def get_config_dict(self):
-        return {'scale_type': self.scale_type, 'similarity_fct': self.similarity_fct.__name__}
+        return {
+            'scale_type': self.scale_type, 
+            'similarity_fct': self.similarity_fct.__name__
+        }
 
 def get_metrics(audio_logits, text_logits, ground_truth):
     # tODO: naar self.multimodal_loss
@@ -1115,28 +1060,28 @@ class FullCfg:
     batch_size: int
     loss_type: str
     # debug = False
-    lr = 5e-5
-
+    lr: float = 5e-5
     # factor = 0.8
     # epochs = 32
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    # device: torch.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device: str = "cuda"
 
     # For the audio module
-    audio_encoder_input = 1024
-    audio_hidden_dim = 768
-    audio_layer_dim = 2
-    audio_activation = 'relu'
+    audio_encoder_input: int = 1024
+    audio_hidden_dim: int = 768
+    audio_layer_dim: int = 2
+    audio_activation: str = 'relu'
 
     # For the text module
-    text_encoder_model = "distilbert-base-uncased"
-    text_tokenizer = "distilbert-base-uncased"
-   
+    # text_encoder_model: str = "distilbert-base-uncased"
+    text_model_name : str = 'distilbert-base-uncased'
+    text_tokenizer: str = "distilbert-base-uncased"
+    text_pooling: str = 'mean'   #['original', 'cls', 'mean']
+    text_max_length: int = 32
 
     # For the projection_head modules
-    text_activation = 'gelu'
-    mutual_embedding_dim = 768
-    
-    max_length = 200
+    text_activation: int = 'gelu'
+    mutual_embedding_dim: int = 768
 
     # pretrained = True # for both image encoder and text encoder
     # trainable = True # for both image encoder and text encoder
@@ -1144,11 +1089,8 @@ class FullCfg:
     # for projection head; used for both image and text encoders
     # num_projection_layers = 1
     # final_projection_dim = 768  # [256 or 768]
-    audio_dropout = 0.1
-    text_dropout = 0.1
-    text_pooling: str = 'mean'   #['original', 'cls', 'mean']
-    text_model_name : str = 'distilbert-base-uncased'
-    text_max_length: int = 32
+    audio_dropout: float = 0.1
+    text_dropout: float = 0.1
     weight_decay: float = 0.01
 
 
@@ -1156,11 +1098,9 @@ class FullCfg:
 def main(args):
     set_logconfig()
     t_start = time()
+    device = "cuda" if torch.cuda.is_available() else "cpu"
 
-    # Set training parameters from argparse
-    device = "cuda:0" if torch.cuda.is_available() else "cpu"
-
-    # Adjust configurations
+    # Change the CFG file according to argparse.
     FullCfg.num_epochs = args.num_epochs
     FullCfg.final_projection_dim = args.final_projection_dim
     FullCfg.audio_proj_head = args.audio_proj_head
@@ -1174,15 +1114,17 @@ def main(args):
     FullCfg.scale_type = args.scale_type
     FullCfg.scale = args.scale
 
+    # Setup logging.
     log_name = setup_config(args, [FullCfg])
     FullCfg.log_name = log_name
 
-    # Setup dataloaders
+    # Setup dataloaders.
     data_loader = MMloader(args, FullCfg)
     train_loader = data_loader.train_loader
     test_loader = data_loader.test_loader
 
-    tokenizer = AutoTokenizer.from_pretrained(FullCfg.text_model_name, cache_dir=None)
+    # tokenizer = AutoTokenizer.from_pretrained(FullCfg.text_model_name, cache_dir=None)
+    tokenizer = AutoTokenizer.from_pretrained(FullCfg.text_model_name)
 
     # TODO: move this into __init__ of dataloader
     data_loader.train_dataset.tokenizer = tokenizer
