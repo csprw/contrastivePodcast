@@ -792,7 +792,7 @@ class mmModule(nn.Module):
             if not full_validation:
                 iterator = iter(self.test_loader)
 
-                total_len = 100
+                total_len = 1000
 
                 for step in range(total_len):
                     batch = next(iterator)
