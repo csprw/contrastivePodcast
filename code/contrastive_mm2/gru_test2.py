@@ -560,6 +560,7 @@ class simple_ProjectionHead(nn.Module):
         self.output_dim = CFG.final_projection_dim
         self.activation  = CFG.audio_activation
         self.config_keys = ['input_dim', 'hidden_dim', 'output_dim', 'activation']
+        dropout = CFG.dropout
 
         if self.activation == 'relu':
             self.simple_model = nn.Sequential(
@@ -573,7 +574,7 @@ class simple_ProjectionHead(nn.Module):
                 nn.Linear(self.input_dim, self.hidden_dim),
                 nn.GELU(),
                 nn.Linear(self.hidden_dim, self.output_dim),
-                nn.Dropout(),
+                nn.Dropout(dropout),
                 nn.LayerNorm(self.output_dim),
             )
 
@@ -591,7 +592,8 @@ class simple_ProjectionHead(nn.Module):
 
         return features
 
-class ProjectionHead(nn.Module):
+class text_ProjectionHead(nn.Module):
+    # TODO: This module is depricated.
     def __init__(self, CFG):
 
         super().__init__()
@@ -599,26 +601,34 @@ class ProjectionHead(nn.Module):
         projection_dim=CFG.final_projection_dim
         dropout=CFG.text_dropout
 
-        self.projection = nn.Linear(embedding_dim, projection_dim)
-        self.gelu = nn.GELU()
-        self.fc = nn.Linear(projection_dim, projection_dim)
-        self.dropout = nn.Dropout(dropout)
-        self.layer_norm = nn.LayerNorm(projection_dim)
+        self.activation  = CFG.text_activation
+
+        if self.activation == 'relu':
+            self.net = nn.Sequential(
+                nn.Linear(embedding_dim, projection_dim),
+                nn.BatchNorm1d(num_features=projection_dim), # TODO: experiment with batchnormalization
+                nn.ReLU(),
+                nn.Linear(projection_dim, projection_dim),
+            )
+
+        else:
+            self.net = nn.Sequential(
+                nn.Linear(embedding_dim, projection_dim),
+                nn.GELU(),
+                nn.Linear(projection_dim, projection_dim),
+                nn.Dropout(dropout),
+                nn.LayerNorm(projection_dim),
+            )
     
     def forward(self, x):
-        projected = self.projection(x)
-        x = self.gelu(projected)
-        x = self.fc(x)
-        x = self.dropout(x)
-        x = x + projected
-        x = self.layer_norm(x)
+        x = self.net(x)
         return x
 
 class mmModule(nn.Module):
     # HIERO1
     def __init__(self, CFG):
         super().__init__()
-        self.temperature=CFG.temperature
+        # self.temperature=CFG.temperature
         self.batch_size = CFG.batch_size
         self.device = CFG.device
 
@@ -626,7 +636,7 @@ class mmModule(nn.Module):
 
         if CFG.text_proj_head == 'simple_projection_head':
             self.text_encoder = TextEncoder(CFG)
-            self.text_projection = ProjectionHead(CFG)
+            self.text_projection = text_ProjectionHead(CFG)
 
             text_modules = [self.text_encoder, self.text_projection]
         elif CFG.text_proj_head.lower() == 'none':
@@ -650,7 +660,7 @@ class mmModule(nn.Module):
         self.text_model = nn.Sequential(text_modules)
         self.audio_model = nn.Sequential(audio_modules)
 
-        self.temperature = CFG.temperature
+        # self.temperature = CFG.temperature
         self.eval_every = CFG.eval_every
         self.print_every = CFG.print_every
         self.batch_size = CFG.batch_size
@@ -699,7 +709,6 @@ class mmModule(nn.Module):
         loss_model,
         start_epoch=1,
         optimizer_class: Type[Optimizer] = AdamW,
-        optimizer_params={'lr': 5e-5},
         fstep = 0,
         loaded_optimizer = None,
         loaded_sched_dict = None,
@@ -835,7 +844,7 @@ class mmModule(nn.Module):
                     sent_features, audio_features, seq_len  = batch
                     with torch.no_grad():
                         loss_value, metrics = loss_model(sent_features, audio_features, seq_len)
-                        losses += loss_value
+                        losses += loss_value.item()
                         if step == 0:
                             #metrics_sum = metrics.copy()
                             met_sum = Counter(metrics.copy())
@@ -1045,6 +1054,7 @@ class multimodal_loss(nn.Module):
 
             labels = torch.tensor(range(len(scores)), dtype=torch.long, device=scores.device)  # Example a[i] should match with b[i]
             loss = self.cross_entropy_loss(scores, labels)
+
             #acc = torch.mean((scores.argmax(dim=-1) == labels).float()).item()
 
             metrics = get_metrics(scores.detach(), scores.t().detach(), labels)
@@ -1115,22 +1125,24 @@ class FullCfg:
     audio_encoder_input = 1024
     audio_hidden_dim = 768
     audio_layer_dim = 2
+    audio_activation = 'relu'
 
     # For the text module
     text_encoder_model = "distilbert-base-uncased"
     text_tokenizer = "distilbert-base-uncased"
-    # text_embedding_dim = 768
+   
 
-    # For the simple_projection_head module
+    # For the projection_head modules
+    text_activation = 'gelu'
     mutual_embedding_dim = 768
     
     max_length = 200
 
     # pretrained = True # for both image encoder and text encoder
     # trainable = True # for both image encoder and text encoder
-    temperature = 1.0
+    # temperature = 1.0
     # for projection head; used for both image and text encoders
-    num_projection_layers = 1
+    # num_projection_layers = 1
     # final_projection_dim = 768  # [256 or 768]
     audio_dropout = 0.1
     text_dropout = 0.1
@@ -1154,6 +1166,7 @@ def main(args):
     FullCfg.audio_proj_head = args.audio_proj_head
     FullCfg.text_proj_head = args.text_proj_head
     FullCfg.audio_activation = args.audio_activation
+    FullCfg.text_activation = args.text_activation
     FullCfg.device = device
     FullCfg.batch_size = args.batch_size
     FullCfg.loss_type = args.loss_type
@@ -1177,9 +1190,12 @@ def main(args):
     data_loader.train_dataset.text_max_length = FullCfg.text_max_length
     data_loader.test_dataset.text_max_length = FullCfg.text_max_length
 
-    FullCfg.eval_every = int(math.ceil(len(train_loader) * 0.1)) #Evaluate every 10% of the data
-    FullCfg.print_every = int(math.ceil(len(train_loader) * 0.02)) #Print results every 2% f the data
-    print("[main] print_every {} eval_every {} ".format(FullCfg.print_every, FullCfg.eval_every))
+    # Evaluate every 10% of the data, print result every 2%.
+    FullCfg.eval_every = int(math.ceil(len(train_loader) * 0.1)) 
+    FullCfg.print_every = int(math.ceil(len(train_loader) * 0.02))
+    print("[main] print_every {} eval_every {} ".format(
+        FullCfg.print_every, FullCfg.eval_every)
+    )
 
     # Setup the full model
     full_model = mmModule(FullCfg)
@@ -1188,12 +1204,11 @@ def main(args):
     normalize=args.normalize             # TODO: dit kan weg in zijn geheel
     loss_func = multimodal_loss(full_model, FullCfg, normalize)
 
-    if args.load_model: 
-        print("[Main] loading model ", args.load_model_path)
-        full_model.load_state_dict(torch.load(args.load_model_path))
 
     if args.load_checkpoint:
-        print("[Main] training from checkpoint ", args.load_checkpoint_path)
+        print("[Main] train model {} from checkpoint".format(
+            args.load_checkpoint_path)
+        )
         checkpoint = torch.load(args.load_checkpoint_path)
         # print("checkpoint: ", checkpoint)
         print(type(checkpoint))
@@ -1205,14 +1220,16 @@ def main(args):
         loaded_sched_dict = checkpoint['lr_sched']
 
     else:
-        print("[Main] training from scratch ")
-        # Define where the training starts.
+        if args.load_model: 
+            print("[Main] load model {}, but initiate new optimizer".format( 
+                args.load_model_path)
+            )
+            full_model.load_state_dict(torch.load(args.load_model_path))
         epoch = 0
         fstep = 0
         loaded_optimizer = None
         loaded_sched_dict = None
         
-
     full_model.fit(
         CFG = FullCfg,
         train_loader=train_loader,
@@ -1220,8 +1237,6 @@ def main(args):
         loss_model=loss_func,
         start_epoch=epoch,
         optimizer_class=AdamW,
-        optimizer_params={'lr': 5e-5},
-
         fstep = fstep,
         loaded_optimizer = loaded_optimizer,
         loaded_sched_dict = loaded_sched_dict,
@@ -1231,52 +1246,30 @@ def main(args):
     print("[main] ------------------------------------------------------------")
     dur = int(t_end - t_start)
     print("[main] Done, total duration {} seconds ".format(dur))
-    csv_file = pd.read_csv(full_model.eval_csv_filename)
-    print("[main] Maximum text acc step={} acc={}".format(csv_file['text_acc'].idxmax(), csv_file['text_acc'].max()))
-    print("[main] Maximum audio acc step={} acc={}".format(csv_file['audio_acc'].idxmax(), csv_file['audio_acc'].max()))
-    best_idx = csv_file['mean_acc'].idxmax()
-    print("[main] Maximum mean acc step={} acc={}".format(best_idx, csv_file['mean_acc'].max()))
-    print(", ".join(["{} - {}".format(k, v) for k, v in csv_file.iloc[best_idx].to_dict().items()]))
+    # csv_file = pd.read_csv(full_model.eval_csv_filename)
+    # print("[main] Maximum text acc step={} acc={}".format(csv_file['text_acc'].idxmax(), csv_file['text_acc'].max()))
+    # print("[main] Maximum audio acc step={} acc={}".format(csv_file['audio_acc'].idxmax(), csv_file['audio_acc'].max()))
+    # best_idx = csv_file['mean_acc'].idxmax()
+    # print("[main] Maximum mean acc step={} acc={}".format(best_idx, csv_file['mean_acc'].max()))
+    # print(", ".join(["{} - {}".format(k, v) for k, v in csv_file.iloc[best_idx].to_dict().items()]))
 
-    print("[del] now save to disk")
-    best_results(full_model.eval_csv_filename, FullCfg.log_name)
+    # print("[del] now save to disk")
+    best_results(full_model.eval_csv_filename, dur, FullCfg.log_name)
 
 
-def best_results(eval_csv_filename, out_dir):
+def best_results(eval_csv_filename, dur, out_dir):
     print("[del] this is eval_csv_filename: ", eval_csv_filename)
 
     csv_file = pd.read_csv(eval_csv_filename)
-    best = {}
-    best['text_acc'] = csv_file['text_acc'].max()
-    best["text_acc_step"] = csv_file['text_acc'].idxmax()
-    best['audio_acc'] = csv_file['audio_acc'].max()
-    best["audio_acc_step"] = csv_file['audio_acc'].idxmax()
-    best['mean_acc'] = csv_file['mean_acc'].idxmax()
-    best["mean_acc_step"] = csv_file['mean_acc'].max()
-
-    outfile = os.path.join(out_dir, 'best_results.json')
-    with open(outfile, "w") as file:
-        json.dump(best, file, indent=4, sort_keys=True)
-    best_idx = csv_file['mean_acc'].idxmax()
-
-    # More clean
-    best2 = {}
+    best2 = {'duration': dur}
     for k, v in csv_file.iloc[best_idx].to_dict().items():
         best2[k] = v
+
     outfile = os.path.join(out_dir, 'best_results2.json')
     with open(outfile, "w") as file:
         json.dump(best2, file, indent=4, sort_keys=True)
-    print("---- Best Resuts ----")
+    print("---- Best epoch results ----")
     pprint(best2)
-
-    
-    
-
-
-
-    
-
-    
 
 
 
@@ -1325,6 +1318,9 @@ if __name__ == "__main__":
                     help='Pooling method to use for text model (default: %(default)s)')
 
     parser.add_argument('--audio_activation', default='relu', const='relu',
+                    nargs='?', choices=['relu', 'gelu'],
+                    help='Activation to use in simple proj head (default: %(default)s)')
+    parser.add_argument('--text_activation', default='gelu', const='gelu',
                     nargs='?', choices=['relu', 'gelu'],
                     help='Activation to use in simple proj head (default: %(default)s)')
     parser.add_argument('--scale_type', default='fixed', const='fixed',
