@@ -17,7 +17,7 @@ def process_args(string):
 job = "gru_test2.py --num_epochs 1 --audio_proj_head rnn"
 cmd = process_args(job)
 print("1---------------------------- Starting: ", cmd)
-subprocess.run(cmd, shell=False)
+# subprocess.run(cmd, shell=False)
 
 
 job = "gru_test2.py --num_epochs 1 --audio_proj_head rnn --pad_pack"

@@ -112,7 +112,7 @@ class MMloader(object):
         self.batch_size = batch_size
         self.device = CFG.device
 
-        if args.audio_proj_head.lower() in ['gru', 'rnn']:
+        if args.audio_proj_head in ['gru', 'rnn']:
             self.load_full = True
         else:
             self.load_full = False
@@ -644,10 +644,10 @@ class mmModule(nn.Module):
             pooling_model = Pooling(text_encoder.get_word_embedding_dimension())
             text_modules = [text_encoder, pooling_model]
 
-        if CFG.audio_proj_head.lower() in ['rnn', 'gru']:
+        if CFG.audio_proj_head in ['rnn', 'gru']:
             audio_encoder = SequentialAudioModel(CFG)
             audio_modules = [audio_encoder]
-        elif CFG.audio_proj_head.lower() in ['simple_projection_head']:
+        elif CFG.audio_proj_head in ['simple_projection_head']:
             audio_encoder = simple_ProjectionHead(CFG)
             audio_modules = [audio_encoder]
         
@@ -1261,6 +1261,7 @@ def best_results(eval_csv_filename, dur, out_dir):
     print("[del] this is eval_csv_filename: ", eval_csv_filename)
 
     csv_file = pd.read_csv(eval_csv_filename)
+    best_idx = csv_file['mean_acc'].idxmax()
     best2 = {'duration': dur}
     for k, v in csv_file.iloc[best_idx].to_dict().items():
         best2[k] = v
