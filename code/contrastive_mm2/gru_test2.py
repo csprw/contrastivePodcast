@@ -792,6 +792,7 @@ class mmModule(nn.Module):
                 
                 # # [del] check on one batch
                 # print("[metrics] ", loss_value.item(), metrics['mean_acc'])
+
                 # if step >= 0:
                 #     print("[del] break")
                 #     break   
@@ -827,6 +828,7 @@ class mmModule(nn.Module):
                 iterator = iter(self.test_loader)
 
                 total_len = 100
+
                 for step in range(total_len):
                     batch = next(iterator)
 
@@ -1097,325 +1099,6 @@ def to_plot(filename, column='accuracy2', title="Test accuracy"):
     plt.savefig(output_name)
     plt.close()
 
-# class Optimization:
-#     #HIERO2
-#     def __init__(self, CFG, text_modules, audio_modules):
-#         self.temperature=CFG.temperature
-#         self.batch_size = CFG.batch_size
-#         self.device = CFG.device
-
-#         self.loss_type = CFG.loss_type
-
-#         if CFG.text_proj_head == 'simple_projection_head':
-#             self.text_encoder = TextEncoder(CFG)
-#             self.text_projection = ProjectionHead(CFG)
-
-#             text_modules = [self.text_encoder, self.text_projection]
-#         elif CFG.text_proj_head.lower() == 'none':
-#             text_encoder = TextEncoder(CFG)
-#             pooling_model = Pooling(text_encoder.get_word_embedding_dimension())
-#             text_modules = [text_encoder, pooling_model]
-
-#         if CFG.audio_proj_head in ['rnn', 'gru']:
-#             audio_encoder = SequentialAudioModel(CFG)
-#             audio_modules = [audio_encoder]
-        
-#         # Create the full model
-#         if text_modules is not None and not isinstance(text_modules, OrderedDict):
-#             text_modules = OrderedDict([(str(idx), module) for idx, module in enumerate(text_modules)])
-#         if audio_modules is not None and not isinstance(audio_modules, OrderedDict):
-#             audio_modules = OrderedDict([(str(idx), module) for idx, module in enumerate(audio_modules)])
-
-#         # self.temperature = temperature
-        
-#         self.text_model = nn.Sequential(text_modules)
-#         self.audio_model = nn.Sequential(audio_modules)
-
-#         # self.lr_scheduler = lr_scheduler
-#         # self.optimizer = optimizer
-
-#         self.eval_every = CFG.eval_every
-#         self.print_every = CFG.print_every
-#         self.best_loss = float('inf')
-#         self.log_name = CFG.log_name
-#         self.init_logging()
-#         self.batch_size = CFG.batch_size
-#         self.device = CFG.device
-
-#         self.total_len = 1000
-#         self.total_len = 100
-
-#         self.loss1 = nn.CrossEntropyLoss()
-#         self.loss2 = nn.CrossEntropyLoss()
-
-#         self.max_grad_norm = 1 # magic number for now
-
-#     def train_epoch(self, epoch, train_loader, val_loader):
-#         self.model.train()
-#         self.model.zero_grad()
-#         steps = len(train_loader)
-#         total_steps = epoch * steps
-#         t1 = time()
-
-#         memory_test_delete = 1000
-
-#         # Fixed length training:
-#         # iterator = iter(train_loader)
-#         # for step in range(self.total_len):
-#         #     batch = next(iterator)
-
-#         # Full training
-#         for step, batch in enumerate(iter(train_loader)):
-#             if  step % self.eval_every == 0 and step < 1: # del last statement
-#                 # Todo: uncommen
-#                 mean_loss, metrics = self.evaluate(val_loader)
-#                 self.add_logging(epoch, total_steps, mean_loss, metrics, train=False)
-                
-#                 print("[eval] Epoch {} Step {}/{} \t loss {} \t acc {}".format(epoch, total_steps, steps, mean_loss, metrics['mean_acc']))
-#                 # if mean_loss < self.best_loss:
-#                 #     print("[eval] better model found")
-#                 #     self.best_loss = mean_loss 
-#                 #     if args.save_model:
-#                 #         self.save_model()
-#                 #     elif args.save_checkpoint:
-#                 #         self.save_checkpoint(epoch, step)
-#                 # if step > self.print_every:
-#                 #     self.output_all_plots()
-
-#             #padded_audio_embeds, lengths, text_embeds  = batch
-#             loss, metrics = self.model(batch)
-
-#             #self.optimizer.zero_grad()
-#             loss.backward()
-#             torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.max_grad_norm)
-
-#             self.optimizer.step()
-#             self.optimizer.zero_grad()
-#             self.lr_scheduler.step()
-
-#             # if step % self.print_every == 0:
-#             #     print("[train] Epoch {} Step {}/{} \t loss {} \t acc {}".format(epoch, total_steps, steps, loss.item(), metrics['mean_acc']))
-#             #     self.add_logging(epoch, total_steps, loss.item(), metrics, train=True)
-            
-#             total_steps += 1
-#             print("[metrics] ", loss.item(), metrics['mean_acc'])
-#             if step >= 0:
-#                 print("[del] break")
-#                 break   
-            
-
-
-#             # # [del]
-#             # if step % memory_test_delete == 0:
-#             #     process = psutil.Process(os.getpid())
-#             #     print("[del] [mem] training memory              : ", process.memory_info().rss)
-#             #     gc.collect()
-#             #     print("[del] [mem] training memory after collect: ", process.memory_info().rss)
-
-
-                
-#         self.output_all_plots()
-#         t2 = time()
-#         print("[train] epoch duration {} seconds".format(int(t2-t1)))
-#         return metrics
-
-#     def evaluate(self, val_loader):
-#         self.model.eval()
-#         losses = []
-#         validation_len = len(val_loader)
-
-#         full_validation = False
-#         with torch.no_grad():
-
-#             # fixed number of steps
-#             if not full_validation:
-#                 iterator = iter(val_loader)
-#                 for step in range(self.total_len):
-#                     batch = next(iterator)
-#                     # padded_audio_embeds, lengths, text_embeds  = batch
-#                     loss, metrics = self.model(batch)
-#                     losses.append(loss.item())
-#                     if step == 0:
-#                         met_sum = Counter(metrics.copy())
-#                     else:
-#                         #metrics_sum = {k: metrics_sum.get(k, 0) + metrics.get(k, 0) for k in set(metrics_sum)}
-#                         met_sum.update(Counter(metrics))
-                    
-#                     # TODO: uncomment
-#                     break
-#                 mean_metrics = {k: value / self.total_len  for k, value in met_sum.items()}
-#                 del met_sum
-
-#                 mean_loss = np.mean(losses)
-#                 self.model.train()
-#                 return mean_loss, mean_metrics
-
-            
-#             else: 
-#                 # full learning
-#                 for step, batch in enumerate(iter(val_loader)):
-#                     # padded_audio_embeds, lengths, text_embeds  = batch
-#                     loss, metrics = self.model(batch)
-#                     losses.append(loss.item())
-#                     if step == 0:
-#                         met_sum = Counter(metrics.copy())
-#                     else:
-#                         #metrics_sum = {k: metrics_sum.get(k, 0) + metrics.get(k, 0) for k in set(metrics_sum)}
-#                         met_sum.update(Counter(metrics))
-                        
-#                 mean_metrics = {k: value / validation_len  for k, value in met_sum.items()}
-#                 mean_loss = np.mean(losses)
-#                 self.model.train()
-#                 return mean_loss, mean_metrics
-
-#     def train(self, train_loader, val_loader, startepoch=0):
-#         # self.model.audio_encoder.to(self.device)
-#         # self.model.text_encoder.to(self.device)
-#         # if self.model.audio_projection:
-#         #     self.model.audio_projection.to(self.device)
-#         # if self.model.text_projection:
-#         #     self.model.text_projection.to(self.device)
-
-#         self.model.text_model.to(self.device)
-#         self.model.audio_model.to(self.device)
-
-#         steps_per_epoch = len(train_loader)
-#         num_train_steps = int(steps_per_epoch * FullCfg.num_epochs)
-
-#         warmup_steps =  math.ceil(len(train_loader) *  FullCfg.num_epochs * 0.1)  # 10% of train data for warm-up
-
-#         optimizer = self._get_optimizer(self.model)
-
-#         scheduler_method='WarmupLinear'
-#         scheduler = self._get_scheduler(optimizer, scheduler=scheduler_method, warmup_steps=warmup_steps, t_total=num_train_steps)
-        
-#         self.optimizer = optimizer
-#         self.lr_scheduler = scheduler
-
-
-#         for epoch in range(startepoch, FullCfg.num_epochs):
-#             self.train_epoch(epoch, train_loader, val_loader)
-
-#         #mean_loss, eval_metrics = self.evaluate(val_loader)
-#         #self.add_logging(epoch, 0, mean_loss, eval_metrics, train=False)
-#         self.output_all_plots()
-
-#     def output_all_plots(self):
-#         to_plot(self.train_csv_filename, column='audio_acc', title="Train accuracy (audio)")
-#         to_plot(self.train_csv_filename, column='text_acc', title="Train accuracy (text)")
-#         to_plot(self.train_csv_filename, column='loss', title="Train loss")
-#         to_plot(self.eval_csv_filename, column='mean_acc', title="Test accuracy (mean)")
-  
-#     def init_logging(self):
-#         self.model_save_path = '{}/output'.format(self.log_name)
-#         os.makedirs(self.model_save_path, exist_ok=True)
-#         self.train_csv_filename = os.path.join(self.model_save_path, "train.csv")
-#         self.eval_csv_filename = os.path.join(self.model_save_path, "test.csv")
-
-#     def add_logging(self, epoch, steps, loss, metrics, train=True):
-#         if train:
-#             filename = self.train_csv_filename
-#         else:
-#             filename = self.eval_csv_filename
-#         total_step = (self.total_len * epoch) + steps
-#         output_file_exists = os.path.isfile(filename)
-
-#         if not output_file_exists:
-#             self.metric_headers = [metric for metric in metrics.keys()]
-#             self.train_csv_headers = ["epoch", "steps", "loss"] + self.metric_headers
-#             with open(filename, newline='', mode="a" if output_file_exists else 'w', encoding="utf-8") as f:
-#                 writer = csv.writer(f)
-#                 writer.writerow(self.train_csv_headers)
-
-#         # Add metrics to CSV
-#         metric_vals = [metrics[header] for header in self.metric_headers]
-#         with open(filename, newline='', mode="a", encoding="utf-8") as f:
-#             writer = csv.writer(f)
-#             writer.writerow([epoch, total_step, loss] + metric_vals)
-
-#     def save_model(self):
-#         output_dir = os.path.join(self.model_save_path, 'full_model_weights.pth')
-#         torch.save(self.model.state_dict(), output_dir)
-
-#     def save_checkpoint(self, epoch, step):
-#         checkpoint = { 
-#             'epoch': epoch,
-#             'step': step,
-#             'full_model': self.model,
-#             'optimizer': self.optimizer,
-#             'lr_sched': self.lr_scheduler
-#         }
-#         output_dir = os.path.join(self.model_save_path, 'checkpoint.pth')
-#         torch.save(checkpoint, output_dir)
-
-#     @staticmethod
-#     def _get_scheduler(optimizer, scheduler: str, warmup_steps: int, t_total: int):
-#         """
-#         Returns the correct learning rate scheduler. Available scheduler: constantlr, warmupconstant, warmuplinear, warmupcosine, warmupcosinewithhardrestarts
-#         """
-#         scheduler = scheduler.lower()
-#         if scheduler == 'constantlr':
-#             return get_constant_schedule(optimizer)
-#         elif scheduler == 'warmupconstant':
-#             return get_constant_schedule_with_warmup(optimizer, num_warmup_steps=warmup_steps)
-#         elif scheduler == 'warmuplinear':
-#             return get_linear_schedule_with_warmup(optimizer, num_warmup_steps=warmup_steps, num_training_steps=t_total)
-#         else:
-#             raise ValueError("Unknown scheduler {}".format(scheduler))
-
-    
-#     def _get_optimizer(self, loss_model):
-#         self.weight_decay: float = 0.01 # todo: naar self of CFG
-#         self.optimizer_params : Dict[str, object]= {'lr': 5e-5}
-#         self.optimizer_class: Type[Optimizer] = AdamW
-        
-#         # Prepare optimizers
-#         param_optimizer = list(loss_model.named_parameters())
-#         no_decay = ['bias', 'LayerNorm.bias', 'LayerNorm.weight']
-#         optimizer_grouped_parameters = [
-#             {'params': [p for n, p in param_optimizer if not any(nd in n for nd in no_decay)], 'weight_decay': self.weight_decay},
-#             {'params': [p for n, p in param_optimizer if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
-#         ]
-#         optimizer_params = self.optimizer_params
-#         optimizer = self.optimizer_class(optimizer_grouped_parameters, **optimizer_params)
-#         return optimizer
-
-        
-#     # @staticmethod
-# def _get_scheduler(optimizer, scheduler: str, warmup_steps: int, t_total: int):
-#     """
-#     Returns the correct learning rate scheduler. Available scheduler: constantlr, warmupconstant, warmuplinear, warmupcosine, warmupcosinewithhardrestarts
-#     """
-#     scheduler = scheduler.lower()
-#     if scheduler == 'constantlr':
-#         return get_constant_schedule(optimizer)
-#     elif scheduler == 'warmupconstant':
-#         return get_constant_schedule_with_warmup(optimizer, num_warmup_steps=warmup_steps)
-#     elif scheduler == 'warmuplinear':
-#         return get_linear_schedule_with_warmup(optimizer, num_warmup_steps=warmup_steps, num_training_steps=t_total)
-#     else:
-#         raise ValueError("Unknown scheduler {}".format(scheduler))
-
-
-# def _get_optimizer(loss_model):
-#     weight_decay: float = 0.01 # todo: naar self
-#     optimizer_params : Dict[str, object]= {'lr': 5e-5}
-#     optimizer_class: Type[Optimizer] = AdamW
-#     # Prepare optimizers
-#     param_optimizer = list(loss_model.named_parameters())
-
-#     no_decay = ['bias', 'LayerNorm.bias', 'LayerNorm.weight']
-#     optimizer_grouped_parameters = [
-#         {'params': [p for n, p in param_optimizer if not any(nd in n for nd in no_decay)], 'weight_decay': weight_decay},
-#         {'params': [p for n, p in param_optimizer if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
-#     ]
-#     # optimizer_params = self.optimizer_params
-#     # optimizer = self.optimizer_class(optimizer_grouped_parameters, **optimizer_params)
-
-#     optimizer = optimizer_class(optimizer_grouped_parameters, **optimizer_params)
-
-#     return optimizer
-
             
 @dataclass
 class FullCfg:
@@ -1546,13 +1229,55 @@ def main(args):
 
     t_end = time()
     print("[main] ------------------------------------------------------------")
-    print("[main] Done, total duration {} seconds ".format(int(t_end - t_start)))
+    dur = int(t_end - t_start)
+    print("[main] Done, total duration {} seconds ".format(dur))
     csv_file = pd.read_csv(full_model.eval_csv_filename)
     print("[main] Maximum text acc step={} acc={}".format(csv_file['text_acc'].idxmax(), csv_file['text_acc'].max()))
     print("[main] Maximum audio acc step={} acc={}".format(csv_file['audio_acc'].idxmax(), csv_file['audio_acc'].max()))
     best_idx = csv_file['mean_acc'].idxmax()
     print("[main] Maximum mean acc step={} acc={}".format(best_idx, csv_file['mean_acc'].max()))
     print(", ".join(["{} - {}".format(k, v) for k, v in csv_file.iloc[best_idx].to_dict().items()]))
+
+    print("[del] now save to disk")
+    best_results(full_model.eval_csv_filename, FullCfg.log_name)
+
+
+def best_results(eval_csv_filename, out_dir):
+    print("[del] this is eval_csv_filename: ", eval_csv_filename)
+
+    csv_file = pd.read_csv(eval_csv_filename)
+    best = {}
+    best['text_acc'] = csv_file['text_acc'].max()
+    best["text_acc_step"] = csv_file['text_acc'].idxmax()
+    best['audio_acc'] = csv_file['audio_acc'].max()
+    best["audio_acc_step"] = csv_file['audio_acc'].idxmax()
+    best['mean_acc'] = csv_file['mean_acc'].idxmax()
+    best["mean_acc_step"] = csv_file['mean_acc'].max()
+
+    outfile = os.path.join(out_dir, 'best_results.json')
+    with open(outfile, "w") as file:
+        json.dump(best, file, indent=4, sort_keys=True)
+    best_idx = csv_file['mean_acc'].idxmax()
+
+    # More clean
+    best2 = {}
+    for k, v in csv_file.iloc[best_idx].to_dict().items():
+        best2[k] = v
+    outfile = os.path.join(out_dir, 'best_results2.json')
+    with open(outfile, "w") as file:
+        json.dump(best2, file, indent=4, sort_keys=True)
+    print("---- Best Resuts ----")
+    pprint(best2)
+
+    
+    
+
+
+
+    
+
+    
+
 
 
 if __name__ == "__main__":
