@@ -743,7 +743,9 @@ class mmModule(nn.Module):
                             self.save_model()
                         if args.save_checkpoint:
                             self.save_checkpoint(epoch, step, optimizer, scheduler)
-                    if step > self.print_every:
+                            
+                    # If csv files are properly set up, save plots.
+                    if os.path.isfile(self.train_csv_filename):
                         self.output_all_plots()
 
                 sent_features, audio_features, seq_len = batch
