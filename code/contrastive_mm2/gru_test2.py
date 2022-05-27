@@ -1190,12 +1190,12 @@ def main(args):
         print("[Main] train model {} from checkpoint".format(
             args.load_checkpoint_path)
         )
-        #####
-        # TODO: fix this
-        import pathlib
-        # plt = platform.system()
-        # if plt != 'Windows': 
-        pathlib.WindowsPath = pathlib.PosixPath
+        ####
+        # TODO: fix this! to read file if trained on windows
+        # import pathlib
+        # # plt = platform.system()
+        # # if plt != 'Windows': 
+        # pathlib.WindowsPath = pathlib.PosixPath
         #####
 
         checkpoint = torch.load(args.load_checkpoint_path, map_location=torch.device(device))
