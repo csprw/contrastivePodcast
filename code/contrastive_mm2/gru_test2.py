@@ -20,9 +20,10 @@ from matplotlib import pyplot as plt
 import seaborn as sns
 from collections import Counter, OrderedDict
 from pprint import pprint
+from dacite import from_dict
 
 from typing import List, Dict, Optional, Union, Tuple, Iterable, Type, Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, asdict
 
 import torch 
 from torch.utils import data as datautil
@@ -58,34 +59,40 @@ def set_logconfig():
             datefmt='%Y-%m-%d %H:%M:%S',
             level=logging.INFO)
 
-def get_log_name(args, dataclasses):
+def get_log_name(args, dc):
     log_name = "gru2-{}_{}_{}_{}_{}_{}".format(args.loss_type, args.audio_proj_head, 
-            args.audio_activation, args.final_projection_dim, dataclasses[0].lr,
+            args.audio_activation, args.final_projection_dim, dc.lr,
             datetime.now().strftime("%Y-%m-%d_%H-%M-%S"))
     log_name = os.path.join(args.log_dir, log_name)
     return log_name
 
-def setup_config(args, dataclasses):
+def setup_config(args, dc, device='cpu'):
     # Set the seed and create output directories
     set_seed(args)
-    log_name = get_log_name(args, dataclasses)
+    log_name = get_log_name(args, dc)
     os.makedirs(log_name, exist_ok=True)
 
-    # Create a configuration file
+    # Create a configuration file from CL arguments. 
     config = vars(args)
-    for dc in dataclasses:
-        name = dc.__name__
-        config[name] = {}
-        for field in dc.__dataclass_fields__:
-            value = getattr(dc, field)
-            config[name][field] = value
+    config['log_name'] = log_name
+    config['device'] = device
 
-    print("Config used: ")
-    pprint(config)
+    # For all other keys, use the standard the dataclass arguments.
+    for field in dc.__dataclass_fields__:
+        value = getattr(dc, field)
+        if field not in config.keys():
+            config[field] = value
+
+    fullcfg = from_dict(data_class=Cfg, data=config)
+    print("[del] DATA: ")
+    pprint(fullcfg)
+
+    # Save config.
     config_dir = os.path.join(log_name, 'config.json')
     with open(config_dir, "w") as file:
         json.dump(config, file, indent=4, sort_keys=True)
-    return log_name
+    return fullcfg, log_name
+
 ################################################################################
 ##################### Dataloaders
 class MMloader(object):
@@ -99,7 +106,7 @@ class MMloader(object):
     def __init__(self, args, CFG, kwargs={}):
 
         train_dataset_name = args.train_dataset
-        dev_dataset_name = args.dev_dataset
+        # dev_dataset_name = args.dev_dataset
         test_dataset_name = args.test_dataset
 
         batch_size = args.batch_size
@@ -232,7 +239,6 @@ class spDatasetNoMemory(datautil.Dataset):
         
         # Pad the audio embeddings
         padded_audio_embeds = pad_sequence(audio_embeds, batch_first=True).to(self.device)
-
         # Tokenize text
         text_embeds = self.tokenizer(
             text_embeds, padding=True, truncation=True, max_length=self.text_max_length, return_tensors='pt'
@@ -284,7 +290,6 @@ class TextEncoder(nn.Module):
         
         # This is self._load_model in mm2
         self.auto_model = AutoModel.from_pretrained(model_name_or_path, config=config)
-
         self.max_seq_length = CFG.text_max_length
 
         # we are using the CLS token hidden representation as the sentence's embedding
@@ -440,8 +445,8 @@ class SequentialAudioModel(nn.Module):
         self.fc = nn.Linear(CFG.audio_hidden_dim, CFG.mutual_embedding_dim)
         self.softmax = nn.Softmax(dim=1)
 
-        pad_pack = args.pad_pack
-        self.pad_pack = pad_pack
+        # pad_pack = args.pad_pack
+        self.pad_pack = CFG.pad_pack
         self.use_softmax = True
         # TODO: print("[TODO] pad_pack is set to false")
 
@@ -570,7 +575,6 @@ class text_ProjectionHead(nn.Module):
         return x
 
 class mmModule(nn.Module):
-    # HIERO1
     def __init__(self, CFG):
         super().__init__()
         # self.temperature=CFG.temperature
@@ -590,9 +594,6 @@ class mmModule(nn.Module):
             #  pooling_mode_max_tokens: bool = False,
             #  pooling_mode_mean_tokens: bool = True,
             #  pooling_mode_mean_sqrt_len_tokens: bool = False,
-            print("hiero")
-            print(CFG.text_pooling)
-
             if CFG.text_pooling == 'mean':
                 pooling_model = Pooling(text_encoder.get_word_embedding_dimension(),
                 pooling_mode_mean_tokens = True)
@@ -670,9 +671,11 @@ class mmModule(nn.Module):
         start_epoch=1,
         optimizer_class: Type[Optimizer] = AdamW,
         fstep = 0,
-        loaded_optimizer = None,
-        loaded_sched_dict = None,
+        loaded_optimizer_state = None,
+        loaded_sched_state = None,
         ):
+
+        # print("[del]: ", self.device, CFG.device, start_epoch, fstep)
 
         self.text_model.to(self.device)
         self.audio_model.to(self.device)
@@ -688,22 +691,24 @@ class mmModule(nn.Module):
         self.optimizer_params = {'lr': CFG.lr}
         scheduler_method='WarmupLinear' 
 
-        print("[del] ", steps_per_epoch, num_train_steps, warmup_steps)
-        total_steps = 0
+        # print("[del] ", steps_per_epoch, num_train_steps, warmup_steps)
+        total_steps = (start_epoch + 1) * fstep
         self.num_train_steps = num_train_steps
 
         # Initiate or load an optimizer
-        if loaded_optimizer == None:
+        if loaded_optimizer_state == None:
             optimizer = self._get_optimizer(loss_model)
         else:
-            optimizer = loaded_optimizer
+            optimizer = self._get_optimizer(loss_model)
+            # optimizer = loaded_optimizer
+            optimizer.load_state_dict(loaded_optimizer_state)
 
         # Initiate or load a scheduler
-        if loaded_sched_dict == None:
+        if loaded_sched_state == None:
             scheduler = self._get_scheduler(optimizer, scheduler=scheduler_method, warmup_steps=warmup_steps, t_total=num_train_steps)
         else:
             scheduler = self._get_scheduler(optimizer, scheduler=scheduler_method, warmup_steps=warmup_steps, t_total=num_train_steps)
-            scheduler.load_state_dict(loaded_sched_dict)
+            scheduler.load_state_dict(loaded_sched_state)
 
         # TODO: this is a test: does it help to learn the scale?
         # if loss_model.scale_type != 'learned':
@@ -723,8 +728,9 @@ class mmModule(nn.Module):
 
             # Full training
             for step, batch in enumerate(iter(train_loader), start=fstep):
-                if  step % self.eval_every == 0 and epoch < 1: # del last statement
-                    print("[del] start evaluation")
+                # print("[del] trainstep: ", total_steps, step)
+                if  step % self.eval_every == 0: 
+                    print("[eval] start evaluation")
                     mean_loss, metrics = self.evaluate(loss_model)
                     # mean_loss = 0 # TODO: check of mean loss terug kan komen uit eval
                     self.add_logging(epoch, total_steps, mean_loss, metrics, train=False)
@@ -756,7 +762,7 @@ class mmModule(nn.Module):
                     self.add_logging(epoch, total_steps, loss_value.item(), metrics, train=True)
                 
                 # # [del] check on one batch
-                # print("[metrics] ", loss_value.item(), metrics['mean_acc'])
+                # print("[del] [metrics] ", loss_value.item(), metrics['mean_acc'])
 
                 # if step >= 0:
                 #     print("[del] break")
@@ -792,9 +798,10 @@ class mmModule(nn.Module):
             if not full_validation:
                 iterator = iter(self.test_loader)
 
-                total_len = 1000
+                total_len = 1000     # 1000
 
                 for step in range(total_len):
+                    # print("[del] step: ", step)
                     batch = next(iterator)
 
                     sent_features, audio_features, seq_len  = batch
@@ -810,7 +817,9 @@ class mmModule(nn.Module):
                             met_sum.update(Counter(metrics))
 
         mean_metrics = {k: value / total_len  for k, value in met_sum.items()}
-        mean_loss = loss_value / total_len
+        mean_loss = losses / total_len
+
+        # print("[del] metrics: ", mean_metrics)
         del met_sum
 
         # if args.test_evalchange:
@@ -925,7 +934,7 @@ class multimodal_loss(nn.Module):
         self.similarity_fct = dek_cos_sim
         self.cross_entropy_loss = nn.CrossEntropyLoss()
 
-        self.device = torch.device(FullCfg.device)
+        self.device = torch.device(CFG.device)
         self.batch_size = full_model.batch_size
 
     def init_parameters_logtiscale(self):
@@ -1071,15 +1080,13 @@ def to_plot(filename, column='accuracy2', title="Test accuracy"):
 
             
 @dataclass
-class FullCfg:
-    batch_size: int
-    loss_type: str
-    # debug = False
+class Cfg:
+    batch_size: int = 128
+    num_epochs: int = 1
+    loss_type: str = 'simcse_loss'
     lr: float = 5e-5
-    # factor = 0.8
-    # epochs = 32
     # device: torch.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    device: str = "cuda"
+    device: str = "cuda" if torch.cuda.is_available() else "cpu"
 
     # For the audio module
     audio_encoder_input: int = 1024
@@ -1088,25 +1095,43 @@ class FullCfg:
     audio_activation: str = 'relu'
 
     # For the text module
-    # text_encoder_model: str = "distilbert-base-uncased"
     text_model_name : str = 'distilbert-base-uncased'
     text_tokenizer: str = "distilbert-base-uncased"
     text_pooling: str = 'mean'   #['cls', 'mean']
     text_max_length: int = 32
 
     # For the projection_head modules
-    text_activation: int = 'gelu'
+    text_proj_head: str = 'None'
+    audio_proj_head: str = 'None'
+    text_activation: str = 'gelu'
     mutual_embedding_dim: int = 768
 
-    # pretrained = True # for both image encoder and text encoder
-    # trainable = True # for both image encoder and text encoder
-    # temperature = 1.0
-    # for projection head; used for both image and text encoders
-    # num_projection_layers = 1
-    # final_projection_dim = 768  # [256 or 768]
+
+    final_projection_dim: int = 768  # [256 or 768]
     audio_dropout: float = 0.1
     text_dropout: float = 0.1
     weight_decay: float = 0.01
+
+    text_activation: str = 'Test'
+    audio_activation: str = 'Test'
+    scale_type: str = 'Test'
+    scale: int = 20
+    pad_pack: bool = False
+    normalize: bool = False
+    eval_every: int = 1
+    print_every: int = 1
+    log_name: str = 'logname'
+
+    train_dataset: str = 'Test'
+    test_dataset: str = 'test'
+    seed: int = 100
+
+    save_model: bool = False
+    save_checkpoint: bool = False
+    load_model_path: str = ''
+    load_model: bool = False
+    load_checkpoint: bool = False
+    load_checkpoint_path: str = ''
 
 
 ######### This stays in MAIN
@@ -1116,22 +1141,21 @@ def main(args):
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
     # Change the CFG file according to argparse.
-    FullCfg.num_epochs = args.num_epochs
-    FullCfg.final_projection_dim = args.final_projection_dim
-    FullCfg.audio_proj_head = args.audio_proj_head
-    FullCfg.text_proj_head = args.text_proj_head
-    FullCfg.audio_activation = args.audio_activation
-    FullCfg.text_activation = args.text_activation
-    FullCfg.device = device
-    FullCfg.batch_size = args.batch_size
-    FullCfg.loss_type = args.loss_type
-    FullCfg.text_pooling = args.text_pooling
-    FullCfg.scale_type = args.scale_type
-    FullCfg.scale = args.scale
+    # FullCfg.num_epochs = args.num_epochs
+    # FullCfg.final_projection_dim = args.final_projection_dim
+    # FullCfg.audio_proj_head = args.audio_proj_head
+    # FullCfg.text_proj_head = args.text_proj_head
+    # FullCfg.audio_activation = args.audio_activation
+    # FullCfg.text_activation = args.text_activation
+    # FullCfg.device = device
+    # FullCfg.batch_size = args.batch_size
+    # FullCfg.loss_type = args.loss_type
+    # FullCfg.text_pooling = args.text_pooling
+    # FullCfg.scale_type = args.scale_type
+    # FullCfg.scale = args.scale
 
-    # Setup logging.
-    log_name = setup_config(args, [FullCfg])
-    FullCfg.log_name = log_name
+
+    FullCfg, log_name = setup_config(args, Cfg, device)
 
     # Setup dataloaders.
     data_loader = MMloader(args, FullCfg)
@@ -1166,15 +1190,28 @@ def main(args):
         print("[Main] train model {} from checkpoint".format(
             args.load_checkpoint_path)
         )
-        checkpoint = torch.load(args.load_checkpoint_path)
+        #####
+        # TODO: fix this
+        import pathlib
+        # plt = platform.system()
+        # if plt != 'Windows': 
+        pathlib.WindowsPath = pathlib.PosixPath
+        #####
+
+        checkpoint = torch.load(args.load_checkpoint_path, map_location=torch.device(device))
         # print("checkpoint: ", checkpoint)
-        print(type(checkpoint))
-        print(checkpoint.keys())
         epoch = checkpoint['epoch']
         fstep = checkpoint['step']
-        full_model = checkpoint['full_model']
-        loaded_optimizer = checkpoint['optimizer']
-        loaded_sched_dict = checkpoint['lr_sched']
+        # full_model = checkpoint['full_model'].state_dict()
+        full_model.load_state_dict(checkpoint['full_model'].state_dict())
+
+        # full_model.load_state_dict(checkpoint['full_model_state_dict'])
+        loaded_optimizer_state = checkpoint['optimizer'].state_dict()
+        # optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+        loaded_sched_state = checkpoint['lr_sched']
+
+        full_model.device = FullCfg.device
+        print("------ CHECK LOADED")
 
     else:
         if args.load_model: 
@@ -1195,8 +1232,8 @@ def main(args):
         start_epoch=epoch,
         optimizer_class=AdamW,
         fstep = fstep,
-        loaded_optimizer = loaded_optimizer,
-        loaded_sched_dict = loaded_sched_dict,
+        loaded_optimizer_state = loaded_optimizer_state,
+        loaded_sched_state = loaded_sched_state
     )
 
     t_end = time()
@@ -1215,7 +1252,7 @@ def main(args):
 
 
 def best_results(eval_csv_filename, dur, out_dir):
-    print("[del] this is eval_csv_filename: ", eval_csv_filename)
+    # print("[del] this is eval_csv_filename: ", eval_csv_filename)
 
     csv_file = pd.read_csv(eval_csv_filename)
     best_idx = csv_file['mean_acc'].idxmax()
@@ -1241,9 +1278,9 @@ if __name__ == "__main__":
     parser.add_argument('--test_dataset', default='sp_sample', const='sts',
                     nargs='?', choices=['sts', 'sp_sample',  'sp'],
                     help='Name of test dataset (default: %(default)s)')
-    parser.add_argument('--dev_dataset', default='sts', const='sts',
-                    nargs='?', choices=['sts'],
-                    help='Name of dev dataset (default: %(default)s)')
+    # parser.add_argument('--dev_dataset', default='sts', const='sts',
+    #                 nargs='?', choices=['sts'],
+    #                 help='Name of dev dataset (default: %(default)s)')
     parser.add_argument('--seed', type=int, default=100,
                         help='Seet to use')
     parser.add_argument('--num_epochs', type=int, default=5,
@@ -1289,15 +1326,15 @@ if __name__ == "__main__":
 
     # GPU device number as in "cuda:0". Defaul is 0.
     parser.add_argument("-cuda", "--cuda_number", type=str, default='0')
-    parser.add_argument('--eval_every', type=int, default=100)
+    # parser.add_argument('--eval_every', type=int, default=100)
 
     parser.add_argument('--no-cuda', action='store_true', default=False,
                         help='disables CUDA training')
-    parser.add_argument('--fp16', action='store_true', default=False,
-                        help='enables fp16 training')
+    # parser.add_argument('--fp16', action='store_true', default=False,
+    #                     help='enables fp16 training')
 
-    parser.add_argument('--use_lr', dest='use_lr', action='store_true',
-                        help="Change the learning rate")
+    # parser.add_argument('--use_lr', dest='use_lr', action='store_true',
+    #                     help="Change the learning rate")
 
     parser.add_argument('--save_model', dest='save_model', action='store_true',
                         help="Save the model weights.")
@@ -1313,10 +1350,10 @@ if __name__ == "__main__":
     parser.add_argument('--load_checkpoint', dest='load_checkpoint', action='store_true',
                         help="Load a model, optimizer and scheduler to continue training.")
 
-    parser.add_argument('--use_old_opt', dest='use_old_opt', action='store_true',
-                        help="test: use old or new opt.")
-    parser.add_argument('--test_evalchange', dest='test_evalchange', action='store_true',
-                        help="test: use old or new opt.")
+    # parser.add_argument('--use_old_opt', dest='use_old_opt', action='store_true',
+    #                     help="test: use old or new opt.")
+    # parser.add_argument('--test_evalchange', dest='test_evalchange', action='store_true',
+    #                     help="test: use old or new opt.")
     parser.add_argument('--pad_pack', dest='pad_pack', action='store_true',
                         help="test: use old or new opt.")
     args, unparsed = parser.parse_known_args()
