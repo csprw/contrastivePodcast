@@ -323,14 +323,15 @@ if __name__ == "__main__":
 
 
     for idx in process_idxs:
-        # if idx > 2: 
+        # if idx > 2000: 
         #     print("[del] break for now")
         #     break
-    #     elif idx < 40086:
-    #         last_output_folder = outer_folders[idx+1]
-    #         continue
+        # elif idx < 40086:
+        #     last_output_folder = outer_folders[idx+1]
+        #     continue
         outer_folder = outer_folders[idx]
         filename = os.path.split(e_filenames[idx])[-1].split('.')[0]
+
         if outer_folder != last_output_folder:
 
             save_path_train = os.path.join(conf.dataset_processed_path, "train", last_output_folder.replace(os.sep, '_') + '_embeds.h5')
@@ -345,7 +346,8 @@ if __name__ == "__main__":
                         train_filenames, 
                         train_in_train_set, 
                         train_all_sentences, 
-                        train_all_full_embeddings)
+                        train_all_full_embeddings,
+                        train_segment_tsps)
             if len(val_filenames) > 0:
                 save_all(save_path_val, 
                         val_all_mean_embeddings, 
@@ -361,7 +363,8 @@ if __name__ == "__main__":
                         test_filenames, 
                         test_in_train_set, 
                         test_all_sentences, 
-                        test_all_full_embeddings)
+                        test_all_full_embeddings,
+                        test_segment_tsps)
 
             last_output_folder = outer_folder
             train_all_sentences = []
@@ -369,16 +372,19 @@ if __name__ == "__main__":
             train_all_mean_embeddings = []
             train_filenames = []
             train_in_train_set = []
+            train_segment_tsps = []
             val_all_sentences = []
             val_all_full_embeddings = []
             val_all_mean_embeddings = []
             val_filenames = []
             val_in_train_set = []
+            val_segment_tsps = []
             test_all_sentences = []
             test_all_full_embeddings = []
             test_all_mean_embeddings = []
             test_filenames = []
             test_in_train_set = []
+            test_segment_tsps = []
 
         if idx % 10 == 0:
             print("\t processing {}/{}".format(idx, len(outer_folders)))
@@ -405,7 +411,7 @@ if __name__ == "__main__":
             train_in_train_set.extend([train_split[filename]] * len(sentences))
             
             # add timestamps
-            val_segment_tsps.extend(segment_ts)
+            train_segment_tsps.extend(segment_ts)
             
         elif train_split[filename] == 'val':
             val_all_sentences.extend(sentences)
