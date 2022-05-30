@@ -256,10 +256,8 @@ if __name__ == "__main__":
     test = tmp.drop(train.index)
     subset["set"] = np.where(subset["show_filename_prefix"].isin(train_shownames), "train", "val")
 
-    print(subset.head(5))
 
     dataframe =  metadata_testset.append(subset)
-    print(dataframe.head(5))
 
     #  Determine the test set
     dataframe.set.isna().sum() 
@@ -324,113 +322,113 @@ if __name__ == "__main__":
     test_segment_tsps = []
 
 
-for idx in process_idxs:
-    # if idx > 2: 
-    #     print("[del] break for now")
-    #     break
-#     elif idx < 40086:
-#         last_output_folder = outer_folders[idx+1]
-#         continue
-    outer_folder = outer_folders[idx]
-    filename = os.path.split(e_filenames[idx])[-1].split('.')[0]
-    if outer_folder != last_output_folder:
+    for idx in process_idxs:
+        # if idx > 2: 
+        #     print("[del] break for now")
+        #     break
+    #     elif idx < 40086:
+    #         last_output_folder = outer_folders[idx+1]
+    #         continue
+        outer_folder = outer_folders[idx]
+        filename = os.path.split(e_filenames[idx])[-1].split('.')[0]
+        if outer_folder != last_output_folder:
 
-        save_path_train = os.path.join(conf.dataset_processed_path, "train", last_output_folder.replace(os.sep, '_') + '_embeds.h5')
-        save_path_val = os.path.join(conf.dataset_processed_path, "val", last_output_folder.replace(os.sep, '_') + '_embeds.h5')
-        save_path_test = os.path.join(conf.dataset_processed_path, "test", last_output_folder.replace(os.sep, '_') + '_embeds.h5')
-        print("saving {}/{}".format(idx, len(outer_folders)))
+            save_path_train = os.path.join(conf.dataset_processed_path, "train", last_output_folder.replace(os.sep, '_') + '_embeds.h5')
+            save_path_val = os.path.join(conf.dataset_processed_path, "val", last_output_folder.replace(os.sep, '_') + '_embeds.h5')
+            save_path_test = os.path.join(conf.dataset_processed_path, "test", last_output_folder.replace(os.sep, '_') + '_embeds.h5')
+            print("saving {}/{}".format(idx, len(outer_folders)))
 
-        # save_all(save_path, all_mean_embeddings, filenames, in_train_set, all_sentences, all_full_embeddings)
-        if len(train_filenames) > 0:
-            save_all(save_path_train, 
-                    train_all_mean_embeddings, 
-                    train_filenames, 
-                    train_in_train_set, 
-                    train_all_sentences, 
-                    train_all_full_embeddings)
-        if len(val_filenames) > 0:
-            save_all(save_path_val, 
-                    val_all_mean_embeddings, 
-                    val_filenames, 
-                    val_in_train_set, 
-                    val_all_sentences, 
-                    val_all_full_embeddings,
-                    val_segment_tsps)
+            # save_all(save_path, all_mean_embeddings, filenames, in_train_set, all_sentences, all_full_embeddings)
+            if len(train_filenames) > 0:
+                save_all(save_path_train, 
+                        train_all_mean_embeddings, 
+                        train_filenames, 
+                        train_in_train_set, 
+                        train_all_sentences, 
+                        train_all_full_embeddings)
+            if len(val_filenames) > 0:
+                save_all(save_path_val, 
+                        val_all_mean_embeddings, 
+                        val_filenames, 
+                        val_in_train_set, 
+                        val_all_sentences, 
+                        val_all_full_embeddings,
+                        val_segment_tsps)
 
-        if len(test_filenames) > 0:
-            save_all(save_path_test, 
-                    test_all_mean_embeddings, 
-                    test_filenames, 
-                    test_in_train_set, 
-                    test_all_sentences, 
-                    test_all_full_embeddings)
+            if len(test_filenames) > 0:
+                save_all(save_path_test, 
+                        test_all_mean_embeddings, 
+                        test_filenames, 
+                        test_in_train_set, 
+                        test_all_sentences, 
+                        test_all_full_embeddings)
 
-        last_output_folder = outer_folder
-        train_all_sentences = []
-        train_all_full_embeddings = []
-        train_all_mean_embeddings = []
-        train_filenames = []
-        train_in_train_set = []
-        val_all_sentences = []
-        val_all_full_embeddings = []
-        val_all_mean_embeddings = []
-        val_filenames = []
-        val_in_train_set = []
-        test_all_sentences = []
-        test_all_full_embeddings = []
-        test_all_mean_embeddings = []
-        test_filenames = []
-        test_in_train_set = []
+            last_output_folder = outer_folder
+            train_all_sentences = []
+            train_all_full_embeddings = []
+            train_all_mean_embeddings = []
+            train_filenames = []
+            train_in_train_set = []
+            val_all_sentences = []
+            val_all_full_embeddings = []
+            val_all_mean_embeddings = []
+            val_filenames = []
+            val_in_train_set = []
+            test_all_sentences = []
+            test_all_full_embeddings = []
+            test_all_mean_embeddings = []
+            test_filenames = []
+            test_in_train_set = []
 
-    if idx % 10 == 0:
-        print("\t processing {}/{}".format(idx, len(outer_folders)))
+        if idx % 10 == 0:
+            print("\t processing {}/{}".format(idx, len(outer_folders)))
 
-    
-    # Load yamnet embeddings and scores
-    embed_path = os.path.join(conf.yamnet_embed_dir, outer_folder, e_filenames[idx])
-    yamnet_embedding = pd.read_hdf(embed_path)
-
-    # Load the transcript
-    transcript_path = os.path.join(transcripts_dir, outer_folder, t_filenames[idx])
-    transcript_json = load_transcript(transcript_path)
-    
-    # Extract all sentences and corresponding words
-    sentences, timestamps, segment_ts, mean_embeddings, full_embeddings = extract_transcript(transcript_json, yamnet_embedding)
-
-    if train_split[filename] == 'train':
-        train_all_sentences.extend(sentences)
-        train_all_mean_embeddings.extend(mean_embeddings)
-        train_all_full_embeddings.extend(full_embeddings)
         
-        # Check if it belongs to train or test split
-        train_filenames.extend([filename] * len(sentences))
-        train_in_train_set.extend([train_split[filename]] * len(sentences))
-        
-        # add timestamps
-        val_segment_tsps.extend(segment_ts)
-        
-    elif train_split[filename] == 'val':
-        val_all_sentences.extend(sentences)
-        val_all_mean_embeddings.extend(mean_embeddings)
-        val_all_full_embeddings.extend(full_embeddings)
+        # Load yamnet embeddings and scores
+        embed_path = os.path.join(conf.yamnet_embed_dir, outer_folder, e_filenames[idx])
+        yamnet_embedding = pd.read_hdf(embed_path)
 
-        # Check if it belongs to train or test split
-        val_filenames.extend([filename] * len(sentences))
-        val_in_train_set.extend([train_split[filename]] * len(sentences))
+        # Load the transcript
+        transcript_path = os.path.join(transcripts_dir, outer_folder, t_filenames[idx])
+        transcript_json = load_transcript(transcript_path)
         
-        # add timestamps
-        val_segment_tsps.extend(segment_ts)
+        # Extract all sentences and corresponding words
+        sentences, timestamps, segment_ts, mean_embeddings, full_embeddings = extract_transcript(transcript_json, yamnet_embedding)
 
-    elif train_split[filename] == 'test':
-        test_all_sentences.extend(sentences)
-        test_all_mean_embeddings.extend(mean_embeddings)
-        test_all_full_embeddings.extend(full_embeddings)
+        if train_split[filename] == 'train':
+            train_all_sentences.extend(sentences)
+            train_all_mean_embeddings.extend(mean_embeddings)
+            train_all_full_embeddings.extend(full_embeddings)
+            
+            # Check if it belongs to train or test split
+            train_filenames.extend([filename] * len(sentences))
+            train_in_train_set.extend([train_split[filename]] * len(sentences))
+            
+            # add timestamps
+            val_segment_tsps.extend(segment_ts)
+            
+        elif train_split[filename] == 'val':
+            val_all_sentences.extend(sentences)
+            val_all_mean_embeddings.extend(mean_embeddings)
+            val_all_full_embeddings.extend(full_embeddings)
 
-        # Check if it belongs to train or test split
-        test_filenames.extend([filename] * len(sentences))
-        test_in_train_set.extend([train_split[filename]] * len(sentences))
-        
-        test_segment_tsps.extend(segment_ts)
+            # Check if it belongs to train or test split
+            val_filenames.extend([filename] * len(sentences))
+            val_in_train_set.extend([train_split[filename]] * len(sentences))
+            
+            # add timestamps
+            val_segment_tsps.extend(segment_ts)
+
+        elif train_split[filename] == 'test':
+            test_all_sentences.extend(sentences)
+            test_all_mean_embeddings.extend(mean_embeddings)
+            test_all_full_embeddings.extend(full_embeddings)
+
+            # Check if it belongs to train or test split
+            test_filenames.extend([filename] * len(sentences))
+            test_in_train_set.extend([train_split[filename]] * len(sentences))
+            
+            test_segment_tsps.extend(segment_ts)
 
     save_path_train = os.path.join(conf.dataset_processed_path, "train", last_output_folder.replace(os.sep, '_') + '_embeds.h5')
     save_path_val = os.path.join(conf.dataset_processed_path, "val", last_output_folder.replace(os.sep, '_') + '_embeds.h5')
