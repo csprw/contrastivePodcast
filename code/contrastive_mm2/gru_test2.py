@@ -493,6 +493,7 @@ class SequentialAudioModel(nn.Module):
         self.pad_pack = CFG.pad_pack
         self.use_softmax = True
         # TODO: print("[TODO] pad_pack is set to false")
+        # To CG
 
     def forward(self, audio_seq):
         features, length = audio_seq
