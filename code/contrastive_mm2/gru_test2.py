@@ -4,6 +4,7 @@ Author: Casper Wortmann
 Usage: python main.py
 """
 import logging
+import sys
 from argparse import ArgumentParser
 import time
 from time import time
@@ -103,17 +104,17 @@ class MMloader(object):
         sample data (scraped)
         SP dataset (future)
     """
-    def __init__(self, args, CFG, kwargs={}):
+    def __init__(self, CFG, kwargs={}):
 
-        train_dataset_name = args.train_dataset
-        # dev_dataset_name = args.dev_dataset
-        test_dataset_name = args.test_dataset
+        train_dataset_name = CFG.train_dataset
+        val_dataset_name = CFG.val_dataset
+        test_dataset_name = CFG.test_dataset
 
-        batch_size = args.batch_size
+        batch_size = CFG.batch_size
         self.batch_size = batch_size
         self.device = CFG.device
 
-        if args.audio_proj_head in ['gru', 'rnn']:
+        if CFG.audio_proj_head in ['gru', 'rnn']:
             self.load_full = True
         else:
             self.load_full = False
@@ -121,15 +122,12 @@ class MMloader(object):
         print("[MMloader] train dataset ", train_dataset_name)
 
         # Get the datasets
-        if train_dataset_name == "wiki":
-            train_dataset = self.get_wiki_dataset()
-            self.train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, drop_last=True, **kwargs)
-        elif train_dataset_name == "sp_sample":
+        if train_dataset_name == "sp_sample":
             train_dataset = self.get_sp_dataset(directory=conf.sp_sample_path, traintest="train", load_full=self.load_full, device=self.device)
             self.train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=False, drop_last=True, **kwargs)  ### TODO: SHUFFLE=TRUE [DEL]
         elif train_dataset_name == "sp":
             train_dataset = self.get_sp_dataset(directory=conf.sp_path,  traintest="train", load_full=self.load_full, device=self.device)
-            self.train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=False, drop_last=True, **kwargs)
+            self.train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, drop_last=True, **kwargs)
         else:
             raise Exception('Unknown dataset')
         
@@ -137,15 +135,23 @@ class MMloader(object):
         self.train_loader.collate_fn = self.train_dataset.collate_fn
         print("[MMloader] train dataset loaded, length: ", len(self.train_dataset))
 
-        if test_dataset_name == "sts":
-            sts_dataset = self.get_sts_dataset()
-            test_samples = sts_dataset.test_samples
-        elif test_dataset_name == "sp_sample":
+        if val_dataset_name == "sp_sample":
+            val_dataset = self.get_sp_dataset(directory=conf.sp_sample_path,  traintest="val", load_full=self.load_full, device=self.device)
+            self.val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, drop_last=True, **kwargs) 
+        elif val_dataset_name == "sp":
+            val_dataset = self.get_sp_dataset(directory=conf.sp_path,  traintest="val",  load_full=self.load_full, device=self.device)
+            self.val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=True, drop_last=True, **kwargs)
+        else:
+            raise Exception('Unknown dataset')
+        self.val_dataset = val_dataset
+        self.val_loader.collate_fn = self.val_dataset.collate_fn
+
+        if test_dataset_name == "sp_sample":
             test_dataset = self.get_sp_dataset(directory=conf.sp_sample_path,  traintest="test", load_full=self.load_full, device=self.device)
             self.test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, drop_last=True, **kwargs) 
         elif test_dataset_name == "sp":
             test_dataset = self.get_sp_dataset(directory=conf.sp_path,  traintest="test",  load_full=self.load_full, device=self.device)
-            self.test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, drop_last=True, **kwargs)
+            self.test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True, drop_last=True, **kwargs)
         else:
             raise Exception('Unknown dataset')
         self.test_dataset = test_dataset
@@ -187,6 +193,12 @@ class spDatasetNoMemory(datautil.Dataset):
                 print("[spdataset] loaded {}/{}".format(h5idx, len(h5py_files)))
         self.idx2file = idx2file
 
+
+        if traintest == 'test':
+            self.return_targets = True
+        else: 
+            self.return_targets = False
+
         if self.load_full:
             self.collate_fn = self.full_batching_collate
         else:
@@ -198,7 +210,27 @@ class spDatasetNoMemory(datautil.Dataset):
 
     def __getitem__(self, index):
         """ Return one item from the df """
-        if self.load_full:
+
+        if self.return_targets:
+            h5py_idx, sent_idx = self.idx2file[index]
+            h5py_file = self.h5py_idx2file[h5py_idx]
+            f = h5py.File(h5py_file, 'r')
+
+            # print("[del] Return targets")
+            sent = f['sentences'][sent_idx]
+            full_embeds = torch.Tensor(np.array(f[str(sent_idx)]))
+
+            # print("1: ", str(f['filenames'][sent_idx]))
+            # print("2: ", (f['segment_ts'][sent_idx]))
+            # target = f['filenames'][sent_idx].decode("utf-8") + '_' + str(f['segment_ts'][sent_idx])
+            target = f['seg_ts'][sent_idx].decode("utf-8") 
+
+            # print("Target: ", target)
+
+            sample = (sent, full_embeds, target)
+
+
+        elif self.load_full:
             h5py_idx, sent_idx = self.idx2file[index]
             h5py_file = self.h5py_idx2file[h5py_idx]
 
@@ -232,6 +264,7 @@ class spDatasetNoMemory(datautil.Dataset):
         text_embeds = []
         audio_embeds = []
         lengths  = []
+        
         for example in batch:
             text_embeds.append(example[0])
             audio_embeds.append(example[1])
@@ -239,12 +272,21 @@ class spDatasetNoMemory(datautil.Dataset):
         
         # Pad the audio embeddings
         padded_audio_embeds = pad_sequence(audio_embeds, batch_first=True).to(self.device)
+        
         # Tokenize text
         text_embeds = self.tokenizer(
             text_embeds, padding=True, truncation=True, max_length=self.text_max_length, return_tensors='pt'
         ).to(self.device)
 
-        return text_embeds, padded_audio_embeds.float(), lengths
+        if self.return_targets:
+            # print("[del] RETURN TARGS")
+            targs = []
+            for example in batch:
+                targs.append(example[2])
+            return text_embeds, padded_audio_embeds, lengths, targs
+        else:
+            # print("[del] not return targs")
+            return text_embeds, padded_audio_embeds.float(), lengths
 
     def mean_batching_collate(self, batch):
         """ Return a batch """
@@ -265,6 +307,8 @@ class spDatasetNoMemory(datautil.Dataset):
         ).to(self.device)
         
         return text_embeds, audio_embeds, lengths
+
+    
 
 ################################################################################
 # Textmodules
@@ -666,7 +710,7 @@ class mmModule(nn.Module):
     def fit(self,
         CFG,
         train_loader,
-        test_loader,
+        val_loader,
         loss_model,
         start_epoch=1,
         optimizer_class: Type[Optimizer] = AdamW,
@@ -674,14 +718,11 @@ class mmModule(nn.Module):
         loaded_optimizer_state = None,
         loaded_sched_state = None,
         ):
-
-        # print("[del]: ", self.device, CFG.device, start_epoch, fstep)
-
         self.text_model.to(self.device)
         self.audio_model.to(self.device)
         loss_model.to(self.device)
 
-        self.test_loader = test_loader
+        self.val_loader = val_loader
 
         steps_per_epoch = len(train_loader)
         num_train_steps = int(steps_per_epoch * CFG.num_epochs)
@@ -692,7 +733,8 @@ class mmModule(nn.Module):
         scheduler_method='WarmupLinear' 
 
         # print("[del] ", steps_per_epoch, num_train_steps, warmup_steps)
-        total_steps = (start_epoch + 1) * fstep
+        steps_so_far = (start_epoch + 1) * fstep
+        steps_per_epoch = len(train_loader)
         self.num_train_steps = num_train_steps
 
         # Initiate or load an optimizer
@@ -727,13 +769,20 @@ class mmModule(nn.Module):
             #     batch = next(iterator)
 
             # Full training
-            for step, batch in enumerate(iter(train_loader), start=fstep):
-                # print("[del] trainstep: ", total_steps, step)
-                if  step % self.eval_every == 0: 
+            # TODO: if training from checkpoint, stop in time
+            for step, batch in enumerate(iter(train_loader)):
+                # print("[del] trainstep: ", steps_so_far, step)
+                if step < fstep:
+                    print("[debug] loading checkpoint, continue")
+                    continue
+                if steps_per_epoch == step:
+                    print("[DEBUG] : remove -1 in line below!")
+
+                if  step % self.eval_every == 0 or step == steps_per_epoch - 1: 
                     print("[eval] start evaluation")
                     mean_loss, metrics = self.evaluate(loss_model)
                     # mean_loss = 0 # TODO: check of mean loss terug kan komen uit eval
-                    self.add_logging(epoch, total_steps, mean_loss, metrics, train=False)
+                    self.add_logging(epoch, steps_so_far, mean_loss, metrics, train=False)
                     
                     print("[eval] Epoch {} Step {}/{} \t loss {} \t acc {}".format(epoch, step, len(train_loader), mean_loss, metrics['mean_acc']))
                     if mean_loss < self.best_loss:
@@ -743,7 +792,7 @@ class mmModule(nn.Module):
                             self.save_model()
                         if args.save_checkpoint:
                             self.save_checkpoint(epoch, step, optimizer, scheduler)
-                            
+
                     # If csv files are properly set up, save plots.
                     if os.path.isfile(self.train_csv_filename):
                         self.output_all_plots()
@@ -757,11 +806,11 @@ class mmModule(nn.Module):
                 optimizer.zero_grad()
 
                 scheduler.step()
-                total_steps += 1
+                steps_so_far += 1
 
                 if step % self.print_every == 0:
                     print("[train] Epoch {} Step {}/{} \t loss {} \t acc {}".format(epoch, step, len(train_loader), loss_value.item(), metrics['mean_acc']))
-                    self.add_logging(epoch, total_steps, loss_value.item(), metrics, train=True)
+                    self.add_logging(epoch, steps_so_far, loss_value.item(), metrics, train=True)
                 
                 # # [del] check on one batch
                 # print("[del] [metrics] ", loss_value.item(), metrics['mean_acc'])
@@ -798,9 +847,9 @@ class mmModule(nn.Module):
 
             # fixed number of steps
             if not full_validation:
-                iterator = iter(self.test_loader)
+                iterator = iter(self.val_loader)
 
-                total_len = 1000     # 1000
+                total_len = 1     # 1000 bij test
 
                 for step in range(total_len):
                     # print("[del] step: ", step)
@@ -832,28 +881,32 @@ class mmModule(nn.Module):
         to_plot(self.train_csv_filename, column='audio_acc', title="Train accuracy (audio)")
         to_plot(self.train_csv_filename, column='text_acc', title="Train accuracy (text)")
         to_plot(self.train_csv_filename, column='loss', title="Train loss")
-        to_plot(self.eval_csv_filename, column='mean_acc', title="Test accuracy (mean)")
+        to_plot(self.eval_csv_filename, column='mean_acc', title="val accuracy (mean)")
   
     def init_logging(self):
         self.model_save_path = '{}/output'.format(self.log_name)
         os.makedirs(self.model_save_path, exist_ok=True)
         self.train_csv_filename = os.path.join(self.model_save_path, "train.csv")
-        self.eval_csv_filename = os.path.join(self.model_save_path, "test.csv")
+        self.eval_csv_filename = os.path.join(self.model_save_path, "val.csv")
+
+    def init_csv(self, metrics):
+        for filename in [self.train_csv_filename, self.eval_csv_filename]:
+            self.metric_headers = [metric for metric in metrics.keys()]
+            self.train_csv_headers = ["epoch", "steps", "loss"] + self.metric_headers
+            with open(filename, newline='', mode='w', encoding="utf-8") as f:
+                writer = csv.writer(f)
+                writer.writerow(self.train_csv_headers)
 
     def add_logging(self, epoch, steps, loss, metrics, train=True):
         if train:
             filename = self.train_csv_filename
         else:
             filename = self.eval_csv_filename
-        total_step = (self.num_train_steps * epoch) + steps
-        output_file_exists = os.path.isfile(filename)
 
+        output_file_exists = os.path.isfile(filename)
         if not output_file_exists:
-            self.metric_headers = [metric for metric in metrics.keys()]
-            self.train_csv_headers = ["epoch", "steps", "loss"] + self.metric_headers
-            with open(filename, newline='', mode="a" if output_file_exists else 'w', encoding="utf-8") as f:
-                writer = csv.writer(f)
-                writer.writerow(self.train_csv_headers)
+            self.init_csv(metrics)
+        total_step = (self.num_train_steps * epoch) + steps
 
         # Add metrics to CSV
         metric_vals = [metrics[header] for header in self.metric_headers]
@@ -964,6 +1017,8 @@ class multimodal_loss(nn.Module):
             text_logits = audio_logits.t()
 
             if self.normalize:
+                #print("TODO: versie waarin normalise naar boven zit!!!")
+
                 audio_logits = audio_logits / audio_logits.norm(dim=1, keepdim=True)
                 text_logits = text_logits / text_logits.norm(dim=1, keepdim=True)
 
@@ -1068,7 +1123,7 @@ def cross_entropy(preds, targets, reduction='none'):
     elif reduction == "mean":
         return loss.mean()
 
-def to_plot(filename, column='accuracy2', title="Test accuracy"):
+def to_plot(filename, column='accuracy', title="Val accuracy"):
     csv_file = pd.read_csv(filename)
 
     ax = sns.lineplot(x=csv_file.steps, y=csv_file[column])
@@ -1114,9 +1169,9 @@ class Cfg:
     text_dropout: float = 0.1
     weight_decay: float = 0.01
 
-    text_activation: str = 'Test'
-    audio_activation: str = 'Test'
-    scale_type: str = 'Test'
+    text_activation: str = ''
+    audio_activation: str = ''
+    scale_type: str = ''
     scale: int = 20
     pad_pack: bool = False
     normalize: bool = False
@@ -1124,8 +1179,9 @@ class Cfg:
     print_every: int = 1
     log_name: str = 'logname'
 
-    train_dataset: str = 'Test'
-    test_dataset: str = 'test'
+    train_dataset: str = ''
+    val_dataset: str = ''
+    test_dataset: str = ''
     seed: int = 100
 
     save_model: bool = False
@@ -1160,17 +1216,20 @@ def main(args):
     FullCfg, log_name = setup_config(args, Cfg, device)
 
     # Setup dataloaders.
-    data_loader = MMloader(args, FullCfg)
+    data_loader = MMloader(FullCfg)
     train_loader = data_loader.train_loader
-    test_loader = data_loader.test_loader
+    val_loader = data_loader.val_loader
+    test_loader = data_loader.test_loader # Not used!
 
     # tokenizer = AutoTokenizer.from_pretrained(FullCfg.text_model_name, cache_dir=None)
     tokenizer = AutoTokenizer.from_pretrained(FullCfg.text_model_name)
 
     # TODO: move this into __init__ of dataloader
     data_loader.train_dataset.tokenizer = tokenizer
+    data_loader.val_dataset.tokenizer = tokenizer
     data_loader.test_dataset.tokenizer = tokenizer
     data_loader.train_dataset.text_max_length = FullCfg.text_max_length
+    data_loader.val_dataset.text_max_length = FullCfg.text_max_length
     data_loader.test_dataset.text_max_length = FullCfg.text_max_length
 
     # Evaluate every 10% of the data, print result every 2%.
@@ -1194,10 +1253,11 @@ def main(args):
         )
         ####
         # TODO: fix this! to read file if trained on windows
-        # import pathlib
-        # # plt = platform.system()
-        # # if plt != 'Windows': 
-        # pathlib.WindowsPath = pathlib.PosixPath
+        import pathlib
+        print(sys.platform)
+        plt = sys.platform
+        if plt != 'win32': 
+            pathlib.WindowsPath = pathlib.PosixPath
         #####
 
         checkpoint = torch.load(args.load_checkpoint_path, map_location=torch.device(device))
@@ -1223,13 +1283,13 @@ def main(args):
             full_model.load_state_dict(torch.load(args.load_model_path))
         epoch = 0
         fstep = 0
-        loaded_optimizer = None
-        loaded_sched_dict = None
+        loaded_optimizer_state = None
+        loaded_sched_state = None
         
     full_model.fit(
         CFG = FullCfg,
         train_loader=train_loader,
-        test_loader = test_loader,
+        val_loader = val_loader,
         loss_model=loss_func,
         start_epoch=epoch,
         optimizer_class=AdamW,
@@ -1274,15 +1334,16 @@ if __name__ == "__main__":
     # Parse flags in command line arguments
     parser = ArgumentParser()
 
-    parser.add_argument('--train_dataset', default='sp_sample', const='wiki',
-                    nargs='?', choices=['wiki', 'sp_sample', 'sp'],
+    parser.add_argument('--train_dataset', default='sp_sample', const='sp_sample',
+                    nargs='?', choices=['sp_sample', 'sp'],
                     help='Name of training dataset (default: %(default)s)')
-    parser.add_argument('--test_dataset', default='sp_sample', const='sts',
-                    nargs='?', choices=['sts', 'sp_sample',  'sp'],
+    parser.add_argument('--val_dataset', default='sp_sample', const='sp_sample',
+                    nargs='?', choices=['sp_sample',  'sp'],
+                    help='Name of validation dataset (default: %(default)s)')
+    parser.add_argument('--test_dataset', default='sp_sample', const='sp_sample',
+                    nargs='?', choices=['sp_sample',  'sp'],
                     help='Name of test dataset (default: %(default)s)')
-    # parser.add_argument('--dev_dataset', default='sts', const='sts',
-    #                 nargs='?', choices=['sts'],
-    #                 help='Name of dev dataset (default: %(default)s)')
+
     parser.add_argument('--seed', type=int, default=100,
                         help='Seet to use')
     parser.add_argument('--num_epochs', type=int, default=5,
