@@ -204,11 +204,9 @@ def save_all(save_path, all_mean_embeddings, filenames, in_train_set, all_senten
     dset2 = f.create_dataset("sentences", data=np.array(all_sentences, dtype=h5py.special_dtype(vlen=str)))
     #dset3 = f.create_dataset("train_split", data=np.array(in_train_set, dtype='S'))
     #dset3 = f.create_dataset("segment_ts", data=np.array(segment_tsps), compression="gzip", compression_opts=comp_lvl)
-    
-    seg_ts = filenames + '_' + str(segment_tsps)
-    print("del: is this correct? ", seg_ts)
-    raise
-    dset0 = f.create_dataset("seg_ts", data=np.array(filenames, dtype='S'))
+
+    seg_ts = [filenames[i] + '_' + str(segment_tsps[i]) for i in range(len(filenames))]
+    dset0 = f.create_dataset("seg_ts", data=np.array(seg_ts, dtype='S'))
 
     max_embed_dim = 0
     for embed_idx, full_embeds in enumerate(all_full_embeddings):
