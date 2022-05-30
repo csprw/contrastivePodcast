@@ -86,6 +86,28 @@ config_path = "./config.yaml"
 conf = OmegaConf.load(config_path)
 print("[cudacheck] Is cuda available? ", torch.cuda.is_available())
 
+from torch import topk
+from sklearn.metrics import ndcg_score
+
+def precision_at_k(predicted, k):
+    if k == 0:
+        print("precision from k ===0?")
+        raise
+    pred = (predicted[:k])
+    relevant = np.sum(pred)
+    num_recommended = float(k)
+    p_at_k = relevant / num_recommended
+    return p_at_k
+
+# Recall@k = (# of recommended items @k that are relevant) / (total # of relevant items)
+def recall_at_k(predicted, num_relevant, k):
+    if num_relevant == 0:
+        return None
+    pred = (predicted[:k])
+    relevant = np.sum(pred)
+    r_at_k = relevant / num_relevant
+
+    return r_at_k
 
 ########################### DELETE 
 
@@ -1085,7 +1107,8 @@ if __name__ == "__main__":
 
 
 
-    do_vali = True
+    do_vali = False
+    create_embedding = True
 
     if do_vali:
         vali_accs = []
@@ -1123,6 +1146,196 @@ if __name__ == "__main__":
             if step > 3:
                 break
         print("TEST acc:{} ".format(np.mean(vali_accs)))
+
+
+    if create_embedding:
+        print("[Create embeds] start for TEST")
+        iterator = iter(test_loader)
+        processed_text = []
+        processed_audio = []
+
+        topic_norm_reps_text = []
+        topic_norm_reps_audio = []
+        matrix_targets = []
+
+
+        for step in range(max_steps):
+            print("{}/{}".format(step, max_steps))
+            if step > 50:
+                print('break for now')
+                break
+            batch = next(iterator)
+            
+            (tok_sentences, audio_features, seq_len, targets) = batch
+
+            with torch.no_grad():
+                reps_sentences = full_model.text_model(tok_sentences)['sentence_embedding']
+                reps_audio = full_model.audio_model((audio_features, seq_len))
+                
+                # Normalized representations
+                topic_norm_reps_text.append(reps_sentences / reps_sentences.norm(dim=1, keepdim=True))
+                topic_norm_reps_audio.append(reps_audio / reps_audio.norm(dim=1, keepdim=True))
+                
+                #print(reps_audio.shape)
+                audio_logits =  (reps_audio @ reps_sentences.t()) * CFG.scale
+                text_logits = audio_logits.t()
+                
+                matrix_targets.extend(targets)
+
+            topic_norm_reps_audio = torch.cat(topic_norm_reps_audio, dim=0)
+            topic_norm_reps_text = torch.cat(topic_norm_reps_text, dim=0)
+            print(topic_norm_reps_audio.shape, topic_norm_reps_text.shape)
+
+        print("[Create embeds] Done")
+
+        ### Other func
+        ### Validation DF
+        ids_we_can_use = [m.split('_')[0] for m in matrix_targets]
+        print("WE CAN USE {} ids".format(len(set(ids_we_can_use))))
+        val_df = topics_df_targets[topics_df_targets['episode_uri'].isin(ids_we_can_use)]
+
+        ### TODO: dit naar boven
+        positive_episodes = val_df.loc[val_df['bin_score'] == 1].copy()
+        positive_eplist = positive_episodes['episode_uri'].tolist()
+
+        for i, row in val_df.iterrows():
+            ifor_val = 0
+            if row['episode_uri'] in positive_eplist:
+                #print("IN TESTLIST")
+                ifor_val = 1
+            val_df.loc[i,'ep_score'] = ifor_val
+            
+        val_df.ep_score = val_df.ep_score.astype(int)
+        print(len(val_df))
+
+
+        ## Create embeds for queries
+        # Create text embeddings of queries
+        # query_field = 'query'
+        # query_nr = 0
+        # query = topics_df[query_field].iloc[query_nr]
+
+        # queries = topics_df[query_field].tolist()
+        # tokenized_queries = tokenizer(
+        #     queries, padding=True, truncation=True, max_length=32, return_tensors='pt', return_token_type_ids=True,
+        # )
+
+        # query_yamnets = []
+        # query_lengths = []
+        # for idx, row in topics_df.iterrows():
+        #     query_num = row.num
+
+        #     query_embed_path  = os.path.join(conf.yamnet_query_embed_path, str(query_num) + ".h5")
+        #     inbetween_yamnet_embeds = pd.read_hdf(query_embed_path)
+
+        #     query_lengths.append(len(inbetween_yamnet_embeds))
+        #     tmp = torch.Tensor(inbetween_yamnet_embeds.values)
+
+        #     query_yamnets.append(tmp)
+        #     #lengths.append(len(example[1]))
+
+        # padded_query_yamnets = pad_sequence(query_yamnets, batch_first=True)
+
+        print("Tokenizing queries")
+        query_field =  'query' # TODO: ook description?
+        queries = topics_df[query_field].tolist()
+        tokenized_queries = tokenizer(
+            queries, padding=True, truncation=True, max_length=32, return_tensors='pt', return_token_type_ids=True,
+        )
+
+        print("Creating padding of yamnets of queries")
+        query_yamnets = []
+        query_lengths = []
+        for idx, row in topics_df.iterrows():
+            query_num = row.num
+
+            query_embed_path  = os.path.join(conf.yamnet_query_embed_path, str(query_num) + ".h5")
+            inbetween_yamnet_embeds = pd.read_hdf(query_embed_path)
+
+            query_lengths.append(len(inbetween_yamnet_embeds))
+            tmp = torch.Tensor(inbetween_yamnet_embeds.values)
+
+            query_yamnets.append(tmp)
+            #lengths.append(len(example[1]))
+
+        padded_query_yamnets = pad_sequence(query_yamnets, batch_first=True)
+
+        print("Creating query embeddings now:")
+        query_text = []
+        query_audio = []
+        query_field = 'query'
+
+        with torch.no_grad():
+            # print("[del] get embeds: ")
+            reps_sentences = full_model.text_model(tokenized_queries)['sentence_embedding']
+            reps_audio = full_model.audio_model((padded_query_yamnets, query_lengths))
+
+            audio_logits =  (reps_audio @ reps_sentences.t()) * CFG.scale
+            text_logits = audio_logits.t()
+
+            audio_logits = audio_logits / audio_logits.norm(dim=1, keepdim=True)
+            text_logits = text_logits / text_logits.norm(dim=1, keepdim=True)
+
+            #probs = audio_logits.softmax(dim=-1).cpu().numpy()
+
+            query_text_logits = text_logits
+            query_audio_logits = audio_logits
+            
+            query_norm_reps_audio = reps_audio / reps_audio.norm(dim=1, keepdim=True)
+            query_norm_reps_text = reps_sentences / reps_sentences.norm(dim=1, keepdim=True)
+
+
+        print("----------")
+        print("TOPK")
+        k = 50
+        pred_episodes = {}
+
+        similarity = 100 * query_norm_reps_text @ topic_norm_reps_text.T
+        probs = similarity.softmax(dim=-1).cpu()
+
+        top_probs, top_labels = probs.topk(k, dim=-1)
+
+        for num in range(len(topics_df)):
+            query = topics_df[query_field][num]
+            pred_ind = top_labels[num].tolist()
+            
+            #pred_targs = matrix_targets[pred_ind]
+            pred_epis = [matrix_targets[val].split('_')[0] for val in pred_ind]
+            
+            tmp = val_df[(val_df.num == num) & (val_df.ep_score==1)]
+            tmp = tmp['episode_uri'].tolist()
+            num_episodes_relevant = len(set(tmp))
+            
+            ep_scores = []
+            for episode_uri in pred_epis:
+                ep_score_row = val_df.loc[val_df['episode_uri'] == episode_uri]
+                if len(ep_score_row) > 0 and ep_score_row.num.values[0] == num:
+                    ep_scores.append(1)
+                else:
+                    ep_scores.append(0)
+            
+            pred_episodes[query] = {}
+            pred_episodes[query]['episodes'] = [matrix_targets[val].split('_')[0] for val in pred_ind]
+            pred_episodes[query]['ep_score'] = ep_scores
+            
+            pred_episodes[query]['prec@3'] = precision_at_k(ep_scores, 3)
+            pred_episodes[query]['prec@10'] = precision_at_k(ep_scores, 10)
+            pred_episodes[query]['prec@30'] = precision_at_k(ep_scores, 30)
+            
+
+            targets = [[1] * num_episodes_relevant + [0] * (len(ep_scores) - num_episodes_relevant)]
+            ndcg_ep_score = ndcg_score(targets, [ep_scores], k=30)
+            pred_episodes[query]['ndc'] = ndcg_ep_score
+            print("done query {}, p@10 {}, ndcg: {}".format(num, pred_episodes[query]['prec@10'], ndcg_ep_score))
+
+
+
+
+
+
+
+
+
 
 
 
