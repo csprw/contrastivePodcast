@@ -124,7 +124,7 @@ if __name__ == "__main__":
             (tok_sentences, audio_features, seq_len, targets) = batch
 
             with torch.no_grad():
-                reps_sentences = full_model.text_model(tok_sentences)['sentence_embedding']
+                reps_sentences = full_model.text_model(tok_sentences)['sentence_embedding'].to(CFG.device)
                 reps_audio = full_model.audio_model((audio_features, seq_len))
                 
                 audio_logits =  (reps_audio @ reps_sentences.t()) * CFG.scale
