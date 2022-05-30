@@ -326,9 +326,9 @@ if __name__ == "__main__":
 
 
 for idx in process_idxs:
-    if idx > 2: 
-        print("[del] break for now")
-        break
+    # if idx > 2: 
+    #     print("[del] break for now")
+    #     break
 #     elif idx < 40086:
 #         last_output_folder = outer_folders[idx+1]
 #         continue
