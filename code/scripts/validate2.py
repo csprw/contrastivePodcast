@@ -220,10 +220,10 @@ class MMloader(object):
 
         if test_dataset_name == "sp_sample":
             test_dataset = self.get_sp_dataset(directory=conf.sp_sample_path,  traintest="test", load_full=self.load_full, device=self.device)
-            self.test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, drop_last=True, **kwargs) 
+            self.test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True, drop_last=True, **kwargs) 
         elif test_dataset_name == "sp":
             test_dataset = self.get_sp_dataset(directory=conf.sp_path,  traintest="test",  load_full=self.load_full, device=self.device)
-            self.test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, drop_last=True, **kwargs)
+            self.test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True, drop_last=True, **kwargs)
         else:
             raise Exception('Unknown dataset')
         self.test_dataset = test_dataset
@@ -1048,9 +1048,9 @@ if __name__ == "__main__":
     model_path = "E:\msc_thesis\code\contrastive_mm2\logs\lisa_v2-simcse_loss_rnn_relu_768_2e-05_2022-05-17_06-58-44"
     model_path = '/Users/casper/Documents/UvAmaster/b23456_thesis/msc_thesis/code/contrastive_mm2/logs/windows_gru2-clip_loss_gru_gelu_768_5e-05_2022-05-26_21-51-25'
     model_path = '/Users/casper/Documents/UvAmaster/b23456_thesis/msc_thesis/code/contrastive_mm2/logs/windows_gru2-clip_loss_followup'
-    model_path = "E:\msc_thesis\code\contrastive_mm2\logs\windows_gru2-clip_loss_followup"
+    # model_path = "E:\msc_thesis\code\contrastive_mm2\logs\windows_gru2-clip_loss_followup"
 
-    transcripts_path = '/Users/casper/Documents/UvAmaster/b23456_thesis/msc_thesis/code/data/sp/podcasts-no-audio-13GB/podcasts-transcripts'
+    # transcripts_path = '/Users/casper/Documents/UvAmaster/b23456_thesis/msc_thesis/code/data/sp/podcasts-no-audio-13GB/podcasts-transcripts'
     # transcripts_path = 'E:/msc_thesis/code/data/sp/podcasts-no-audio-13GB/podcasts-transcripts'
 
     # Whether we create for the train or the tes split. 
@@ -1179,9 +1179,9 @@ if __name__ == "__main__":
         # print("[del] this is keys: ", f.keys())
         for step in range(max_steps):
             print("{}/{}".format(step, max_steps))
-            # if step > 5:
-            #     print('break for now')
-            #     break
+            if step > 5:
+                print('break for now')
+                break
             batch = next(iterator)
             
             (tok_sentences, audio_features, seq_len, targets) = batch
@@ -1290,8 +1290,8 @@ if __name__ == "__main__":
         padded_query_yamnets = pad_sequence(query_yamnets, batch_first=True).to(CFG.device)
 
         print("Creating query embeddings now:")
-        query_text = []
-        query_audio = []
+        query_text_repr = []
+        query_audio_repr = []
         query_field = 'query'
 
         with torch.no_grad():
@@ -1311,15 +1311,24 @@ if __name__ == "__main__":
             query_norm_reps_audio = reps_audio / reps_audio.norm(dim=1, keepdim=True)
             query_norm_reps_text = reps_sentences / reps_sentences.norm(dim=1, keepdim=True)
 
+            query_text_repr.append(query_norm_reps_text)
+            query_audio_repr.append(query_norm_reps_audio)
+    
 
+        query_audio_repr = torch.cat(query_audio_repr, dim=0).cpu()
+        query_text_repr = torch.cat(query_text_repr, dim=0).cpu()
+
+
+        print("Shapes: ", query_audio_repr.shape, query_audio_repr.shape)
+        print(": ", topic_norm_reps_text.shape)
         print("----------")
         print("TOPK")
         k = 50
         pred_episodes = {}
-        query_norm_reps_audio = query_norm_reps_audio.cpu()
-        query_norm_reps_text = query_norm_reps_text.cpu()
+        # query_norm_reps_audio = query_norm_reps_audio.cpu()
+        # query_norm_reps_text = query_norm_reps_text.cpu()
 
-        similarity = 100 * query_norm_reps_text @ topic_norm_reps_text.T
+        similarity = 100 * query_audio_repr @ topic_norm_reps_text.T
         probs = similarity.softmax(dim=-1).cpu()
 
         top_probs, top_labels = probs.topk(k, dim=-1)
