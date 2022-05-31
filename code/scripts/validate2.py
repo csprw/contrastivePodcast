@@ -1338,7 +1338,7 @@ if __name__ == "__main__":
             pred_ind = top_labels[row_idx].tolist()
 
             pred_epis = [matrix_targets[val].split('_')[0] for val in pred_ind]
-            query_num = val_df['num'][row_idx]
+            query_num = topics_df['num'][row_idx]
             print("checking for {} and num {} ".format(row_idx, query_num))
             
             tmp = val_df[(val_df.num == query_num) & (val_df.ep_score==1)]
