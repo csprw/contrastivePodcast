@@ -1162,7 +1162,7 @@ if __name__ == "__main__":
         matrix_targets = []
         vali_accs = []
 
-        # max_steps = 15 ## DEL
+        # max_steps = 100 ## DEL
 
         sent_representations = np.zeros((max_steps * 128, 768)) # TODO: mutual embed dim
         audio_representations = np.zeros((max_steps * 128, 768))# TODO: mutual embed dim
@@ -1329,8 +1329,8 @@ if __name__ == "__main__":
             
             tmp = val_df[(val_df.num == num) & (val_df.ep_score==1)]
             tmp = tmp['episode_uri'].tolist()
-            print("[del] episodes: ", tmp)
             num_episodes_relevant = len(set(tmp))
+            print("[del] Relevant episodes for Query: ", num_episodes_relevant)
             
             ep_scores = []
             for episode_uri in pred_epis:
@@ -1351,11 +1351,25 @@ if __name__ == "__main__":
 
             targets = [[1] * num_episodes_relevant + [0] * (len(ep_scores) - num_episodes_relevant)]
             ndcg_ep_score = ndcg_score(targets, [ep_scores], k=30)
-            pred_episodes[query]['ndc'] = ndcg_ep_score
+            pred_episodes[query]['ndcg'] = ndcg_ep_score
             print("done query {}, p@10 {}, ndcg: {}".format(num, pred_episodes[query]['prec@10'], ndcg_ep_score))
 
+    mets = ['prec@3','prec@10','prec@30','ndcg']
+
+    mean_mets = {}
+    for m in mets:
+        mean_mets[m] = []
+    for query, qval in pred_episodes.items():
+        query_metrics = pred_episodes[query]
+        for m in (mets):
+            mean_mets[m].append(query_metrics[m])
+
+    for k, v in mean_mets.items():
+        print("Metric: {}    Mean {}".format(k, np.mean(v)))
+
     with open("results.json", "w") as f:
-        json.dump(pred_episodes, f, indent=4)
+        # json.dump(pred_episodes, f, indent=4)
+        json.dump(mean_mets, f, indent=4)
 
 
 
