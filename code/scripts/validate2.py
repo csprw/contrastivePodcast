@@ -1368,7 +1368,7 @@ if __name__ == "__main__":
             print("and also: ", ep_scores)
             ndcg_ep_score = ndcg_score(targets, [ep_scores], k=30)
             pred_episodes[query]['ndcg'] = ndcg_ep_score
-            print("done query {}, p@10 {}, ndcg: {}".format(num, pred_episodes[query]['prec@10'], ndcg_ep_score))
+            print("done query {}, p@10 {}, ndcg: {}".format(query_num, pred_episodes[query]['prec@10'], ndcg_ep_score))
 
     mets = ['prec@3','prec@10','prec@30','ndcg']
 
