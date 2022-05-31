@@ -72,7 +72,7 @@ from torch.nn.utils.rnn import pad_sequence, pad_packed_sequence, pack_padded_se
 
 import src.data
 from src.data import load_metadata, find_paths, relative_file_path
-
+from pathlib import Path
 import sys
 sys.path.append('../contrastive_mm2/') 
 # from gru_test2 import mmModule, Cfg
@@ -223,7 +223,7 @@ class MMloader(object):
             self.test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, drop_last=True, **kwargs) 
         elif test_dataset_name == "sp":
             test_dataset = self.get_sp_dataset(directory=conf.sp_path,  traintest="test",  load_full=self.load_full, device=self.device)
-            self.test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True, drop_last=True, **kwargs)
+            self.test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, drop_last=True, **kwargs)
         else:
             raise Exception('Unknown dataset')
         self.test_dataset = test_dataset
@@ -416,7 +416,8 @@ class TextEncoder(nn.Module):
         self.pooling = CFG.text_pooling # TODO: delete this line?
 
     def forward(self, text_embeds):
-        trans_features = {'input_ids': text_embeds['input_ids'].to('cuda'), 'attention_mask': text_embeds['attention_mask'].to('cuda')}
+        trans_features = {'input_ids': text_embeds['input_ids'], 'attention_mask': text_embeds['attention_mask']}
+        #trans_features = {'input_ids': text_embeds['input_ids'].to('cuda'), 'attention_mask': text_embeds['attention_mask'].to('cuda')}
         
         # print(trans_features['input_ids'].is_cuda, trans_features['attention_mask'].is_cuda)
         # print(trans_features.is_cuda)
@@ -1047,7 +1048,7 @@ if __name__ == "__main__":
     model_path = "E:\msc_thesis\code\contrastive_mm2\logs\lisa_v2-simcse_loss_rnn_relu_768_2e-05_2022-05-17_06-58-44"
     model_path = '/Users/casper/Documents/UvAmaster/b23456_thesis/msc_thesis/code/contrastive_mm2/logs/windows_gru2-clip_loss_gru_gelu_768_5e-05_2022-05-26_21-51-25'
     model_path = '/Users/casper/Documents/UvAmaster/b23456_thesis/msc_thesis/code/contrastive_mm2/logs/windows_gru2-clip_loss_followup'
-    model_path = "E:\msc_thesis\code\contrastive_mm2\logs\windows_gru2-clip_loss_followup"
+    # model_path = "E:\msc_thesis\code\contrastive_mm2\logs\windows_gru2-clip_loss_followup"
 
     transcripts_path = '/Users/casper/Documents/UvAmaster/b23456_thesis/msc_thesis/code/data/sp/podcasts-no-audio-13GB/podcasts-transcripts'
     # transcripts_path = 'E:/msc_thesis/code/data/sp/podcasts-no-audio-13GB/podcasts-transcripts'
@@ -1100,8 +1101,9 @@ if __name__ == "__main__":
 
     # Load model and tokenizer
     full_model = mmModule(CFG)
-    # full_model.load_state_dict(torch.load(model_weights,  map_location=CFG.device))              
-    full_model.load_state_dict(torch.load(model_weights))   
+    print("[del] device: ", CFG.device)
+    full_model.load_state_dict(torch.load(model_weights,  map_location=CFG.device))              
+    # full_model.load_state_dict(torch.load(model_weights))   
     full_model = full_model.to(CFG.device)     
     full_model.eval()
 
@@ -1160,9 +1162,23 @@ if __name__ == "__main__":
         matrix_targets = []
         vali_accs = []
 
+        # max_steps = 15 ## DEL
+
+        sent_representations = np.zeros((max_steps * 128, 768)) # TODO: mutual embed dim
+        audio_representations = np.zeros((max_steps * 128, 768))# TODO: mutual embed dim
+		# image_representations = np.zeros((len(self.dataset.caption_ids), self.config.model.embed_dim))
+
+        # This is for now to code faster, delete it
+        my_tmp_file = Path("tmp_validation.hdf5")
+        if my_tmp_file.is_file():
+            f = h5py.File("tmp_validation.hdf5", "r")
+        else:
+            f = h5py.File("tmp_validation.hdf5", "w")
+
+        print("[del] this is keys: ", f.keys())
         for step in range(max_steps):
             print("{}/{}".format(step, max_steps))
-            # if step > 5:
+            # if step > 50:
             #     print('break for now')
             #     break
             batch = next(iterator)
@@ -1170,31 +1186,63 @@ if __name__ == "__main__":
             (tok_sentences, audio_features, seq_len, targets) = batch
 
             with torch.no_grad():
-                reps_sentences = full_model.text_model(tok_sentences)['sentence_embedding']
-                reps_audio = full_model.audio_model((audio_features, seq_len))
+
+                all_targs_del = '-'.join(targets)
+                # all_targs_del = targets[0]
+                if not all_targs_del in f.keys():
+                    #print("create it")
+                    reps_sentences = full_model.text_model(tok_sentences)['sentence_embedding']
+                    reps_audio = full_model.audio_model((audio_features, seq_len))
+
+                    # dset = f.create_dataset(all_targs_del)
+                    grp = f.create_group(all_targs_del)
+                    grp.create_dataset('reps_sentences', data=reps_sentences)
+                    grp.create_dataset('reps_audio', data=reps_audio)
+
+                else:
+                    print("load it")
+                    reps_sentences = torch.tensor(f[all_targs_del]['reps_sentences'])
+                    reps_audio = torch.tensor(f[all_targs_del]['reps_audio'])
+
+                # print("---Reps audio: ", type(reps_audio))
+                # print("---Reps audio: ", (reps_audio.shape))
                 
                 # Normalized representations
-                topic_norm_reps_text.append(reps_sentences / reps_sentences.norm(dim=1, keepdim=True))
-                topic_norm_reps_audio.append(reps_audio / reps_audio.norm(dim=1, keepdim=True))
+                norm_reps_sentences = reps_sentences / reps_sentences.norm(dim=1, keepdim=True)
+                norm_reps_audio = reps_audio / reps_audio.norm(dim=1, keepdim=True)
+
+                # This will be returned
+                idxs = np.arange(step * 128, step*128+128)
+                sent_representations[idxs, :] = norm_reps_sentences.cpu().numpy().copy()
+                audio_representations[idxs, :] = norm_reps_audio.cpu().numpy().copy()
+                matrix_targets.extend(targets)
+
+                # This has to be deleted
+                # topic_norm_reps_text.append(reps_sentences / reps_sentences.norm(dim=1, keepdim=True))
+                # topic_norm_reps_audio.append(reps_audio / reps_audio.norm(dim=1, keepdim=True))
                 
-                #print(reps_audio.shape)
+                # Calculate accuracy of test set
                 audio_logits =  (reps_audio @ reps_sentences.t()) * CFG.scale
                 text_logits = audio_logits.t()
                 
-                matrix_targets.extend(targets)
-
                 probs = audio_logits.softmax(dim=-1).cpu().numpy()
                 ground_truth = torch.arange(128)
                 acc = torch.eq(torch.tensor(probs.argmax(axis=0)), ground_truth).sum() / ground_truth.shape[0]
                 print("accuracy", acc.item())
                 vali_accs.append(acc.item())
 
-        topic_norm_reps_audio = torch.cat(topic_norm_reps_audio, dim=0)
-        topic_norm_reps_text = torch.cat(topic_norm_reps_text, dim=0)
-        print(topic_norm_reps_audio.shape, topic_norm_reps_text.shape)
-
-        print("[Create embeds] Done")
         print("This was acc: ", np.mean(vali_accs))
+
+        # TODO: THis results in CUDA out oOOM
+        # topic_norm_reps_audio = torch.cat(topic_norm_reps_audio, dim=0)
+        # topic_norm_reps_text = torch.cat(topic_norm_reps_text, dim=0)
+        # print(topic_norm_reps_audio.shape, topic_norm_reps_text.shape)
+        # print(sent_representations.shape, audio_representations.shape)
+
+        topic_norm_reps_text = sent_representations
+        topic_norm_reps_audio = audio_representations
+        print("[Create embeds] Done")
+        
 
         ### Other func
         ### Validation DF
@@ -1209,40 +1257,11 @@ if __name__ == "__main__":
         for i, row in val_df.iterrows():
             ifor_val = 0
             if row['episode_uri'] in positive_eplist:
-                #print("IN TESTLIST")
                 ifor_val = 1
             val_df.loc[i,'ep_score'] = ifor_val
             
         val_df.ep_score = val_df.ep_score.astype(int)
         print(len(val_df))
-
-
-        ## Create embeds for queries
-        # Create text embeddings of queries
-        # query_field = 'query'
-        # query_nr = 0
-        # query = topics_df[query_field].iloc[query_nr]
-
-        # queries = topics_df[query_field].tolist()
-        # tokenized_queries = tokenizer(
-        #     queries, padding=True, truncation=True, max_length=32, return_tensors='pt', return_token_type_ids=True,
-        # )
-
-        # query_yamnets = []
-        # query_lengths = []
-        # for idx, row in topics_df.iterrows():
-        #     query_num = row.num
-
-        #     query_embed_path  = os.path.join(conf.yamnet_query_embed_path, str(query_num) + ".h5")
-        #     inbetween_yamnet_embeds = pd.read_hdf(query_embed_path)
-
-        #     query_lengths.append(len(inbetween_yamnet_embeds))
-        #     tmp = torch.Tensor(inbetween_yamnet_embeds.values)
-
-        #     query_yamnets.append(tmp)
-        #     #lengths.append(len(example[1]))
-
-        # padded_query_yamnets = pad_sequence(query_yamnets, batch_first=True)
 
         print("Tokenizing queries")
         query_field =  'query' # TODO: ook description?
@@ -1276,19 +1295,16 @@ if __name__ == "__main__":
         with torch.no_grad():
             # print("[del] get embeds: ")
             reps_sentences = full_model.text_model(tokenized_queries)['sentence_embedding']
-
             reps_audio = full_model.audio_model((padded_query_yamnets, query_lengths))
 
-            audio_logits =  (reps_audio @ reps_sentences.t()) * CFG.scale
-            text_logits = audio_logits.t()
+            # audio_logits =  (reps_audio @ reps_sentences.t()) * CFG.scale
+            # text_logits = audio_logits.t()
 
-            audio_logits = audio_logits / audio_logits.norm(dim=1, keepdim=True)
-            text_logits = text_logits / text_logits.norm(dim=1, keepdim=True)
-
+            # audio_logits = audio_logits / audio_logits.norm(dim=1, keepdim=True)
+            # text_logits = text_logits / text_logits.norm(dim=1, keepdim=True)
             #probs = audio_logits.softmax(dim=-1).cpu().numpy()
-
-            query_text_logits = text_logits
-            query_audio_logits = audio_logits
+            # query_text_logits = text_logits
+            # query_audio_logits = audio_logits
             
             query_norm_reps_audio = reps_audio / reps_audio.norm(dim=1, keepdim=True)
             query_norm_reps_text = reps_sentences / reps_sentences.norm(dim=1, keepdim=True)
@@ -1313,6 +1329,7 @@ if __name__ == "__main__":
             
             tmp = val_df[(val_df.num == num) & (val_df.ep_score==1)]
             tmp = tmp['episode_uri'].tolist()
+            print("[del] episodes: ", tmp)
             num_episodes_relevant = len(set(tmp))
             
             ep_scores = []
