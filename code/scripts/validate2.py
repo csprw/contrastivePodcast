@@ -1333,22 +1333,23 @@ if __name__ == "__main__":
 
         top_probs, top_labels = probs.topk(k, dim=-1)
 
-        for num in range(len(topics_df)):
-            query = topics_df[query_field][num]
-            pred_ind = top_labels[num].tolist()
-            
-            #pred_targs = matrix_targets[pred_ind]
+        for row_idx in range(len(topics_df)):
+            query = topics_df[query_field][row_idx]
+            pred_ind = top_labels[row_idx].tolist()
+
             pred_epis = [matrix_targets[val].split('_')[0] for val in pred_ind]
+            query_num = val_df['num'][row_idx]
+            print("checking for {} and num {} ".format(row_idx, query_num))
             
-            tmp = val_df[(val_df.num == num) & (val_df.ep_score==1)]
+            tmp = val_df[(val_df.num == query_num) & (val_df.ep_score==1)]
             tmp = tmp['episode_uri'].tolist()
             num_episodes_relevant = len(set(tmp))
             print("[del] Relevant episodes for Query: ", num_episodes_relevant)
-            
+                    
             ep_scores = []
             for episode_uri in pred_epis:
                 ep_score_row = val_df.loc[val_df['episode_uri'] == episode_uri]
-                if len(ep_score_row) > 0 and ep_score_row.num.values[0] == num:
+                if len(ep_score_row) > 0 and ep_score_row.num.values[0] == query_num:
                     ep_scores.append(1)
                 else:
                     ep_scores.append(0)
@@ -1363,6 +1364,8 @@ if __name__ == "__main__":
             
 
             targets = [[1] * num_episodes_relevant + [0] * (len(ep_scores) - num_episodes_relevant)]
+            print("input ndcg: ", targets)
+            print("and also: ", ep_scores)
             ndcg_ep_score = ndcg_score(targets, [ep_scores], k=30)
             pred_episodes[query]['ndcg'] = ndcg_ep_score
             print("done query {}, p@10 {}, ndcg: {}".format(num, pred_episodes[query]['prec@10'], ndcg_ep_score))
