@@ -1151,19 +1151,20 @@ if __name__ == "__main__":
     if create_embedding:
         print("[Create embeds] start for TEST")
         iterator = iter(test_loader)
+        max_steps = len(test_loader) 
         processed_text = []
         processed_audio = []
 
         topic_norm_reps_text = []
         topic_norm_reps_audio = []
         matrix_targets = []
-
+        vali_accs = []
 
         for step in range(max_steps):
             print("{}/{}".format(step, max_steps))
-            if step > 50:
-                print('break for now')
-                break
+            # if step > 5:
+            #     print('break for now')
+            #     break
             batch = next(iterator)
             
             (tok_sentences, audio_features, seq_len, targets) = batch
@@ -1182,11 +1183,18 @@ if __name__ == "__main__":
                 
                 matrix_targets.extend(targets)
 
-            topic_norm_reps_audio = torch.cat(topic_norm_reps_audio, dim=0)
-            topic_norm_reps_text = torch.cat(topic_norm_reps_text, dim=0)
-            print(topic_norm_reps_audio.shape, topic_norm_reps_text.shape)
+                probs = audio_logits.softmax(dim=-1).cpu().numpy()
+                ground_truth = torch.arange(128)
+                acc = torch.eq(torch.tensor(probs.argmax(axis=0)), ground_truth).sum() / ground_truth.shape[0]
+                print("accuracy", acc.item())
+                vali_accs.append(acc.item())
+
+        topic_norm_reps_audio = torch.cat(topic_norm_reps_audio, dim=0)
+        topic_norm_reps_text = torch.cat(topic_norm_reps_text, dim=0)
+        print(topic_norm_reps_audio.shape, topic_norm_reps_text.shape)
 
         print("[Create embeds] Done")
+        print("This was acc: ", np.mean(vali_accs))
 
         ### Other func
         ### Validation DF
@@ -1241,7 +1249,7 @@ if __name__ == "__main__":
         queries = topics_df[query_field].tolist()
         tokenized_queries = tokenizer(
             queries, padding=True, truncation=True, max_length=32, return_tensors='pt', return_token_type_ids=True,
-        )
+        ).to(CFG.device)
 
         print("Creating padding of yamnets of queries")
         query_yamnets = []
@@ -1258,7 +1266,7 @@ if __name__ == "__main__":
             query_yamnets.append(tmp)
             #lengths.append(len(example[1]))
 
-        padded_query_yamnets = pad_sequence(query_yamnets, batch_first=True)
+        padded_query_yamnets = pad_sequence(query_yamnets, batch_first=True).to(CFG.device)
 
         print("Creating query embeddings now:")
         query_text = []
@@ -1268,6 +1276,7 @@ if __name__ == "__main__":
         with torch.no_grad():
             # print("[del] get embeds: ")
             reps_sentences = full_model.text_model(tokenized_queries)['sentence_embedding']
+
             reps_audio = full_model.audio_model((padded_query_yamnets, query_lengths))
 
             audio_logits =  (reps_audio @ reps_sentences.t()) * CFG.scale
@@ -1315,7 +1324,7 @@ if __name__ == "__main__":
                     ep_scores.append(0)
             
             pred_episodes[query] = {}
-            pred_episodes[query]['episodes'] = [matrix_targets[val].split('_')[0] for val in pred_ind]
+            # pred_episodes[query]['episodes'] = [matrix_targets[val].split('_')[0] for val in pred_ind]
             pred_episodes[query]['ep_score'] = ep_scores
             
             pred_episodes[query]['prec@3'] = precision_at_k(ep_scores, 3)
@@ -1328,8 +1337,8 @@ if __name__ == "__main__":
             pred_episodes[query]['ndc'] = ndcg_ep_score
             print("done query {}, p@10 {}, ndcg: {}".format(num, pred_episodes[query]['prec@10'], ndcg_ep_score))
 
-
-
+    with open("results.json", "w") as f:
+        json.dump(pred_episodes, f, indent=4)
 
 
 
