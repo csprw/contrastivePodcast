@@ -1048,7 +1048,7 @@ if __name__ == "__main__":
     model_path = "E:\msc_thesis\code\contrastive_mm2\logs\lisa_v2-simcse_loss_rnn_relu_768_2e-05_2022-05-17_06-58-44"
     model_path = '/Users/casper/Documents/UvAmaster/b23456_thesis/msc_thesis/code/contrastive_mm2/logs/windows_gru2-clip_loss_gru_gelu_768_5e-05_2022-05-26_21-51-25'
     model_path = '/Users/casper/Documents/UvAmaster/b23456_thesis/msc_thesis/code/contrastive_mm2/logs/windows_gru2-clip_loss_followup'
-    # model_path = "E:\msc_thesis\code\contrastive_mm2\logs\windows_gru2-clip_loss_followup"
+    model_path = "E:\msc_thesis\code\contrastive_mm2\logs\windows_gru2-clip_loss_followup"
 
     transcripts_path = '/Users/casper/Documents/UvAmaster/b23456_thesis/msc_thesis/code/data/sp/podcasts-no-audio-13GB/podcasts-transcripts'
     # transcripts_path = 'E:/msc_thesis/code/data/sp/podcasts-no-audio-13GB/podcasts-transcripts'
@@ -1172,13 +1172,14 @@ if __name__ == "__main__":
         my_tmp_file = Path("tmp_validation.hdf5")
         if my_tmp_file.is_file():
             f = h5py.File("tmp_validation.hdf5", "r")
+            read_something = True
         else:
             f = h5py.File("tmp_validation.hdf5", "w")
-
-        print("[del] this is keys: ", f.keys())
+            read_something= False
+        # print("[del] this is keys: ", f.keys())
         for step in range(max_steps):
             print("{}/{}".format(step, max_steps))
-            # if step > 50:
+            # if step > 5:
             #     print('break for now')
             #     break
             batch = next(iterator)
@@ -1195,9 +1196,10 @@ if __name__ == "__main__":
                     reps_audio = full_model.audio_model((audio_features, seq_len))
 
                     # dset = f.create_dataset(all_targs_del)
-                    grp = f.create_group(all_targs_del)
-                    grp.create_dataset('reps_sentences', data=reps_sentences)
-                    grp.create_dataset('reps_audio', data=reps_audio)
+                    if not read_something:
+                        grp = f.create_group(all_targs_del)
+                        grp.create_dataset('reps_sentences', data=reps_sentences.cpu())
+                        grp.create_dataset('reps_audio', data=reps_audio.cpu())
 
                 else:
                     print("load it")
@@ -1314,6 +1316,8 @@ if __name__ == "__main__":
         print("TOPK")
         k = 50
         pred_episodes = {}
+        query_norm_reps_audio = query_norm_reps_audio.cpu()
+        query_norm_reps_text = query_norm_reps_text.cpu()
 
         similarity = 100 * query_norm_reps_text @ topic_norm_reps_text.T
         probs = similarity.softmax(dim=-1).cpu()
