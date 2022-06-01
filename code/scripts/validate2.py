@@ -220,10 +220,10 @@ class MMloader(object):
 
         if test_dataset_name == "sp_sample":
             test_dataset = self.get_sp_dataset(directory=conf.sp_sample_path,  traintest="test", load_full=self.load_full, device=self.device)
-            self.test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True, drop_last=True, **kwargs) 
+            self.test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, drop_last=True, **kwargs) 
         elif test_dataset_name == "sp":
             test_dataset = self.get_sp_dataset(directory=conf.sp_path,  traintest="test",  load_full=self.load_full, device=self.device)
-            self.test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True, drop_last=True, **kwargs)
+            self.test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, drop_last=True, **kwargs)
         else:
             raise Exception('Unknown dataset')
         self.test_dataset = test_dataset
@@ -1048,7 +1048,7 @@ if __name__ == "__main__":
     model_path = "E:\msc_thesis\code\contrastive_mm2\logs\lisa_v2-simcse_loss_rnn_relu_768_2e-05_2022-05-17_06-58-44"
     model_path = '/Users/casper/Documents/UvAmaster/b23456_thesis/msc_thesis/code/contrastive_mm2/logs/windows_gru2-clip_loss_gru_gelu_768_5e-05_2022-05-26_21-51-25'
     model_path = '/Users/casper/Documents/UvAmaster/b23456_thesis/msc_thesis/code/contrastive_mm2/logs/windows_gru2-clip_loss_followup'
-    # model_path = "E:\msc_thesis\code\contrastive_mm2\logs\windows_gru2-clip_loss_followup"
+    model_path = "E:\msc_thesis\code\contrastive_mm2\logs\windows_gru2-clip_loss_followup"
 
     # transcripts_path = '/Users/casper/Documents/UvAmaster/b23456_thesis/msc_thesis/code/data/sp/podcasts-no-audio-13GB/podcasts-transcripts'
     # transcripts_path = 'E:/msc_thesis/code/data/sp/podcasts-no-audio-13GB/podcasts-transcripts'
@@ -1179,9 +1179,9 @@ if __name__ == "__main__":
         # print("[del] this is keys: ", f.keys())
         for step in range(max_steps):
             print("{}/{}".format(step, max_steps))
-            if step > 5:
-                print('break for now')
-                break
+            # if step > 5:
+            #     print('break for now')
+            #     break
             batch = next(iterator)
             
             (tok_sentences, audio_features, seq_len, targets) = batch
@@ -1364,6 +1364,7 @@ if __name__ == "__main__":
             
 
             targets = [[1] * num_episodes_relevant + [0] * (len(ep_scores) - num_episodes_relevant)]
+            targets = [targets[0][:k]]
             print("input ndcg: ", targets)
             print("and also: ", ep_scores)
             ndcg_ep_score = ndcg_score(targets, [ep_scores], k=30)
