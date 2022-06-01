@@ -4,6 +4,7 @@ Author: Casper Wortmann
 Usage: python main.py
 """
 import logging
+from random import sample
 import sys
 from argparse import ArgumentParser
 import time
@@ -123,10 +124,10 @@ class MMloader(object):
 
         # Get the datasets
         if train_dataset_name == "sp_sample":
-            train_dataset = self.get_sp_dataset(directory=conf.sp_sample_path, traintest="train", load_full=self.load_full, device=self.device)
+            train_dataset = self.get_sp_dataset(CFG, directory=conf.sp_sample_path, traintest="train", load_full=self.load_full, device=self.device)
             self.train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=False, drop_last=True, **kwargs)  ### TODO: SHUFFLE=TRUE [DEL]
         elif train_dataset_name == "sp":
-            train_dataset = self.get_sp_dataset(directory=conf.sp_path,  traintest="train", load_full=self.load_full, device=self.device)
+            train_dataset = self.get_sp_dataset(CFG, directory=conf.sp_path,  traintest="train", load_full=self.load_full, device=self.device)
             self.train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, drop_last=True, **kwargs)
         else:
             raise Exception('Unknown dataset')
@@ -136,21 +137,22 @@ class MMloader(object):
         print("[MMloader] train dataset loaded, length: ", len(self.train_dataset))
 
         if val_dataset_name == "sp_sample":
-            val_dataset = self.get_sp_dataset(directory=conf.sp_sample_path,  traintest="val", load_full=self.load_full, device=self.device)
+            val_dataset = self.get_sp_dataset(CFG, directory=conf.sp_sample_path,  traintest="val", load_full=self.load_full, device=self.device)
             self.val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, drop_last=True, **kwargs) 
         elif val_dataset_name == "sp":
-            val_dataset = self.get_sp_dataset(directory=conf.sp_path,  traintest="val",  load_full=self.load_full, device=self.device)
+            val_dataset = self.get_sp_dataset(CFG, directory=conf.sp_path,  traintest="val",  load_full=self.load_full, device=self.device)
             self.val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=True, drop_last=True, **kwargs)
         else:
             raise Exception('Unknown dataset')
         self.val_dataset = val_dataset
         self.val_loader.collate_fn = self.val_dataset.collate_fn
+        print("[MMloader] test dataset loaded, length: ", len(val_dataset))
 
         if test_dataset_name == "sp_sample":
-            test_dataset = self.get_sp_dataset(directory=conf.sp_sample_path,  traintest="test", load_full=self.load_full, device=self.device)
+            test_dataset = self.get_sp_dataset(CFG, directory=conf.sp_sample_path,  traintest="test", load_full=self.load_full, device=self.device)
             self.test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, drop_last=True, **kwargs) 
         elif test_dataset_name == "sp":
-            test_dataset = self.get_sp_dataset(directory=conf.sp_path,  traintest="test",  load_full=self.load_full, device=self.device)
+            test_dataset = self.get_sp_dataset(CFG, directory=conf.sp_path,  traintest="test",  load_full=self.load_full, device=self.device)
             self.test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True, drop_last=True, **kwargs)
         else:
             raise Exception('Unknown dataset')
@@ -158,15 +160,15 @@ class MMloader(object):
         self.test_loader.collate_fn = self.test_dataset.collate_fn
         print("[MMloader] test dataset loaded, length: ", len(test_dataset))
 
-    def get_sp_dataset(self, directory=conf.sp_sample_path, traintest="train", load_full=False, device=None):
-        dataset =  spDatasetNoMemory(directory=directory, traintest=traintest,  load_full=load_full, device=device)
+    def get_sp_dataset(self, CFG, directory=conf.sp_sample_path, traintest="train", load_full=False, device=None):
+        dataset =  spDatasetNoMemory(CFG, directory=directory, traintest=traintest,  load_full=load_full, device=device)
         return dataset
 
 class spDatasetNoMemory(datautil.Dataset):
     """
     Spotify Podcast dataset dataloader. 
     """
-    def __init__(self,  directory=conf.sp_sample_path, traintest="train", load_full=False, device=None):
+    def __init__(self, CFG, directory=conf.sp_sample_path, traintest="train", load_full=False, device=None):
         print("[spDataset] init from directory ", directory, traintest)
         directory = os.path.join(directory, traintest)
         h5py_files = list(Path(directory).glob('*.h5'))
@@ -179,6 +181,11 @@ class spDatasetNoMemory(datautil.Dataset):
 
         self.load_full = load_full
 
+        self.tokenizer = AutoTokenizer.from_pretrained(CFG.text_model_name)
+        self.text_max_length = CFG.text_max_length
+        exceeded = False
+        print("[del] : max train", CFG.max_train_samples)
+
         for h5idx, h5py_file in enumerate(h5py_files):    
             print("[del] h5py_file: ", h5py_file)
             f = h5py.File(h5py_file, 'r')
@@ -186,11 +193,20 @@ class spDatasetNoMemory(datautil.Dataset):
             for sentidx in range(len(f['sentences'])):
                 idx2file[sample_idx] = (h5idx, sentidx)
                 sample_idx += 1
+
+                if traintest == 'train' and sample_idx >= CFG.max_train_samples:
+                    print("[del] Max train samples exceeded to {}, break".format(sample_idx))
+                    exceeded = True
+                    break
  
             self.max_embed_dim = max(self.max_embed_dim, f.attrs['max_embed_dim'])
             f.close()
             if h5idx % 10 == 0 and h5idx > 0:
                 print("[spdataset] loaded {}/{}".format(h5idx, len(h5py_files)))
+
+            if exceeded:
+                break
+
         self.idx2file = idx2file
 
 
@@ -1007,7 +1023,7 @@ class multimodal_loss(nn.Module):
         reps_audio = self.audio_model((audio_features, seq_len))
 
         # ['simcse_loss', 'clip_loss', 'clip_loss_simple'] 
-        if self.loss_type == 'clip_loss':
+        if self.loss_type == 'clip_loss_old':
             # Loss function from CLIP paper
             if self.scale_type == 'fixed':
                 audio_logits =  (reps_audio @ reps_sentences.t()) * self.fixed_scale
@@ -1033,6 +1049,34 @@ class multimodal_loss(nn.Module):
             #audio_acc = torch.mean((audio_logits.detach().argmax(dim=-1) == ground_truth).float()).item()
             #text_acc = torch.mean((text_logits.detach().argmax(dim=-1) == ground_truth).float()).item()
 
+            metrics = get_metrics(audio_logits.detach(), text_logits.detach(), ground_truth)
+   
+            return total_loss, metrics
+
+        if self.loss_type == 'clip_loss':
+
+            if self.normalize:
+                #print("TODO: versie waarin normalise naar boven zit!!!")
+
+                audio_logits = audio_logits / audio_logits.norm(dim=1, keepdim=True)
+                text_logits = text_logits / text_logits.norm(dim=1, keepdim=True)
+
+            else:
+                print("This should be removed")
+                raise NotImplementedError
+
+            # Loss function from CLIP paper
+            if self.scale_type == 'fixed':
+                audio_logits =  (reps_audio @ reps_sentences.t()) * self.fixed_scale
+            elif self.scale_type == 'learned':
+                cur_logit_scale = torch.clamp(self.logit_scale.exp(), min=1.0, max=100.0)
+                audio_logits =  (reps_audio @ reps_sentences.t()) * cur_logit_scale.exp()
+
+            text_logits = audio_logits.t()
+
+            # ground_truth = torch.tensor(range(len(scores)), dtype=torch.long, device=scores.device)  
+            ground_truth = torch.arange(self.batch_size, dtype=torch.long, device=self.device)
+            total_loss = F.cross_entropy(audio_logits,ground_truth, weight=None) + F.cross_entropy(text_logits.transpose(-1, -2), ground_truth, weight=None)
             metrics = get_metrics(audio_logits.detach(), text_logits.detach(), ground_truth)
    
             return total_loss, metrics
@@ -1185,6 +1229,8 @@ class Cfg:
     test_dataset: str = ''
     seed: int = 100
 
+    max_train_samples: int = 100
+
     save_model: bool = False
     save_checkpoint: bool = False
     load_model_path: str = ''
@@ -1223,15 +1269,15 @@ def main(args):
     test_loader = data_loader.test_loader # Not used!
 
     # tokenizer = AutoTokenizer.from_pretrained(FullCfg.text_model_name, cache_dir=None)
-    tokenizer = AutoTokenizer.from_pretrained(FullCfg.text_model_name)
+    # tokenizer = AutoTokenizer.from_pretrained(FullCfg.text_model_name)
 
     # TODO: move this into __init__ of dataloader
-    data_loader.train_dataset.tokenizer = tokenizer
-    data_loader.val_dataset.tokenizer = tokenizer
-    data_loader.test_dataset.tokenizer = tokenizer
-    data_loader.train_dataset.text_max_length = FullCfg.text_max_length
-    data_loader.val_dataset.text_max_length = FullCfg.text_max_length
-    data_loader.test_dataset.text_max_length = FullCfg.text_max_length
+    # data_loader.train_dataset.tokenizer = tokenizer
+    # data_loader.val_dataset.tokenizer = tokenizer
+    # data_loader.test_dataset.tokenizer = tokenizer
+    # data_loader.train_dataset.text_max_length = FullCfg.text_max_length
+    # data_loader.val_dataset.text_max_length = FullCfg.text_max_length
+    # data_loader.test_dataset.text_max_length = FullCfg.text_max_length
 
     # Evaluate every 10% of the data, print result every 2%.
     FullCfg.eval_every = int(math.ceil(len(train_loader) * 0.1)) 
@@ -1420,6 +1466,8 @@ if __name__ == "__main__":
     #                     help="test: use old or new opt.")
     parser.add_argument('--pad_pack', dest='pad_pack', action='store_true',
                         help="test: use old or new opt.")
+    parser.add_argument('--max_train_samples', type=int, default=1000000000,
+                        help='Fixed scale to use')
     args, unparsed = parser.parse_known_args()
 
     main(args)
