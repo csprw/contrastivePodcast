@@ -133,7 +133,7 @@ class MMloader(object):
             train_dataset = self.get_sp_dataset(CFG, directory=conf.sp_path,  traintest="train", load_full=self.load_full, device=self.device)
         else:
             raise Exception('Unknown dataset')
-        if args.weak_shuffle:
+        if CFG.weak_shuffle:
             self.train_loader = DataLoader(
                 train_dataset, batch_size=None,  # must be disabled when using samplers
                 sampler=BatchSampler(RandomBatchSampler(train_dataset, batch_size), batch_size=batch_size, drop_last=True)
@@ -174,7 +174,7 @@ class MMloader(object):
         print("[MMloader] test dataset loaded, length: ", len(test_dataset))
 
     def get_sp_dataset(self, CFG, directory=conf.sp_sample_path, traintest="train", load_full=False, device=None):
-        if args.weak_shuffle and traintest=='train':
+        if CFG.weak_shuffle and traintest=='train':
             dataset =  spDatasetWeakShuffle(CFG, directory=directory, traintest=traintest,  load_full=load_full, device=device)
         else:
             dataset =  spDatasetNoMemory(CFG, directory=directory, traintest=traintest,  load_full=load_full, device=device)
@@ -1293,7 +1293,6 @@ class multimodal_loss(nn.Module):
 
             if self.normalize:
                 #print("TODO: versie waarin normalise naar boven zit!!!")
-
                 reps_audio = reps_audio / reps_audio.norm(dim=1, keepdim=True)
                 reps_text = reps_text / reps_text.norm(dim=1, keepdim=True)
 
