@@ -110,8 +110,8 @@ class Evaluator(object):
                 f1.close()
 
             else:
-                print("create it: ", step)
-                print("This is ful_text: ", full_text)
+                print("create it: ", step, len(self.test_loader))
+                # print("This is ful_text: ", full_text)
                 f1 = h5py.File(my_tmp_file, "w")
                 tok_sentences = tok_sentences.to(self.device)
                 audio_features = audio_features.to(self.device)  
