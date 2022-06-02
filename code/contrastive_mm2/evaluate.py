@@ -101,7 +101,7 @@ class Evaluator(object):
             # all_targs_del = '-'.join(targets)
             all_targs_del = targets[0]
 
-            my_tmp_file = os.path.join("tmp_v2", all_targs_del+".hdf5")
+            my_tmp_file = os.path.join("tmp_v2", all_targs_del+'_'+ str(step)+".hdf5")
             if Path(my_tmp_file).is_file():
                 print("load it from file")
                 f1 = h5py.File(my_tmp_file, "r")
