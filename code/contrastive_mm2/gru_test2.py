@@ -29,7 +29,8 @@ from dataclasses import dataclass, asdict
 
 import torch 
 from torch.utils import data as datautil
-from torch.utils.data import DataLoader
+# from torch.utils.data import DataLoader
+from torch.utils.data import Sampler, BatchSampler, DataLoader
 import torch.nn.functional as F
 
 from transformers import AutoTokenizer, AutoModel, AdamW, AutoConfig, T5Config
@@ -45,10 +46,13 @@ from torch.nn.utils.rnn import pad_sequence, pad_packed_sequence, pack_padded_se
 import psutil, gc
 from omegaconf import OmegaConf
 
+from random import shuffle
+
 # Load static configuration variables. 
 conf = OmegaConf.load("./config.yaml")
 print("[cudacheck] Is cuda available? ", torch.cuda.is_available())
 
+from time import sleep
 ################################################################################
 # move to Utils
 def set_seed(args):
@@ -125,20 +129,29 @@ class MMloader(object):
         # Get the datasets
         if train_dataset_name == "sp_sample":
             train_dataset = self.get_sp_dataset(CFG, directory=conf.sp_sample_path, traintest="train", load_full=self.load_full, device=self.device)
-            self.train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=False, drop_last=True, **kwargs)  ### TODO: SHUFFLE=TRUE [DEL]
         elif train_dataset_name == "sp":
             train_dataset = self.get_sp_dataset(CFG, directory=conf.sp_path,  traintest="train", load_full=self.load_full, device=self.device)
-            self.train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, drop_last=True, **kwargs)
         else:
             raise Exception('Unknown dataset')
-        
-        self.train_dataset = train_dataset
-        self.train_loader.collate_fn = self.train_dataset.collate_fn
+        if args.weak_shuffle:
+            self.train_loader = DataLoader(
+                train_dataset, batch_size=None,  # must be disabled when using samplers
+                sampler=BatchSampler(RandomBatchSampler(train_dataset, batch_size), batch_size=batch_size, drop_last=True)
+            )
+            self.train_dataset = train_dataset
+        else:
+            self.train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, drop_last=True, **kwargs)
+            self.train_dataset = train_dataset
+            self.train_loader.collate_fn = self.train_dataset.collate_fn
         print("[MMloader] train dataset loaded, length: ", len(self.train_dataset))
 
         if val_dataset_name == "sp_sample":
             val_dataset = self.get_sp_dataset(CFG, directory=conf.sp_sample_path,  traintest="val", load_full=self.load_full, device=self.device)
             self.val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, drop_last=True, **kwargs) 
+            # self.val_loader = DataLoader(
+            #     val_dataset, batch_size=None,  # must be disabled when using samplers
+            #     sampler=BatchSampler(RandomBatchSampler(val_dataset, batch_size), batch_size=batch_size, drop_last=True)
+            # )
         elif val_dataset_name == "sp":
             val_dataset = self.get_sp_dataset(CFG, directory=conf.sp_path,  traintest="val",  load_full=self.load_full, device=self.device)
             self.val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=True, drop_last=True, **kwargs)
@@ -153,7 +166,7 @@ class MMloader(object):
             self.test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, drop_last=True, **kwargs) 
         elif test_dataset_name == "sp":
             test_dataset = self.get_sp_dataset(CFG, directory=conf.sp_path,  traintest="test",  load_full=self.load_full, device=self.device)
-            self.test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True, drop_last=True, **kwargs)
+            self.test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, drop_last=True, **kwargs)
         else:
             raise Exception('Unknown dataset')
         self.test_dataset = test_dataset
@@ -161,7 +174,11 @@ class MMloader(object):
         print("[MMloader] test dataset loaded, length: ", len(test_dataset))
 
     def get_sp_dataset(self, CFG, directory=conf.sp_sample_path, traintest="train", load_full=False, device=None):
-        dataset =  spDatasetNoMemory(CFG, directory=directory, traintest=traintest,  load_full=load_full, device=device)
+        if args.weak_shuffle and traintest=='train':
+            dataset =  spDatasetWeakShuffle(CFG, directory=directory, traintest=traintest,  load_full=load_full, device=device)
+        else:
+            dataset =  spDatasetNoMemory(CFG, directory=directory, traintest=traintest,  load_full=load_full, device=device)
+        
         return dataset
 
 class spDatasetNoMemory(datautil.Dataset):
@@ -175,46 +192,40 @@ class spDatasetNoMemory(datautil.Dataset):
         print("[spDataset] found {} h5py files".format(len(h5py_files)))
         self.max_embed_dim = 0
         self.device = device
+
         idx2file = {}
         self.h5py_idx2file = h5py_files
         sample_idx = 0
 
         self.load_full = load_full
+        self.traintest = traintest
 
         self.tokenizer = AutoTokenizer.from_pretrained(CFG.text_model_name)
         self.text_max_length = CFG.text_max_length
         exceeded = False
-        print("[del] : max train", CFG.max_train_samples)
+        print("[del] : max train ", CFG.max_train_samples)
 
         for h5idx, h5py_file in enumerate(h5py_files):    
-            print("[del] h5py_file: ", h5py_file)
             f = h5py.File(h5py_file, 'r')
+            self.max_embed_dim = max(self.max_embed_dim, f.attrs['max_embed_dim'])  # TODO: can be removed?
+            
+            if h5idx % 10 == 0:
+                print("[spdataset] loading {}/{}".format(h5idx, len(h5py_files)))
 
             for sentidx in range(len(f['sentences'])):
                 idx2file[sample_idx] = (h5idx, sentidx)
                 sample_idx += 1
 
                 if traintest == 'train' and sample_idx >= CFG.max_train_samples:
-                    print("[del] Max train samples exceeded to {}, break".format(sample_idx))
-                    exceeded = True
+                    print("[del] Max exceeded {}".format(sample_idx))
+                    f.close()
                     break
- 
-            self.max_embed_dim = max(self.max_embed_dim, f.attrs['max_embed_dim'])
-            f.close()
-            if h5idx % 10 == 0 and h5idx > 0:
-                print("[spdataset] loaded {}/{}".format(h5idx, len(h5py_files)))
-
-            if exceeded:
-                break
+            else:
+                f.close()
+                continue
+            break
 
         self.idx2file = idx2file
-
-
-        if traintest == 'test':
-            self.return_targets = True
-        else: 
-            self.return_targets = False
-
         if self.load_full:
             self.collate_fn = self.full_batching_collate
         else:
@@ -226,25 +237,16 @@ class spDatasetNoMemory(datautil.Dataset):
 
     def __getitem__(self, index):
         """ Return one item from the df """
-
-        if self.return_targets:
+        if self.traintest == 'test':
             h5py_idx, sent_idx = self.idx2file[index]
             h5py_file = self.h5py_idx2file[h5py_idx]
-            f = h5py.File(h5py_file, 'r')
 
-            # print("[del] Return targets")
+            f = h5py.File(h5py_file, 'r')
             sent = f['sentences'][sent_idx]
             full_embeds = torch.Tensor(np.array(f[str(sent_idx)]))
-
-            # print("1: ", str(f['filenames'][sent_idx]))
-            # print("2: ", (f['segment_ts'][sent_idx]))
-            # target = f['filenames'][sent_idx].decode("utf-8") + '_' + str(f['segment_ts'][sent_idx])
             target = f['seg_ts'][sent_idx].decode("utf-8") 
-
-            # print("Target: ", target)
-
             sample = (sent, full_embeds, target)
-
+            f.close()
 
         elif self.load_full:
             h5py_idx, sent_idx = self.idx2file[index]
@@ -252,7 +254,6 @@ class spDatasetNoMemory(datautil.Dataset):
 
             f = h5py.File(h5py_file, 'r')
 
-            # TODO: FIND OUT WHY IT SOMETIMES IS LIKE THIS:
             # sent = f['sentences'][sent_idx].decode("utf-8")
             sent = f['sentences'][sent_idx]
             full_embeds = torch.Tensor(np.array(f[str(sent_idx)]))
@@ -265,7 +266,6 @@ class spDatasetNoMemory(datautil.Dataset):
 
             f = h5py.File(h5py_file, 'r')
             
-            # TODO: FIND OUT WHY IT SOMETIMES IS LIKE THIS:
             # sent = f['sentences'][sent_idx].decode("utf-8")
             sent = f['sentences'][sent_idx]
 
@@ -279,9 +279,11 @@ class spDatasetNoMemory(datautil.Dataset):
         """ Return a batch """
         text_embeds = []
         audio_embeds = []
+        full_text = []
         lengths  = []
         
         for example in batch:
+            full_text.append(example[0])
             text_embeds.append(example[0])
             audio_embeds.append(example[1])
             lengths.append(len(example[1]))
@@ -294,12 +296,12 @@ class spDatasetNoMemory(datautil.Dataset):
             text_embeds, padding=True, truncation=True, max_length=self.text_max_length, return_tensors='pt'
         ).to(self.device)
 
-        if self.return_targets:
+        if self.traintest == 'test':
             # print("[del] RETURN TARGS")
             targs = []
             for example in batch:
                 targs.append(example[2])
-            return text_embeds, padded_audio_embeds, lengths, targs
+            return text_embeds, padded_audio_embeds, lengths, targs, full_text
         else:
             # print("[del] not return targs")
             return text_embeds, padded_audio_embeds.float(), lengths
@@ -324,8 +326,237 @@ class spDatasetNoMemory(datautil.Dataset):
         
         return text_embeds, audio_embeds, lengths
 
-    
 
+class spDatasetWeakShuffle(datautil.Dataset):
+    """
+    Spotify Podcast dataset dataloader. 
+    """
+    def __init__(self, CFG, directory=conf.sp_sample_path, traintest="train", load_full=False, device=None):
+        print("[spDataset] init from directory [DEL WEAKSHUFFLE] ", directory, traintest)
+        directory = os.path.join(directory, traintest)
+        h5py_files = list(Path(directory).glob('*.h5'))
+        print("[spDataset] found {} h5py files".format(len(h5py_files)))
+        self.max_embed_dim = 0
+        self.device = device
+
+        idx2file = {}
+        self.h5py_idx2file = h5py_files
+        sample_idx = 0
+
+        self.load_full = load_full
+        self.traintest = traintest
+
+        self.tokenizer = AutoTokenizer.from_pretrained(CFG.text_model_name)
+        self.text_max_length = CFG.text_max_length
+        print("[del] : max train ", CFG.max_train_samples)
+
+        for h5idx, h5py_file in enumerate(h5py_files):    
+            f = h5py.File(h5py_file, 'r')
+            self.max_embed_dim = max(self.max_embed_dim, f.attrs['max_embed_dim'])  # TODO: can be removed?
+            
+            if h5idx % 10 == 0:
+                print("[spdataset] loading {}/{}".format(h5idx, len(h5py_files)))
+
+            for sentidx in range(len(f['sentences'])):
+                idx2file[sample_idx] = (h5idx, sentidx)
+                sample_idx += 1
+
+                if traintest == 'train' and sample_idx >= CFG.max_train_samples:
+                    print("[del] Max exceeded {}".format(sample_idx))
+                    f.close()
+                    break
+            else:
+                f.close()
+                continue
+            break
+
+        self.idx2file = idx2file
+        if self.load_full:
+            self.collate_fn = self.full_batching_collate
+        else:
+            self.collate_fn = self.mean_batching_collate
+
+        # For weak shuffling
+        # self.batch_size = CFG.batch_size
+        # self.dataset_length = self.idx2file.keys()
+        # self.n_batches = self.dataset_length / self.batch_size
+        # self.batch_ids = torch.randperm(int(self.n_batches))
+
+    def __len__(self):
+        """ Denotes the total number of utterances """
+        return len(self.idx2file.keys())
+
+    def __getitem__(self, index):
+        """ Return one item from the df """
+
+        if self.traintest == 'test':
+            h5py_idx, sent_idx = self.idx2file[index]
+            h5py_file = self.h5py_idx2file[h5py_idx]
+
+            f = h5py.File(h5py_file, 'r')
+            sent = f['sentences'][sent_idx]
+            full_embeds = torch.Tensor(np.array(f[str(sent_idx)]))
+            target = f['seg_ts'][sent_idx].decode("utf-8") 
+            sample = (sent, full_embeds, target)
+            f.close()
+
+        elif self.load_full:
+            # print("---- Getitem index: ", index)
+            text_embeds = []
+            audio_embeds = []
+            full_text = []
+            lengths  = []
+
+            last_idx = -1
+            for enum, i in enumerate(index):
+                # print(self.idx2file[i])
+                h5py_idx, sent_idx = self.idx2file[i]
+
+                if h5py_idx != last_idx:
+                    if enum != 0:
+                        f.close()
+                    h5py_file = self.h5py_idx2file[h5py_idx]
+                    f = h5py.File(h5py_file, 'r')
+
+                sent = f['sentences'][sent_idx]
+                full_embeds = torch.Tensor(np.array(f[str(sent_idx)]))
+                # sample = (sent, full_embeds)
+
+                # Collate fn
+                full_text.append(sent)
+                text_embeds.append(sent)
+                audio_embeds.append(full_embeds)
+                lengths.append(len(full_embeds))
+
+            f.close()
+             # Pad the audio embeddings
+            padded_audio_embeds = pad_sequence(audio_embeds, batch_first=True).to(self.device)
+            
+            # Tokenize text
+            text_embeds = self.tokenizer(
+                text_embeds, padding=True, truncation=True, max_length=self.text_max_length, return_tensors='pt'
+            ).to(self.device)
+
+            if self.traintest == 'test':
+                # print("[del] RETURN TARGS")
+                print("First process targets in other formal please!")
+                raise NotImplementedError
+                targs = []
+                for example in batch:
+                    targs.append(example[2])
+                return text_embeds, padded_audio_embeds, lengths, targs, full_text
+            else:
+                return text_embeds, padded_audio_embeds.float(), lengths
+                
+            # h5py_idx, sent_idx = self.idx2file[index]
+            # h5py_file = self.h5py_idx2file[h5py_idx]
+
+            # f = h5py.File(h5py_file, 'r')
+
+            # # sent = f['sentences'][sent_idx].decode("utf-8")
+            # sent = f['sentences'][sent_idx]
+            # full_embeds = torch.Tensor(np.array(f[str(sent_idx)]))
+            # sample = (sent, full_embeds)
+            
+            
+        else:
+            h5py_idx, sent_idx = self.idx2file[index]
+            h5py_file = self.h5py_idx2file[h5py_idx]
+
+            f = h5py.File(h5py_file, 'r')
+            
+            # sent = f['sentences'][sent_idx].decode("utf-8")
+            sent = f['sentences'][sent_idx]
+
+            mean_embeds = torch.Tensor(f['mean_embeddings'][sent_idx])
+            sample = (sent, mean_embeds)
+            f.close()
+            
+        return sample
+
+    def full_batching_collate(self, batch):
+        """ Return a batch """
+        text_embeds = []
+        audio_embeds = []
+        full_text = []
+        lengths  = []
+        
+        for example in batch:
+            full_text.append(example[0])
+            text_embeds.append(example[0])
+            audio_embeds.append(example[1])
+            lengths.append(len(example[1]))
+        
+        # Pad the audio embeddings
+        padded_audio_embeds = pad_sequence(audio_embeds, batch_first=True).to(self.device)
+        
+        # Tokenize text
+        text_embeds = self.tokenizer(
+            text_embeds, padding=True, truncation=True, max_length=self.text_max_length, return_tensors='pt'
+        ).to(self.device)
+
+        if self.traintest == 'test':
+            # print("[del] RETURN TARGS")
+            targs = []
+            for example in batch:
+                targs.append(example[2])
+            return text_embeds, padded_audio_embeds, lengths, targs, full_text
+        else:
+            # print("[del] not return targs")
+            return text_embeds, padded_audio_embeds.float(), lengths
+
+    def mean_batching_collate(self, batch):
+        """ Return a batch """
+        text_embeds = []
+        audio_embeds = []
+        lengths  = []
+        for example in batch:
+            text_embeds.append(example[0])
+            audio_embeds.append(example[1])
+
+        # Combine audio embeddings to a Tensor
+        audio_embeds = torch.stack(audio_embeds).to(self.device)
+
+        # Tokenize text
+        max_length = 32 # TODO: is dit nodig?
+        text_embeds = self.tokenizer(
+            text_embeds, padding=True, truncation=True, max_length=max_length, return_tensors='pt'
+        ).to(self.device)
+        
+        return text_embeds, audio_embeds, lengths
+
+
+
+class RandomBatchSampler(Sampler):
+    """Sampling class to create random sequential batches from a given dataset
+    E.g. if data is [1,2,3,4] with bs=2. Then first batch, [[1,2], [3,4]] then shuffle batches -> [[3,4],[1,2]]
+    This is useful for cases when you are interested in 'weak shuffling'
+    :param dataset: dataset you want to batch
+    :type dataset: torch.utils.data.Dataset
+    :param batch_size: batch size
+    :type batch_size: int
+    :returns: generator object of shuffled batch indices
+    """
+    def __init__(self, dataset, batch_size):
+        self.batch_size = batch_size
+        self.dataset_length = len(dataset)
+        self.n_batches = self.dataset_length / self.batch_size
+        self.batch_ids = torch.randperm(int(self.n_batches))
+
+    def __len__(self):
+        return self.batch_size
+
+    def __iter__(self):
+        for id in self.batch_ids:
+            idx = torch.arange(id * self.batch_size, (id + 1) * self.batch_size)
+            t = torch.randperm(idx.shape[0])
+            idx= idx[t].view(idx.size())
+            for index in idx:
+                yield int(index)
+        if int(self.n_batches) < self.n_batches:
+            idx = torch.arange(int(self.n_batches) * self.batch_size, self.dataset_length)
+            for index in idx:
+                yield int(index)
 ################################################################################
 # Textmodules
 class TextEncoder(nn.Module):
@@ -776,6 +1007,8 @@ class mmModule(nn.Module):
         #     update_scale = True
         # memory_test_delete = 1000
 
+        time_del = []
+
         for epoch in range(start_epoch, CFG.num_epochs):
             t1 = time()
             loss_model.zero_grad()
@@ -787,8 +1020,10 @@ class mmModule(nn.Module):
 
             # Full training
             # TODO: if training from checkpoint, stop in time
+            test1 = time()
             for step, batch in enumerate(iter(train_loader)):
-                # print("[del] trainstep: ", steps_so_far, step)
+                time_del.append(time() - test1)
+                
                 if step < fstep:
                     print("[debug] loading checkpoint, continue")
                     continue
@@ -798,7 +1033,6 @@ class mmModule(nn.Module):
                 if  step % self.eval_every == 0 or step == steps_per_epoch - 1: 
                     print("[eval] start evaluation")
                     mean_loss, metrics = self.evaluate(loss_model)
-                    # mean_loss = 0 # TODO: check of mean loss terug kan komen uit eval
                     self.add_logging(epoch, steps_so_far, mean_loss, metrics, train=False)
                     
                     print("[eval] Epoch {} Step {}/{} \t loss {} \t acc {}".format(epoch, step, len(train_loader), mean_loss, metrics['mean_acc']))
@@ -828,6 +1062,9 @@ class mmModule(nn.Module):
                 if step % self.print_every == 0:
                     print("[train] Epoch {} Step {}/{} \t loss {} \t acc {}".format(epoch, step, len(train_loader), loss_value.item(), metrics['mean_acc']))
                     self.add_logging(epoch, steps_so_far, loss_value.item(), metrics, train=True)
+
+                    print("[del] mean batching time: ", np.mean(time_del))
+                    time_del = []
                 
                 # # [del] check on one batch
                 # print("[del] [metrics] ", loss_value.item(), metrics['mean_acc'])
@@ -854,7 +1091,6 @@ class mmModule(nn.Module):
         # if args.test_evalchange:
         loss_model.eval()
         losses = 0
-        # validation_len = len(self.test_loader)
 
         # Iterate over data and calculate accuracies
         self.to(self.device)
@@ -866,7 +1102,7 @@ class mmModule(nn.Module):
             if not full_validation:
                 iterator = iter(self.val_loader)
 
-                total_len = 1     # 1000 bij test
+                total_len = 1000     # 1000 bij test
 
                 for step in range(total_len):
                     # print("[del] step: ", step)
@@ -1016,7 +1252,7 @@ class multimodal_loss(nn.Module):
 
     def forward(self, sentence_features: Iterable[Dict[str, Tensor]], audio_features: Tensor, seq_len):
         # Get sentence Representations (shape [batchsize, 768])
-        reps_sentences = self.text_model(sentence_features)['sentence_embedding']
+        reps_text = self.text_model(sentence_features)['sentence_embedding']
         # print("[clipmodel] text_embeddings: ", reps_sentences[0])
         
         # Get Audio representations
@@ -1026,10 +1262,10 @@ class multimodal_loss(nn.Module):
         if self.loss_type == 'clip_loss_old':
             # Loss function from CLIP paper
             if self.scale_type == 'fixed':
-                audio_logits =  (reps_audio @ reps_sentences.t()) * self.fixed_scale
+                audio_logits =  (reps_audio @ reps_text.t()) * self.fixed_scale
             elif self.scale_type == 'learned':
                 cur_logit_scale = torch.clamp(self.logit_scale.exp(), min=1.0, max=100.0)
-                audio_logits =  (reps_audio @ reps_sentences.t()) * cur_logit_scale.exp()
+                audio_logits =  (reps_audio @ reps_text.t()) * cur_logit_scale.exp()
 
             text_logits = audio_logits.t()
 
@@ -1058,8 +1294,8 @@ class multimodal_loss(nn.Module):
             if self.normalize:
                 #print("TODO: versie waarin normalise naar boven zit!!!")
 
-                audio_logits = audio_logits / audio_logits.norm(dim=1, keepdim=True)
-                text_logits = text_logits / text_logits.norm(dim=1, keepdim=True)
+                reps_audio = reps_audio / reps_audio.norm(dim=1, keepdim=True)
+                reps_text = reps_text / reps_text.norm(dim=1, keepdim=True)
 
             else:
                 print("This should be removed")
@@ -1067,10 +1303,10 @@ class multimodal_loss(nn.Module):
 
             # Loss function from CLIP paper
             if self.scale_type == 'fixed':
-                audio_logits =  (reps_audio @ reps_sentences.t()) * self.fixed_scale
+                audio_logits =  (reps_audio @ reps_text.t()) * self.fixed_scale
             elif self.scale_type == 'learned':
                 cur_logit_scale = torch.clamp(self.logit_scale.exp(), min=1.0, max=100.0)
-                audio_logits =  (reps_audio @ reps_sentences.t()) * cur_logit_scale.exp()
+                audio_logits =  (reps_audio @ reps_text.t()) * cur_logit_scale.exp()
 
             text_logits = audio_logits.t()
 
@@ -1081,44 +1317,15 @@ class multimodal_loss(nn.Module):
    
             return total_loss, metrics
     
-        if self.loss_type == 'clip_loss_simple':
-            # Loss function from CLIP paper
-            if self.scale_type == 'fixed':
-                # temp = 40.0
-                logits =  (reps_sentences @ reps_audio.t()) / self.fixed_scale
-                audio_logits = reps_audio @ reps_audio.T
-                text_logits = reps_sentences @ reps_sentences.T
-                ground_truth = F.softmax((audio_logits + text_logits) / 2 * self.fixed_scale, dim=-1)
-
-            elif self.scale_type == 'learned':
-                cur_logit_scale = torch.clamp(self.logit_scale.exp(), min=1.0, max=100.0)
-                logits =  (reps_sentences @ reps_audio.t()) / cur_logit_scale.exp()
-                audio_logits = reps_audio @ reps_audio.T
-                text_logits = reps_sentences @ reps_sentences.T
-                ground_truth = F.softmax((audio_logits + text_logits) / 2 * cur_logit_scale.exp(), dim=-1)
-                
-            if self.normalize:
-                audio_logits = audio_logits / audio_logits.norm(dim=1, keepdim=True)
-                text_logits = text_logits / text_logits.norm(dim=1, keepdim=True)
-
-            texts_loss = cross_entropy(logits, ground_truth, reduction='none')
-            images_loss = cross_entropy(logits.T, ground_truth.T, reduction='none')
-            total_loss =  ((images_loss + texts_loss) / 2.0).mean() 
- 
-            #audio_acc = torch.mean((audio_logits.argmax(dim=-1) == ground_truth).float()).item()
-            #text_acc = torch.mean((text_logits.argmax(dim=-1) == ground_truth).float()).item()
-            metrics = get_metrics(audio_logits.detach(), text_logits.detach(), ground_truth)
-            return total_loss, metrics
-
         elif self.loss_type == 'simcse_loss':
             # SIMCSE-based NCE loss
             if self.scale_type == 'fixed':
                 # audio_logits =  (reps_audio @ reps_sentences.t()) * self.fixed_scale
-                scores = self.similarity_fct(reps_sentences, reps_audio) * self.fixed_scale
+                scores = self.similarity_fct(reps_text, reps_audio) * self.fixed_scale
             elif self.scale_type == 'learned':
                 cur_logit_scale = torch.clamp(self.logit_scale.exp(), min=1.0, max=100.0)
                 # audio_logits =  (reps_audio @ reps_sentences.t()) * self.logit_scale.exp()
-                scores = self.similarity_fct(reps_sentences, reps_audio) * cur_logit_scale.exp()
+                scores = self.similarity_fct(reps_text, reps_audio) * cur_logit_scale.exp()
 
             labels = torch.tensor(range(len(scores)), dtype=torch.long, device=scores.device)  # Example a[i] should match with b[i]
             loss = self.cross_entropy_loss(scores, labels)
@@ -1229,7 +1436,7 @@ class Cfg:
     test_dataset: str = ''
     seed: int = 100
 
-    max_train_samples: int = 100
+    max_train_samples: int = 100000
 
     save_model: bool = False
     save_checkpoint: bool = False
@@ -1237,6 +1444,7 @@ class Cfg:
     load_model: bool = False
     load_checkpoint: bool = False
     load_checkpoint_path: str = ''
+    weak_shuffle: bool = False
 
 
 ######### This stays in MAIN
@@ -1245,21 +1453,6 @@ def main(args):
     t_start = time()
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
-    # Change the CFG file according to argparse.
-    # FullCfg.num_epochs = args.num_epochs
-    # FullCfg.final_projection_dim = args.final_projection_dim
-    # FullCfg.audio_proj_head = args.audio_proj_head
-    # FullCfg.text_proj_head = args.text_proj_head
-    # FullCfg.audio_activation = args.audio_activation
-    # FullCfg.text_activation = args.text_activation
-    # FullCfg.device = device
-    # FullCfg.batch_size = args.batch_size
-    # FullCfg.loss_type = args.loss_type
-    # FullCfg.text_pooling = args.text_pooling
-    # FullCfg.scale_type = args.scale_type
-    # FullCfg.scale = args.scale
-
-
     FullCfg, log_name = setup_config(args, Cfg, device)
 
     # Setup dataloaders.
@@ -1267,17 +1460,6 @@ def main(args):
     train_loader = data_loader.train_loader
     val_loader = data_loader.val_loader
     test_loader = data_loader.test_loader # Not used!
-
-    # tokenizer = AutoTokenizer.from_pretrained(FullCfg.text_model_name, cache_dir=None)
-    # tokenizer = AutoTokenizer.from_pretrained(FullCfg.text_model_name)
-
-    # TODO: move this into __init__ of dataloader
-    # data_loader.train_dataset.tokenizer = tokenizer
-    # data_loader.val_dataset.tokenizer = tokenizer
-    # data_loader.test_dataset.tokenizer = tokenizer
-    # data_loader.train_dataset.text_max_length = FullCfg.text_max_length
-    # data_loader.val_dataset.text_max_length = FullCfg.text_max_length
-    # data_loader.test_dataset.text_max_length = FullCfg.text_max_length
 
     # Evaluate every 10% of the data, print result every 2%.
     FullCfg.eval_every = int(math.ceil(len(train_loader) * 0.1)) 
@@ -1349,14 +1531,6 @@ def main(args):
     print("[main] ------------------------------------------------------------")
     dur = int(t_end - t_start)
     print("[main] Done, total duration {} seconds ".format(dur))
-    # csv_file = pd.read_csv(full_model.eval_csv_filename)
-    # print("[main] Maximum text acc step={} acc={}".format(csv_file['text_acc'].idxmax(), csv_file['text_acc'].max()))
-    # print("[main] Maximum audio acc step={} acc={}".format(csv_file['audio_acc'].idxmax(), csv_file['audio_acc'].max()))
-    # best_idx = csv_file['mean_acc'].idxmax()
-    # print("[main] Maximum mean acc step={} acc={}".format(best_idx, csv_file['mean_acc'].max()))
-    # print(", ".join(["{} - {}".format(k, v) for k, v in csv_file.iloc[best_idx].to_dict().items()]))
-
-    # print("[del] now save to disk")
     best_results(full_model.eval_csv_filename, dur, FullCfg.log_name)
 
 
@@ -1468,6 +1642,8 @@ if __name__ == "__main__":
                         help="test: use old or new opt.")
     parser.add_argument('--max_train_samples', type=int, default=1000000000,
                         help='Fixed scale to use')
+    parser.add_argument('--weak_shuffle', dest='weak_shuffle', action='store_true',
+                        help="test: use old or new opt.")
     args, unparsed = parser.parse_known_args()
 
     main(args)
