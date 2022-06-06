@@ -346,6 +346,7 @@ class spDatasetWeakShuffle(datautil.Dataset):
 
         for h5idx, h5py_file in enumerate(h5py_files):    
             f = h5py.File(h5py_file, 'r')
+            print(h5py_file)
             self.max_embed_dim = max(self.max_embed_dim, f.attrs['max_embed_dim'])  # TODO: can be removed?
             
             if h5idx % 10 == 0:
@@ -355,7 +356,7 @@ class spDatasetWeakShuffle(datautil.Dataset):
                 idx2file[sample_idx] = (h5idx, sentidx)
                 sample_idx += 1
 
-                if traintest == 'train' and sample_idx >= CFG.max_train_samples:
+                if CFG.max_train_samples > 0 and traintest == 'train' and sample_idx >= CFG.max_train_samples:
                     print("[del] Max exceeded {}".format(sample_idx))
                     f.close()
                     break
@@ -946,6 +947,7 @@ class mmModule(nn.Module):
         CFG,
         train_loader,
         val_loader,
+        steps_per_epoch,
         loss_model,
         start_epoch=1,
         optimizer_class: Type[Optimizer] = AdamW,
@@ -959,17 +961,17 @@ class mmModule(nn.Module):
 
         self.val_loader = val_loader
 
-        steps_per_epoch = len(train_loader)
+
         num_train_steps = int(steps_per_epoch * CFG.num_epochs)
-        warmup_steps =  math.ceil(len(train_loader) *  CFG.num_epochs * 0.1)  
+        warmup_steps =  math.ceil(steps_per_epoch *  CFG.num_epochs * 0.1)  
         self.weight_decay = CFG.weight_decay
         self.optimizer_class = optimizer_class
         self.optimizer_params = {'lr': CFG.lr}
         scheduler_method='WarmupLinear' 
 
         # print("[del] ", steps_per_epoch, num_train_steps, warmup_steps)
+
         steps_so_far = (start_epoch + 1) * fstep
-        steps_per_epoch = len(train_loader)
         self.num_train_steps = num_train_steps
 
         # Initiate or load an optimizer
@@ -994,19 +996,22 @@ class mmModule(nn.Module):
         #     update_scale = True
         # memory_test_delete = 1000
 
+        print("[del] eval_every, print_every: ", self.eval_every, self.print_every, warmup_steps)
+
         time_del = []
         for epoch in range(start_epoch, CFG.num_epochs):
             t1 = time()
             loss_model.zero_grad()
             loss_model.train()
+            # test1 = time()
 
             # Full training
             # TODO: if training from checkpoint, stop batch in time
             for step, batch in enumerate(iter(train_loader)):
                 
-                ##### Leave for debugging, check speedup weak shuffling.
+                #### Leave for debugging, check speedup weak shuffling.
                 # time_del.append(time() - test1)
-                # sent_features, audio_features, seq_len = batch
+                # # sent_features, audio_features, seq_len = batch
                 # if step % 10 == 0 and step != 0:
                 #     print("avg:", np.mean(time_del))
                 #     time_del = []
@@ -1024,6 +1029,7 @@ class mmModule(nn.Module):
                     print("[DEBUG] : remove -1 in line below!")
 
                 if  step % self.eval_every == 0 or step == steps_per_epoch - 1: 
+                    # print("del: ", self.eval_every, step, steps_per_epoch)
                     # Evaluate on validation set. 
                     print("[eval] start evaluation")
                     mean_loss, metrics = self.evaluate(loss_model)
@@ -1361,7 +1367,7 @@ class Cfg:
     test_dataset: str = ''
     seed: int = 100
 
-    max_train_samples: int = 10000000
+    max_train_samples: int = 0
     save_model: bool = False
     save_checkpoint: bool = False
     load_model_path: str = ''
@@ -1383,10 +1389,11 @@ def main(args):
     train_loader = data_loader.train_loader
     val_loader = data_loader.val_loader
     test_loader = data_loader.test_loader # Not used!
+    steps_per_epoch = int(len(data_loader.train_dataset) / FullCfg.batch_size)
 
     # Evaluate every 10% of the data, print result every 2%.
-    FullCfg.eval_every = int(math.ceil(len(train_loader) * 0.1)) 
-    FullCfg.print_every = int(math.ceil(len(train_loader) * 0.02))
+    FullCfg.eval_every = int(math.ceil(steps_per_epoch * 0.1)) 
+    FullCfg.print_every = int(math.ceil(steps_per_epoch * 0.02))
     print("[main] print_every {} eval_every {} ".format(
         FullCfg.print_every, FullCfg.eval_every)
     )
@@ -1433,6 +1440,7 @@ def main(args):
         CFG = FullCfg,
         train_loader=train_loader,
         val_loader = val_loader,
+        steps_per_epoch = steps_per_epoch,
         loss_model=loss_func,
         start_epoch=epoch,
         optimizer_class=AdamW,
@@ -1542,7 +1550,7 @@ if __name__ == "__main__":
     #                     help="test: use old or new opt.")
     parser.add_argument('--pad_pack', dest='pad_pack', action='store_true',
                         help="test: use old or new opt.")
-    parser.add_argument('--max_train_samples', type=int, default=10000000,
+    parser.add_argument('--max_train_samples', type=int, default=0,
                         help='Fixed scale to use')
     parser.add_argument('--weak_shuffle', dest='weak_shuffle', action='store_true',
                         help="test: use old or new opt.")
