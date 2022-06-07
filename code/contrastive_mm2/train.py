@@ -377,7 +377,6 @@ class spDatasetWeakShuffle(datautil.Dataset):
 
     def __getitem__(self, index):
         """ Return one item from the df """
-
         if self.traintest == 'test':
             h5py_idx, sent_idx = self.idx2file[index]
             h5py_file = self.h5py_idx2file[h5py_idx]
@@ -388,6 +387,7 @@ class spDatasetWeakShuffle(datautil.Dataset):
             target = f['seg_ts'][sent_idx].decode("utf-8") 
             sample = (sent, full_embeds, target)
             f.close()
+            return sample
 
         elif self.load_full:
             text_embeds = []
@@ -430,8 +430,6 @@ class spDatasetWeakShuffle(datautil.Dataset):
                 text_embeds, padding=True, truncation=True, max_length=self.text_max_length, return_tensors='pt'
             ).to(self.device)
 
-            #print("[del] lengths: ", list(set(del_lens)), list(set(del_lens2)))
-
             if self.traintest == 'test':
                 print("First process targets")
                 raise NotImplementedError
@@ -440,27 +438,47 @@ class spDatasetWeakShuffle(datautil.Dataset):
                     targs.append(example[2])
                 return text_embeds, padded_audio_embeds, lengths, targs, full_text
             else:
-                return text_embeds, padded_audio_embeds.float(), lengths
+                return text_embeds, padded_audio_embeds, lengths
 
-            
-            
         else:
-            h5py_idx, sent_idx = self.idx2file[index]
-            h5py_file = self.h5py_idx2file[h5py_idx]
+            text_embeds = []
+            audio_embeds = []
+            lengths  = []
+            last_idx = -1
 
-            f = h5py.File(h5py_file, 'r')
-            
-            sent = f['sentences'][sent_idx].decode("utf-8")
-            # sent = f['sentences'][sent_idx]
+            for enum, i in enumerate(index):
+                h5py_idx, sent_idx = self.idx2file[i]
 
-            mean_embeds = torch.Tensor(f['mean_embeddings'][sent_idx])
-            sample = (sent, mean_embeds)
+                if h5py_idx != last_idx:
+                    if enum != 0:
+                        f.close()
+                    h5py_file = self.h5py_idx2file[h5py_idx]
+                    f = h5py.File(h5py_file, 'r')
+
+                sent = f['sentences'][sent_idx].decode("utf-8")
+                mean_embeds = torch.Tensor(f['mean_embeddings'][sent_idx])
+
+                text_embeds.append(sent)
+                audio_embeds.append(mean_embeds)
+
             f.close()
-            
-        return sample
+
+            # Combine audio embeddings to a Tensor
+            audio_embeds = torch.stack(audio_embeds).to(self.device)
+
+            # Tokenize text
+            max_length = 32 # TODO: is dit nodig?
+            text_embeds = self.tokenizer(
+                text_embeds, padding=True, truncation=True, max_length=max_length, return_tensors='pt'
+            ).to(self.device)
+
+            return text_embeds, audio_embeds, lengths
+     
 
     def full_batching_collate(self, batch):
         """ Return a batch """
+        print("[Depricated]")
+        raise NotImplementedError
         text_embeds = []
         audio_embeds = []
         full_text = []
@@ -944,7 +962,7 @@ class mmModule(nn.Module):
                     mean_loss, metrics = self.evaluate(loss_model)
                     self.add_logging(epoch, steps_so_far, mean_loss, metrics, train=False)
                     
-                    print("[eval] Epoch {} Step {}/{} \t loss {} \t acc {}".format(epoch, step, len(num_train_steps), mean_loss, metrics['mean_acc']))
+                    print("[eval] Epoch {} Step {}/{} \t loss {} \t acc {}".format(epoch, step, num_train_steps, mean_loss, metrics['mean_acc']))
                     if mean_loss < self.best_loss:
                         print("[eval] better model found")
                         self.best_loss = mean_loss 
