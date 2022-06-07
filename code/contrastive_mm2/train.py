@@ -324,9 +324,10 @@ class spDatasetNoMemory(datautil.Dataset):
 class spDatasetWeakShuffle(datautil.Dataset):
     """
     Spotify Podcast dataset dataloader. 
+    Weak shuffling to enable shuffle while clustering sentences of similar length.
     """
     def __init__(self, CFG, directory=conf.sp_sample_path, traintest="train", load_full=False, device=None):
-        print("[spDataset] init from directory [DEL WEAKSHUFFLE] ", directory, traintest)
+        print("[spDataset] init from directory [WEAKSHUFFLE] ", directory, traintest)
         directory = os.path.join(directory, traintest)
         h5py_files = list(Path(directory).glob('*.h5'))
         print("[spDataset] found {} h5py files".format(len(h5py_files)))
@@ -342,7 +343,6 @@ class spDatasetWeakShuffle(datautil.Dataset):
 
         self.tokenizer = AutoTokenizer.from_pretrained(CFG.text_model_name)
         self.text_max_length = CFG.text_max_length
-        print("[del] : max train ", CFG.max_train_samples)
 
         for h5idx, h5py_file in enumerate(h5py_files):    
             f = h5py.File(h5py_file, 'r')
@@ -390,7 +390,6 @@ class spDatasetWeakShuffle(datautil.Dataset):
             f.close()
 
         elif self.load_full:
-            # print("---- Getitem index: ", index)
             text_embeds = []
             audio_embeds = []
             full_text = []
@@ -399,7 +398,6 @@ class spDatasetWeakShuffle(datautil.Dataset):
             last_idx = -1
             del_lens = []
             for enum, i in enumerate(index):
-                # print(self.idx2file[i])
                 h5py_idx, sent_idx = self.idx2file[i]
 
                 if h5py_idx != last_idx:
@@ -410,7 +408,6 @@ class spDatasetWeakShuffle(datautil.Dataset):
 
                 sent = f['sentences'][sent_idx]
                 full_embeds = torch.Tensor(np.array(f[str(sent_idx)]))
-                # sample = (sent, full_embeds)
 
                 del_lens.append(len(sent))
 
@@ -432,8 +429,7 @@ class spDatasetWeakShuffle(datautil.Dataset):
             print("[del] lengths: ", list(set(del_lens)))
 
             if self.traintest == 'test':
-                # print("[del] RETURN TARGS")
-                print("First process targets in other formal please!")
+                print("First process targets")
                 raise NotImplementedError
                 targs = []
                 for example in batch:
@@ -441,16 +437,7 @@ class spDatasetWeakShuffle(datautil.Dataset):
                 return text_embeds, padded_audio_embeds, lengths, targs, full_text
             else:
                 return text_embeds, padded_audio_embeds.float(), lengths
-                
-            # h5py_idx, sent_idx = self.idx2file[index]
-            # h5py_file = self.h5py_idx2file[h5py_idx]
 
-            # f = h5py.File(h5py_file, 'r')
-
-            # # sent = f['sentences'][sent_idx].decode("utf-8")
-            # sent = f['sentences'][sent_idx]
-            # full_embeds = torch.Tensor(np.array(f[str(sent_idx)]))
-            # sample = (sent, full_embeds)
             
             
         else:
@@ -490,13 +477,11 @@ class spDatasetWeakShuffle(datautil.Dataset):
         ).to(self.device)
 
         if self.traintest == 'test':
-            # print("[del] RETURN TARGS")
             targs = []
             for example in batch:
                 targs.append(example[2])
             return text_embeds, padded_audio_embeds, lengths, targs, full_text
         else:
-            # print("[del] not return targs")
             return text_embeds, padded_audio_embeds.float(), lengths
 
     def mean_batching_collate(self, batch):
@@ -518,8 +503,6 @@ class spDatasetWeakShuffle(datautil.Dataset):
         ).to(self.device)
         
         return text_embeds, audio_embeds, lengths
-
-
 
 class RandomBatchSampler(Sampler):
     """Sampling class to create random sequential batches from a given dataset
@@ -558,16 +541,7 @@ class TextEncoder(nn.Module):
         super().__init__()
         model_name_or_path = CFG.text_model_name
         self.config_keys = ['max_seq_length', 'do_lower_case']
-        
-
-        # model_args: Dict = {}
         self.do_lower_case = None
-        # my_dropout = 0.1
-        # cache_dir = None
-        # config_kwargs = {
-        #     "attention_dropout": my_dropout,
-        #     "dropout": my_dropout,
-        # }
 
         config = AutoConfig.from_pretrained(model_name_or_path)
         self.hidden_dim = config.dim
@@ -732,8 +706,6 @@ class SequentialAudioModel(nn.Module):
 
         # pad_pack = args.pad_pack
         self.pad_pack = CFG.pad_pack
-        self.use_softmax = True
-        # TODO: print("[TODO] pad_pack is set to false")
 
     def forward(self, audio_seq):
         features, length = audio_seq
@@ -742,28 +714,18 @@ class SequentialAudioModel(nn.Module):
         h0 = torch.zeros(self.layer_dim, features.size(0), self.hidden_dim).requires_grad_().to(self.device)
 
         if length != None:
-            # print("lengths: ", length)
-            # print("should be [BS* SL * ?] ", x.shape)
             if self.pad_pack:
-                # print("!! PACK PAD ON!!")
                 # Pack the features such that we do not compute zero products
                 features = pack_padded_sequence(features, length, batch_first=True, enforce_sorted=False)
-
-            #embedded = torch.nn.utils.rnn.pack_padded_sequence(x, length, batch_first=True, enforce_sorted=False)
-            #packed_output, h0 = self.rnn(embedded, h0.detach())
 
             out, h0 = self.seq_model(features, h0.detach())
             if self.pad_pack:
                 out, output_lengths = pad_packed_sequence(out, batch_first=True)
-            
             do_trick = True
-            # do_trick = False
 
         else:
             # Forward propagation by passing in the input and hidden state into the model
-            #out, h0 = self.rnn(x, h0.detach())
-            out, h0 = self.seq_model(features, h0.detach())
-            # print("[rnn] out forward: [bs, sl, hidden]", out.shape)
+            out, h0 = self.seq_model(features, h0.detach())     # shape [bs, sl, hidden]
             do_trick=False
 
         # Convert the final state to our desired output shape (batch_size, output_dim)
@@ -772,14 +734,11 @@ class SequentialAudioModel(nn.Module):
         else:
             # Reshaping the outputs
             # so that it can fit into the fully connected layer
-            out = out[:, -1, :]
-            # print("trick outshape:[bs * hidden] ", out.shape)
+            out = out[:, -1, :]     # shape [bs * hidden]
 
         out = self.fc(out)
-        if self.use_softmax:
-            out = self.softmax(out)
-        # print("[rnn] ifnal out: [bs*output]", out.shape)
-        return out
+        out = self.softmax(out)
+        return out  # shape [bs*output]
 
 class simple_ProjectionHead(nn.Module):
     """
@@ -787,9 +746,6 @@ class simple_ProjectionHead(nn.Module):
     """
     def __init__(self, CFG):
         super(simple_ProjectionHead, self).__init__()
-
-        # OG input: input_dim, hidden_dim=768, output_dim=768, proj_type = 'gelu'
-        
         self.input_dim = CFG.audio_encoder_input
         self.hidden_dim = CFG.audio_hidden_dim
         self.output_dim = CFG.final_projection_dim
@@ -827,42 +783,9 @@ class simple_ProjectionHead(nn.Module):
 
         return features
 
-class text_ProjectionHead(nn.Module):
-    # TODO: This module is depricated.
-    def __init__(self, CFG):
-
-        super().__init__()
-        embedding_dim=CFG.mutual_embedding_dim
-        projection_dim=CFG.final_projection_dim
-        dropout=CFG.text_dropout
-
-        self.activation  = CFG.text_activation
-
-        if self.activation == 'relu':
-            self.net = nn.Sequential(
-                nn.Linear(embedding_dim, projection_dim),
-                nn.BatchNorm1d(num_features=projection_dim), # TODO: experiment with batchnormalization
-                nn.ReLU(),
-                nn.Linear(projection_dim, projection_dim),
-            )
-
-        else:
-            self.net = nn.Sequential(
-                nn.Linear(embedding_dim, projection_dim),
-                nn.GELU(),
-                nn.Linear(projection_dim, projection_dim),
-                nn.Dropout(dropout),
-                nn.LayerNorm(projection_dim),
-            )
-    
-    def forward(self, x):
-        x = self.net(x)
-        return x
-
 class mmModule(nn.Module):
     def __init__(self, CFG):
         super().__init__()
-        # self.temperature=CFG.temperature
         self.batch_size = CFG.batch_size
         self.device = CFG.device
 
@@ -875,10 +798,6 @@ class mmModule(nn.Module):
             text_modules = [self.text_encoder, self.text_projection]
         elif CFG.text_proj_head.lower() == 'none':
             text_encoder = TextEncoder(CFG)
-            # pooling_mode_cls_token: bool = False,
-            #  pooling_mode_max_tokens: bool = False,
-            #  pooling_mode_mean_tokens: bool = True,
-            #  pooling_mode_mean_sqrt_len_tokens: bool = False,
             if CFG.text_pooling == 'mean':
                 pooling_model = Pooling(text_encoder.get_word_embedding_dimension(),
                 pooling_mode_mean_tokens = True)
@@ -906,7 +825,6 @@ class mmModule(nn.Module):
         self.text_model = nn.Sequential(text_modules)
         self.audio_model = nn.Sequential(audio_modules)
 
-        # self.temperature = CFG.temperature
         self.eval_every = CFG.eval_every
         self.print_every = CFG.print_every
         self.batch_size = CFG.batch_size
@@ -916,8 +834,6 @@ class mmModule(nn.Module):
         self.init_logging()
 
         self.best_loss = float('inf')
-        # self.loss1 = nn.CrossEntropyLoss()
-        # self.loss2 = nn.CrossEntropyLoss()
         self.max_grad_norm = 1 # magic number for now
 
     @staticmethod
@@ -965,16 +881,12 @@ class mmModule(nn.Module):
         loss_model.to(self.device)
 
         self.val_loader = val_loader
-
-
         num_train_steps = int(steps_per_epoch * CFG.num_epochs)
         warmup_steps =  math.ceil(steps_per_epoch *  CFG.num_epochs * 0.1)  
         self.weight_decay = CFG.weight_decay
         self.optimizer_class = optimizer_class
         self.optimizer_params = {'lr': CFG.lr}
         scheduler_method='WarmupLinear' 
-
-        # print("[del] ", steps_per_epoch, num_train_steps, warmup_steps)
 
         steps_so_far = (start_epoch + 1) * fstep
         self.num_train_steps = num_train_steps
@@ -984,7 +896,6 @@ class mmModule(nn.Module):
             optimizer = self._get_optimizer(loss_model)
         else:
             optimizer = self._get_optimizer(loss_model)
-            # optimizer = loaded_optimizer
             optimizer.load_state_dict(loaded_optimizer_state)
 
         # Initiate or load a scheduler
@@ -994,14 +905,7 @@ class mmModule(nn.Module):
             scheduler = self._get_scheduler(optimizer, scheduler=scheduler_method, warmup_steps=warmup_steps, t_total=num_train_steps)
             scheduler.load_state_dict(loaded_sched_state)
 
-        # TODO: this is a test: does it help to learn the scale?
-        # if loss_model.scale_type != 'learned':
-        #     update_scale = False
-        # else:
-        #     update_scale = True
-        # memory_test_delete = 1000
-
-        print("[del] eval_every, print_every: ", self.eval_every, self.print_every, warmup_steps)
+        print("[del] eval_every, print_every, warmput_steps: ", self.eval_every, self.print_every, warmup_steps)
 
         time_del = []
         for epoch in range(start_epoch, CFG.num_epochs):
@@ -1030,11 +934,7 @@ class mmModule(nn.Module):
                     print("[DEBUG] loading checkpoint, continue")
                     continue
 
-                if steps_per_epoch == step:
-                    print("[DEBUG] : remove -1 in line below!")
-
                 if  step % self.eval_every == 0 or step == steps_per_epoch - 1: 
-                    # print("del: ", self.eval_every, step, steps_per_epoch)
                     # Evaluate on validation set. 
                     print("[eval] start evaluation")
                     mean_loss, metrics = self.evaluate(loss_model)
@@ -1139,13 +1039,6 @@ class mmModule(nn.Module):
             writer.writerow([epoch, steps, loss] + metric_vals)
 
     def save_model(self, extra_name=""):
-        # Debug: saves all models seperately
-        # for idx, name in enumerate(self._modules):
-        #     module = self._modules[name]
-        #     print(module)
-        #     output_dir = os.path.join(self.model_save_path, '{}_weights.pth'.format(name))
-        #     torch.save(module.state_dict(), output_dir)
-
         # Save the model
         output_dir = os.path.join(self.model_save_path, '{}{}_weights.pth'.format('full_model', extra_name))
         torch.save(self.state_dict(), output_dir)
@@ -1203,7 +1096,6 @@ class multimodal_loss(nn.Module):
         if self.scale_type == 'fixed':
             self.fixed_scale = self.scale
         elif self.scale_type == 'learned':
-            # self.init_parameters_logtiscale()
             self.logit_scale = nn.Parameter(torch.log(torch.ones([]) * 100))
             self.logit_scale.requires_grad = True
 
@@ -1462,15 +1354,13 @@ def main(args):
 
 
 def best_results(eval_csv_filename, dur, out_dir):
-    # print("[del] this is eval_csv_filename: ", eval_csv_filename)
-
     csv_file = pd.read_csv(eval_csv_filename)
     best_idx = csv_file['mean_acc'].idxmax()
     best2 = {'duration': dur}
     for k, v in csv_file.iloc[best_idx].to_dict().items():
         best2[k] = v
 
-    outfile = os.path.join(out_dir, 'best_results2.json')
+    outfile = os.path.join(out_dir, 'best_results.json')
     with open(outfile, "w") as file:
         json.dump(best2, file, indent=4, sort_keys=True)
     print("---- Best epoch results ----")
@@ -1549,11 +1439,7 @@ if __name__ == "__main__":
     parser.add_argument('--load_checkpoint', dest='load_checkpoint', action='store_true',
                         help="Load a model, optimizer and scheduler to continue training.")
 
-    # parser.add_argument('--use_old_opt', dest='use_old_opt', action='store_true',
-    #                     help="test: use old or new opt.")
-    # parser.add_argument('--test_evalchange', dest='test_evalchange', action='store_true',
-    #                     help="test: use old or new opt.")
-    parser.add_argument('--pad_pack', dest='pad_pack', action='store_true',
+    parser.add_argument('--pad_pack', dest='pad_pack', action='store_true',     # TODO: depricated
                         help="test: use old or new opt.")
     parser.add_argument('--max_train_samples', type=int, default=0,
                         help='Fixed scale to use')
