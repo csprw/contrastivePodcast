@@ -366,10 +366,10 @@ class spDatasetWeakShuffle(datautil.Dataset):
             break
 
         self.idx2file = idx2file
-        if self.load_full:
-            self.collate_fn = self.full_batching_collate
-        else:
-            self.collate_fn = self.mean_batching_collate
+        # if self.load_full:
+        #     self.collate_fn = self.full_batching_collate
+        # else:
+        #     self.collate_fn = self.mean_batching_collate
 
     def __len__(self):
         """ Denotes the total number of utterances """
@@ -378,16 +378,8 @@ class spDatasetWeakShuffle(datautil.Dataset):
     def __getitem__(self, index):
         """ Return one item from the df """
         if self.traintest == 'test':
-            h5py_idx, sent_idx = self.idx2file[index]
-            h5py_file = self.h5py_idx2file[h5py_idx]
-
-            f = h5py.File(h5py_file, 'r')
-            sent = f['sentences'][sent_idx]
-            full_embeds = torch.Tensor(np.array(f[str(sent_idx)]))
-            target = f['seg_ts'][sent_idx].decode("utf-8") 
-            sample = (sent, full_embeds, target)
-            f.close()
-            return sample
+            print("Weak shuffling not supported for test set")
+            raise NotImplementedError
 
         elif self.load_full:
             text_embeds = []
@@ -430,15 +422,7 @@ class spDatasetWeakShuffle(datautil.Dataset):
                 text_embeds, padding=True, truncation=True, max_length=self.text_max_length, return_tensors='pt'
             ).to(self.device)
 
-            if self.traintest == 'test':
-                print("First process targets")
-                raise NotImplementedError
-                targs = []
-                for example in batch:
-                    targs.append(example[2])
-                return text_embeds, padded_audio_embeds, lengths, targs, full_text
-            else:
-                return text_embeds, padded_audio_embeds, lengths
+            return text_embeds, padded_audio_embeds, lengths
 
         else:
             text_embeds = []
@@ -475,56 +459,6 @@ class spDatasetWeakShuffle(datautil.Dataset):
             return text_embeds, audio_embeds, lengths
      
 
-    def full_batching_collate(self, batch):
-        """ Return a batch """
-        print("[Depricated]")
-        raise NotImplementedError
-        text_embeds = []
-        audio_embeds = []
-        full_text = []
-        lengths  = []
-        
-        for example in batch:
-            full_text.append(example[0])
-            text_embeds.append(example[0])
-            audio_embeds.append(example[1])
-            lengths.append(len(example[1]))
-        
-        # Pad the audio embeddings
-        padded_audio_embeds = pad_sequence(audio_embeds, batch_first=True).to(self.device)
-        
-        # Tokenize text
-        text_embeds = self.tokenizer(
-            text_embeds, padding=True, truncation=True, max_length=self.text_max_length, return_tensors='pt'
-        ).to(self.device)
-
-        if self.traintest == 'test':
-            targs = []
-            for example in batch:
-                targs.append(example[2])
-            return text_embeds, padded_audio_embeds, lengths, targs, full_text
-        else:
-            return text_embeds, padded_audio_embeds.float(), lengths
-
-    def mean_batching_collate(self, batch):
-        """ Return a batch """
-        text_embeds = []
-        audio_embeds = []
-        lengths  = []
-        for example in batch:
-            text_embeds.append(example[0])
-            audio_embeds.append(example[1])
-
-        # Combine audio embeddings to a Tensor
-        audio_embeds = torch.stack(audio_embeds).to(self.device)
-
-        # Tokenize text
-        max_length = 32 # TODO: is dit nodig?
-        text_embeds = self.tokenizer(
-            text_embeds, padding=True, truncation=True, max_length=max_length, return_tensors='pt'
-        ).to(self.device)
-        
-        return text_embeds, audio_embeds, lengths
 
 class RandomBatchSampler(Sampler):
     """Sampling class to create random sequential batches from a given dataset
@@ -927,30 +861,30 @@ class mmModule(nn.Module):
             scheduler = self._get_scheduler(optimizer, scheduler=scheduler_method, warmup_steps=warmup_steps, t_total=num_train_steps)
             scheduler.load_state_dict(loaded_sched_state)
 
-        print("[del] eval_every, print_every, warmput_steps: ", self.eval_every, self.print_every, warmup_steps)
+        print("[del] eval_every, print_every, warmup_steps: ", self.eval_every, self.print_every, warmup_steps)
 
         time_del = []
         for epoch in range(start_epoch, CFG.num_epochs):
             t1 = time()
             loss_model.zero_grad()
             loss_model.train()
-            # test1 = time()
+            test1 = time()
 
             # Full training
             # TODO: if training from checkpoint, stop batch in time
             for step, batch in enumerate(iter(train_loader)):
                 
-                #### Leave for debugging, check speedup weak shuffling.
-                # time_del.append(time() - test1)
-                # # sent_features, audio_features, seq_len = batch
-                # if step % 10 == 0 and step != 0:
-                #     print("avg:", np.mean(time_del))
-                #     time_del = []
-                #     test1 = time()
-                # else:
-                #     # print("continue ", step)
-                #     test1 = time()
-                # continue
+                ### Leave for debugging, check speedup weak shuffling.
+                time_del.append(time() - test1)
+                # sent_features, audio_features, seq_len = batch
+                if step % 10 == 0 and step != 0:
+                    print("avg:", np.mean(time_del))
+                    time_del = []
+                    test1 = time()
+                else:
+                    # print("continue ", step)
+                    test1 = time()
+                continue
                 
                 if step < fstep:
                     print("[DEBUG] loading checkpoint, continue")
@@ -993,7 +927,7 @@ class mmModule(nn.Module):
             self.output_all_plots()
             t2 = time()
             print("[fit] epoch duration {} seconds".format(int(t2-t1)))
-            if self.save_model:
+            if args.save_model:
                 self.save_model("epoch_"+str(epoch)+"_")
 
         print("[fit] Done training")
