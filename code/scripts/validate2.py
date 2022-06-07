@@ -1175,6 +1175,7 @@ if __name__ == "__main__":
             read_something = True
         else:
             f = h5py.File("tmp_validation.hdf5", "w")
+            print("Created f [del]")
             read_something= False
         # print("[del] this is keys: ", f.keys())
         for step in range(max_steps):

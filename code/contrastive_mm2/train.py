@@ -397,6 +397,7 @@ class spDatasetWeakShuffle(datautil.Dataset):
             lengths  = []
 
             last_idx = -1
+            del_lens = []
             for enum, i in enumerate(index):
                 # print(self.idx2file[i])
                 h5py_idx, sent_idx = self.idx2file[i]
@@ -410,6 +411,8 @@ class spDatasetWeakShuffle(datautil.Dataset):
                 sent = f['sentences'][sent_idx]
                 full_embeds = torch.Tensor(np.array(f[str(sent_idx)]))
                 # sample = (sent, full_embeds)
+
+                del_lens.append(len(sent))
 
                 # Collate fn
                 full_text.append(sent)
@@ -425,6 +428,8 @@ class spDatasetWeakShuffle(datautil.Dataset):
             text_embeds = self.tokenizer(
                 text_embeds, padding=True, truncation=True, max_length=self.text_max_length, return_tensors='pt'
             ).to(self.device)
+
+            print("[del] lengths: ", list(set(del_lens)))
 
             if self.traintest == 'test':
                 # print("[del] RETURN TARGS")

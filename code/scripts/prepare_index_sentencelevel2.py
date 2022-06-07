@@ -36,7 +36,7 @@ from src.data import load_metadata, find_paths, relative_file_path
 
 import sys
 sys.path.append('../contrastive_mm2/') 
-from gru_test2 import mmModule, Cfg
+from train import mmModule, Cfg
 
 # Load static configuration variables. 
 config_path = "./config.yaml"
