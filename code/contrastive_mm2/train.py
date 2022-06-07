@@ -154,7 +154,7 @@ class MMloader(object):
             raise Exception('Unknown dataset')
         self.val_dataset = val_dataset
         self.val_loader.collate_fn = self.val_dataset.collate_fn
-        print("[MMloader] test dataset loaded, length: ", len(val_dataset))
+        print("[MMloader] val dataset loaded, length: ", len(val_dataset))
 
         if test_dataset_name == "sp_sample":
             test_dataset = self.get_sp_dataset(CFG, directory=conf.sp_sample_path,  traintest="test", load_full=self.load_full, device=self.device)
@@ -247,8 +247,8 @@ class spDatasetNoMemory(datautil.Dataset):
 
             f = h5py.File(h5py_file, 'r')
 
-            # sent = f['sentences'][sent_idx].decode("utf-8")
-            sent = f['sentences'][sent_idx]
+            sent = f['sentences'][sent_idx].decode("utf-8")
+            # sent = f['sentences'][sent_idx]
             full_embeds = torch.Tensor(np.array(f[str(sent_idx)]))
             sample = (sent, full_embeds)
             f.close()
@@ -259,8 +259,8 @@ class spDatasetNoMemory(datautil.Dataset):
 
             f = h5py.File(h5py_file, 'r')
             
-            # sent = f['sentences'][sent_idx].decode("utf-8")
-            sent = f['sentences'][sent_idx]
+            sent = f['sentences'][sent_idx].decode("utf-8")
+            # sent = f['sentences'][sent_idx]
 
             mean_embeds = torch.Tensor(f['mean_embeddings'][sent_idx])
             sample = (sent, mean_embeds)
@@ -408,7 +408,8 @@ class spDatasetWeakShuffle(datautil.Dataset):
                     h5py_file = self.h5py_idx2file[h5py_idx]
                     f = h5py.File(h5py_file, 'r')
 
-                sent = f['sentences'][sent_idx]
+                # sent = f['sentences'][sent_idx]
+                sent = f['sentences'][sent_idx].decode("utf-8")
                 full_embeds = torch.Tensor(np.array(f[str(sent_idx)]))
 
                 del_lens.append(len(sent))
@@ -449,8 +450,8 @@ class spDatasetWeakShuffle(datautil.Dataset):
 
             f = h5py.File(h5py_file, 'r')
             
-            # sent = f['sentences'][sent_idx].decode("utf-8")
-            sent = f['sentences'][sent_idx]
+            sent = f['sentences'][sent_idx].decode("utf-8")
+            # sent = f['sentences'][sent_idx]
 
             mean_embeds = torch.Tensor(f['mean_embeddings'][sent_idx])
             sample = (sent, mean_embeds)
