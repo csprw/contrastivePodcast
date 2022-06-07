@@ -755,7 +755,7 @@ class simple_ProjectionHead(nn.Module):
         self.output_dim = CFG.final_projection_dim
         self.activation  = CFG.audio_activation
         self.config_keys = ['input_dim', 'hidden_dim', 'output_dim', 'activation']
-        dropout = CFG.dropout
+        dropout = CFG.text_dropout
 
         if self.activation == 'relu':
             self.simple_model = nn.Sequential(
@@ -944,7 +944,7 @@ class mmModule(nn.Module):
                     mean_loss, metrics = self.evaluate(loss_model)
                     self.add_logging(epoch, steps_so_far, mean_loss, metrics, train=False)
                     
-                    print("[eval] Epoch {} Step {}/{} \t loss {} \t acc {}".format(epoch, step, len(train_loader), mean_loss, metrics['mean_acc']))
+                    print("[eval] Epoch {} Step {}/{} \t loss {} \t acc {}".format(epoch, step, len(num_train_steps), mean_loss, metrics['mean_acc']))
                     if mean_loss < self.best_loss:
                         print("[eval] better model found")
                         self.best_loss = mean_loss 
@@ -975,7 +975,9 @@ class mmModule(nn.Module):
             self.output_all_plots()
             t2 = time()
             print("[fit] epoch duration {} seconds".format(int(t2-t1)))
-            self.save_model("epoch_"+str(epoch)+"_")
+            if self.save_model:
+                self.save_model("epoch_"+str(epoch)+"_")
+
         print("[fit] Done training")
 
     def evaluate(self, loss_model):
