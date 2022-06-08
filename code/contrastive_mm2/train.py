@@ -958,7 +958,7 @@ class mmModule(nn.Module):
             t2 = time()
             print("[fit] epoch duration {} seconds".format(int(t2-t1)))
             if args.save_model:
-                self.save_model("epoch_"+str(epoch)+"_")
+                self.save_model("_epoch_"+str(epoch))
 
         print("[fit] Done training")
 
@@ -968,7 +968,7 @@ class mmModule(nn.Module):
         self.to(self.device)
 
         iterator = iter(self.val_loader)
-        total_len = 1   # for now I evaluate on a subset
+        total_len = 1000   # for now I evaluate on a subset
 
         with torch.no_grad():
             for step in range(total_len):
