@@ -968,7 +968,7 @@ class mmModule(nn.Module):
         self.to(self.device)
 
         iterator = iter(self.val_loader)
-        total_len = 100   # for now I evaluate on a subset
+        total_len = 500   # for now I evaluate on a subset
 
         with torch.no_grad():
             for step in range(total_len):
