@@ -357,8 +357,8 @@ if __name__ == "__main__":
             print("------------------------------------- Raise save count to: ", save_count + 1)
             save_count += 1
 
-            # if save_count == save_every or outer_folder[0] != last_output_folder[0]:
-            if outer_folder[0] != last_output_folder[0]:
+            if save_count == save_every or outer_folder[0] != last_output_folder[0]:
+            # if outer_folder[0] != last_output_folder[0]:
                 if outer_folder[0] != last_output_folder[0]:
                     print("[del] saving because of end of outer folder ")
                 

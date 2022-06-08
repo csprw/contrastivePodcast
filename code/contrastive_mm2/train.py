@@ -63,8 +63,8 @@ def get_log_name(args, dc):
     """
     Returns name of the current run.
     """
-    log_name = "run-{}_{}_{}_{}_{}_{}".format(args.loss_type, args.audio_proj_head, 
-            args.audio_activation, args.final_projection_dim, dc.lr,
+    log_name = "run-{}_{}_{}_{}_{}_{}".format(args.loss_type, args.text_proj_head, 
+            args.audio_proj_head, args.final_projection_dim, dc.lr,
             datetime.now().strftime("%Y-%m-%d_%H-%M-%S"))
     log_name = os.path.join(args.log_dir, log_name)
     return log_name
@@ -523,6 +523,28 @@ class TextEncoder(nn.Module):
         return self.auto_model.config.hidden_size
 
 
+class text_ProjectionHead(nn.Module):
+    # TODO: This module is depricated.
+    def __init__(self, CFG):
+
+        super().__init__()
+        embedding_dim=CFG.mutual_embedding_dim
+        projection_dim=CFG.final_projection_dim
+        dropout=CFG.text_dropout
+
+        self.net = nn.Sequential(
+            nn.Linear(embedding_dim, projection_dim),
+            nn.GELU(),
+            nn.Linear(projection_dim, projection_dim),
+            nn.Dropout(dropout),
+            nn.LayerNorm(projection_dim),
+        )
+    
+    def forward(self, x):
+        output_tokens = self.net(x['token_embeddings'])
+        features = {'input_ids':x['input_ids'], 'attention_mask':x['attention_mask'],'token_embeddings': output_tokens}
+        return features
+
 class Pooling(nn.Module):
     """Performs pooling (max or mean) on the token embeddings.
 
@@ -747,11 +769,19 @@ class mmModule(nn.Module):
 
         self.loss_type = CFG.loss_type
 
-        if CFG.text_proj_head == 'simple_projection_head':
-            self.text_encoder = TextEncoder(CFG)
-            self.text_projection = text_ProjectionHead(CFG)
+        if CFG.text_proj_head == 'sph':
+            text_encoder = TextEncoder(CFG)
+            text_projection = text_ProjectionHead(CFG)
+            if CFG.text_pooling == 'mean':
+                pooling_model = Pooling(text_encoder.get_word_embedding_dimension(),
+                pooling_mode_mean_tokens = True)
+            elif CFG.text_pooling == 'cls':
+                pooling_model = Pooling(text_encoder.get_word_embedding_dimension(),
+                pooling_mode_mean_tokens = False,
+                pooling_mode_cls_token = True)
 
-            text_modules = [self.text_encoder, self.text_projection]
+            text_modules = [text_encoder, text_projection, pooling_model]
+
         elif CFG.text_proj_head.lower() == 'none':
             text_encoder = TextEncoder(CFG)
             if CFG.text_pooling == 'mean':
@@ -768,7 +798,7 @@ class mmModule(nn.Module):
         if CFG.audio_proj_head in ['rnn', 'gru']:
             audio_encoder = SequentialAudioModel(CFG)
             audio_modules = [audio_encoder]
-        elif CFG.audio_proj_head in ['simple_projection_head']:
+        elif CFG.audio_proj_head in ['sph']:
             audio_encoder = simple_ProjectionHead(CFG)
             audio_modules = [audio_encoder]
         
@@ -781,7 +811,7 @@ class mmModule(nn.Module):
         self.text_model = nn.Sequential(text_modules)
         self.audio_model = nn.Sequential(audio_modules)
 
-        self.eval_every = CFG.eval_every
+        self.eval_every = CFG.eval_every        # TODO: depr?
         self.print_every = CFG.print_every
         self.batch_size = CFG.batch_size
         self.device = CFG.device
@@ -868,23 +898,23 @@ class mmModule(nn.Module):
             t1 = time()
             loss_model.zero_grad()
             loss_model.train()
-            test1 = time()
+            # test1 = time()
 
             # Full training
             # TODO: if training from checkpoint, stop batch in time
             for step, batch in enumerate(iter(train_loader)):
                 
-                ### Leave for debugging, check speedup weak shuffling.
-                time_del.append(time() - test1)
-                # sent_features, audio_features, seq_len = batch
-                if step % 10 == 0 and step != 0:
-                    print("avg:", np.mean(time_del))
-                    time_del = []
-                    test1 = time()
-                else:
-                    # print("continue ", step)
-                    test1 = time()
-                continue
+                # ### Leave for debugging, check speedup weak shuffling.
+                # time_del.append(time() - test1)
+                # # sent_features, audio_features, seq_len = batch
+                # if step % 10 == 0 and step != 0:
+                #     print("avg:", np.mean(time_del))
+                #     time_del = []
+                #     test1 = time()
+                # else:
+                #     # print("continue ", step)
+                #     test1 = time()
+                # continue
                 
                 if step < fstep:
                     print("[DEBUG] loading checkpoint, continue")
@@ -1357,10 +1387,10 @@ if __name__ == "__main__":
                     nargs='?', choices=['simcse_loss', 'clip_loss', 'clip_loss_simple'],
                     help='Name of scale_type (default: %(default)s)')
     parser.add_argument('--audio_proj_head', default='gru', const='gru',
-                    nargs='?', choices=['simple_projection_head', 'rnn', 'gru'],
+                    nargs='?', choices=['sph', 'rnn', 'gru'],
                     help='Activation to use in simple proj head (default: %(default)s)')
     parser.add_argument('--text_proj_head', default='None', const='None',
-                    nargs='?', choices=['simple_projection_head', 'None'],
+                    nargs='?', choices=['sph', 'None'],
                     help='Activation to use in simple proj head (default: %(default)s)')
     parser.add_argument('--text_pooling', default='mean', const='mean',
                     nargs='?', choices=['cls', 'mean'],
