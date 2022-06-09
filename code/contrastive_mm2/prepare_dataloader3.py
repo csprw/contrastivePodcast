@@ -353,6 +353,12 @@ if __name__ == "__main__":
             print("Test set! continue")
             continue
 
+        if int(outer_folder[0]) < 7:
+            last_output_folder = outer_folders[idx]
+            print("Already processed ", outer_folder)
+            continue
+        # print("okay: ", outer_folder)
+        # exit(1)
         if outer_folder != last_output_folder:
             print("------------------------------------- Raise save count to: ", save_count + 1)
             save_count += 1

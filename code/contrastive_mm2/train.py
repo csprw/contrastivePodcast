@@ -209,7 +209,7 @@ class spDatasetNoMemory(datautil.Dataset):
                 idx2file[sample_idx] = (h5idx, sentidx)
                 sample_idx += 1
 
-                if traintest == 'train' and sample_idx >= CFG.max_train_samples:
+                if traintest == 'train' and CFG.max_train_samples > 0 and sample_idx >= CFG.max_train_samples:
                     print("[spdataset] Max exceeded: ", sample_idx)
                     f.close()
                     break
@@ -951,7 +951,7 @@ class mmModule(nn.Module):
                 steps_so_far += 1
 
                 if step % self.print_every == 0:
-                    print("[fit] Epoch {} Step {}/{} \t loss {} \t acc {}".format(epoch, step, len(train_loader), loss_value.item(), metrics['mean_acc']))
+                    print("[fit] Epoch {} Step {}/{} \t loss {} \t acc {}".format(epoch, step, num_train_steps, loss_value.item(), metrics['mean_acc']))
                     self.add_logging(epoch, steps_so_far, loss_value.item(), metrics, train=True)
 
             self.output_all_plots()
