@@ -63,8 +63,8 @@ def get_log_name(args, dc):
     """
     Returns name of the current run.
     """
-    log_name = "run-{}_{}_{}_{}_{}_{}".format(args.loss_type, args.text_proj_head, 
-            args.audio_proj_head, args.final_projection_dim, dc.lr,
+    log_name = "run2-{}_{}_{}_{}_{}_{}".format(args.loss_type, args.text_proj_head, 
+            args.audio_proj_head, args.final_projection_dim, dc.pad_pack,
             datetime.now().strftime("%Y-%m-%d_%H-%M-%S"))
     log_name = os.path.join(args.log_dir, log_name)
     return log_name
@@ -295,7 +295,7 @@ class spDatasetNoMemory(datautil.Dataset):
                 targs.append(example[2])
             return text_embeds, padded_audio_embeds, lengths, targs, full_text
         else:
-            return text_embeds, padded_audio_embeds.float(), lengths
+            return text_embeds, padded_audio_embeds, lengths
 
     def mean_batching_collate(self, batch):
         """ 

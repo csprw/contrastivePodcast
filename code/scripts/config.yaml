@@ -1,23 +1,31 @@
 ########################################
 # Paths for reading yamnet embeddings 
-dataset_path: ../data/sp/podcasts-no-audio-13GB/
-dataset_processed_path: ../data/sp/yamnet/processed/
+dataset_path: ../../data/podcasts-no-audio-13GB/
 
-yamnet_embed_dir: ../data/sp/yamnet/embedding
+# dataset_processed_path: ../data/sp/yamnet/processed/
+yamnet_processed_path: ../../data/yamnet/processed/          # Changed to yamnet_processd_path
+
+# yamnet_embed_dir: ../data/sp/yamnet/embedding
+yamnet_embed_path: ../../data/yamnet/embedding  
+
 yamnet_embed_dir_cloud: /Users/casper/Library/CloudStorage/Box-Box/Spotify-Podcasts/yamnet/embedding
-yamnet_score_dir: ../data/sp/yamnet/score
+# yamnet_score_dir: ../data/sp/yamnet/score
+yamnet_score_path: ../../data/yamnet/score
 
-yamnet_query_embed_path: ../data/sp/yamnet/query_embedding/query/fast
-yamnet_topic_embed_path: ../data/sp/yamnet/processed_topictask
+
+yamnet_query_embed_path: ../../data/yamnet/query_embedding/query/fast
+yamnet_descr_embed_path: ../../data/yamnet/query_embedding/description/fast
+yamnet_topic_embed_path: ../../data/yamnet/processed_topictask
 
 ########################################
 # Paths for contrastive training
 # sp_path: ../data/sp/yamnet/sp_yamnet.h5
-sp_path: ../data/sp/yamnet/processed/
+sp_path: ../../data/yamnet/processed/       # same as yamnett_processed_path!!
 # sp_sample_path: ../data/sp/yamnet/sp_yamnet_sample.h5
-sp_sample_path: ../data/sp/yamnet/processed_sample/
-sp_train_test_split: ../data/sp/yamnet/sp_train_test_split.json
+sp_sample_path: ../../data/yamnet/processed_sample/
+sp_train_test_split: ../../data/yamnet/sp_train_test_split.json
 output_dir: ./output
+
 
 ########################################
 #### Feature Extraction Configuration ####
@@ -34,24 +42,24 @@ features_num_workers: 8
 
 #########
 ### Text to speech
-query_audio_dir: ../data/sp/podcasts-no-audio-13GB/topic_task/query_audio
+query_audio_dir: ../../data/podcasts-no-audio-13GB/topic_task/query_audio
 # query_audio_dir: ../data/sp/yamnet/query_embedding
 # query_embed_dir: ../data/sp/podcasts-no-audio-13GB/topic_task/query_embedding
-query_embed_dir: ../data/sp/yamnet/query_embedding
+query_embed_dir: ../../data/yamnet/query_embedding
 # features_output_path
 
 
-##################################
-#### Search Configuration ####
-# Elasticsearch cluster UCL
-search_es_url: http://localhost:9200/segments/_search
-search_knn_url: http://localhost:9200/segments/_knn_search
+# ##################################
+# #### Search Configuration ####
+# # Elasticsearch cluster UCL
+# search_es_url: http://localhost:9200/segments/_search
+# search_knn_url: http://localhost:9200/segments/_knn_search
 
-# Num of segments to return from the Elasticsearch query
-search_es_num: 100
+# # Num of segments to return from the Elasticsearch query
+# search_es_num: 100
 
-# Directory to cache transformer model in
-search_cache_dir: ./transformers
+# # Directory to cache transformer model in
+# search_cache_dir: ./transformers
 
-# BERT Rerank model to use
-search_rerank_model: amberoad/bert-multilingual-passage-reranking-msmarco
+# # BERT Rerank model to use
+# search_rerank_model: amberoad/bert-multilingual-passage-reranking-msmarco

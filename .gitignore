@@ -1,5 +1,5 @@
 # Folders to ignore, regardless of where they are
-*/data/sp/*
+*/data/*
 */checkpoints/*
 */logs/*
 

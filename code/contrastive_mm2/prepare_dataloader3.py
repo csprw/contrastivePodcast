@@ -236,10 +236,10 @@ def save_all(save_path, all_mean_embeddings, filenames, in_train_set, all_senten
 
 if __name__ == "__main__":
     print("[main] reading data from: ")
-    print(conf.dataset_input_path)
+    print(conf.dataset_path)
 
     # Load all the metadata
-    metadata = load_metadata(conf.dataset_input_path)
+    metadata = load_metadata(conf.dataset_path)
     # metadata = metadata[:100] # [del] delete!
     print("[main] total length of metadata: ", len(metadata))
 
@@ -255,7 +255,7 @@ if __name__ == "__main__":
     print("Metadata samples for train and validation: ", len(metadata))
 
     # Check how many yamnet embeddings are stored on local disk
-    subset_shows = [h5file.parts[-2] for h5file in Path(conf.yamnet_embed_dir).glob('**/*.h5')]
+    subset_shows = [h5file.parts[-2] for h5file in Path(conf.yamnet_embed_path).glob('**/*.h5')]
     subset_shows = set(subset_shows)
     subset = metadata[(metadata['show_filename_prefix'].isin(subset_shows))]
     print("[main] number of data found on local disk: ", len(subset)) 
@@ -280,7 +280,7 @@ if __name__ == "__main__":
         json.dump(train_split, fp, sort_keys=True, indent=4)
 
     # Read transcripts
-    transcripts_dir = os.path.join(conf.dataset_input_path, 'podcasts-transcripts')
+    transcripts_dir = os.path.join(conf.dataset_path, 'podcasts-transcripts')
     transcripts_paths = find_paths(dataframe, transcripts_dir, ".json")
     print("Number of transcripts found: ", len(transcripts_paths))
     transcripts_paths = sorted(transcripts_paths)
@@ -288,9 +288,9 @@ if __name__ == "__main__":
     outer_folders, e_filenames, t_filenames = get_embed_transcript_paths(transcripts_paths)
 
     # Create output folders
-    Path(os.path.join(conf.dataset_processed_path, "train")).mkdir(parents=True, exist_ok=True) 
-    Path(os.path.join(conf.dataset_processed_path, "val")).mkdir(parents=True, exist_ok=True) 
-    Path(os.path.join(conf.dataset_processed_path, "test")).mkdir(parents=True, exist_ok=True) 
+    Path(os.path.join(conf.yamnet_processed_path, "train")).mkdir(parents=True, exist_ok=True) 
+    Path(os.path.join(conf.yamnet_processed_path, "val")).mkdir(parents=True, exist_ok=True) 
+    Path(os.path.join(conf.yamnet_processed_path, "test")).mkdir(parents=True, exist_ok=True) 
 
     # Before processing all other data, first do the test set
     # That way we can move the evaluation task easier between devices.
@@ -344,7 +344,7 @@ if __name__ == "__main__":
         outer_folder = outer_folders[idx]
         filename = os.path.split(e_filenames[idx])[-1].split('.')[0]
 
-        # save_path_test = os.path.join(conf.dataset_processed_path, "test", last_output_folder.replace(os.sep, '_') + '_embeds.h5')
+        # save_path_test = os.path.join(conf.yamnet_processed_path, "test", last_output_folder.replace(os.sep, '_') + '_embeds.h5')
         # if os.path.isfile(save_path_test):
         #     print("Filename already exists!")
         #     last_output_folder = outer_folders[idx]
@@ -371,9 +371,9 @@ if __name__ == "__main__":
                 print("Save count to zero and save")
                 save_count = 0
 
-                save_path_train = os.path.join(conf.dataset_processed_path, "train", last_output_folder.replace(os.sep, '_') + '_embeds.h5')
-                save_path_val = os.path.join(conf.dataset_processed_path, "val", last_output_folder.replace(os.sep, '_') + '_embeds.h5')
-                save_path_test = os.path.join(conf.dataset_processed_path, "test", last_output_folder.replace(os.sep, '_') + '_embeds.h5')
+                save_path_train = os.path.join(conf.yamnet_processed_path, "train", last_output_folder.replace(os.sep, '_') + '_embeds.h5')
+                save_path_val = os.path.join(conf.yamnet_processed_path, "val", last_output_folder.replace(os.sep, '_') + '_embeds.h5')
+                save_path_test = os.path.join(conf.yamnet_processed_path, "test", last_output_folder.replace(os.sep, '_') + '_embeds.h5')
                 print("saving {}/{}".format(count, len(outer_folders)))
 
                 # save_all(save_path, all_mean_embeddings, filenames, in_train_set, all_sentences, all_full_embeddings)
@@ -429,7 +429,7 @@ if __name__ == "__main__":
 
         try:
             # Load yamnet embeddings and scores
-            embed_path = os.path.join(conf.yamnet_embed_dir, outer_folder, e_filenames[idx])
+            embed_path = os.path.join(conf.yamnet_embed_path, outer_folder, e_filenames[idx])
             yamnet_embedding = pd.read_hdf(embed_path)
 
             # Load the transcript
@@ -477,9 +477,9 @@ if __name__ == "__main__":
             
             test_segment_tsps.extend(segment_ts)
 
-    save_path_train = os.path.join(conf.dataset_processed_path, "train", last_output_folder.replace(os.sep, '_') + '_embeds.h5')
-    save_path_val = os.path.join(conf.dataset_processed_path, "val", last_output_folder.replace(os.sep, '_') + '_embeds.h5')
-    save_path_test = os.path.join(conf.dataset_processed_path, "test", last_output_folder.replace(os.sep, '_') + '_embeds.h5')
+    save_path_train = os.path.join(conf.yamnet_processed_path, "train", last_output_folder.replace(os.sep, '_') + '_embeds.h5')
+    save_path_val = os.path.join(conf.yamnet_processed_path, "val", last_output_folder.replace(os.sep, '_') + '_embeds.h5')
+    save_path_test = os.path.join(conf.yamnet_processed_path, "test", last_output_folder.replace(os.sep, '_') + '_embeds.h5')
     print("saving {}/{}".format(count, len(outer_folders)))
 
     # save_all(save_path, all_mean_embeddings, filenames, in_train_set, all_sentences, all_full_embeddings)
