@@ -1513,8 +1513,6 @@ def cross_entropy(preds, targets, reduction='none'):
 def train_epoch(model, train_loader, optimizer, lr_scheduler, step):
     loss_meter = AvgMeter()
 
-
-
     tqdm_object = tqdm(train_loader, total=len(train_loader))
     for batch in tqdm_object:
         ##batch = {k: v.to(Cfg.device) for k, v in batch.items() if k != "caption"}
@@ -1547,7 +1545,7 @@ def valid_epoch(model, valid_loader):
         tqdm_object.set_postfix(valid_loss=loss_meter.avg)
 
         count += 1
-        if count > 5:
+        if count > 500:
             print("[del] break for now")
             break
     return loss_meter
