@@ -1382,7 +1382,7 @@ class AudioEncoderRNN(nn.Module):
     def forward(self, input):
 
         hidden = self.initHidden()
-        print("Input forward: ", input.shape)
+        # print("Input forward: ", input.shape)
 
         # for i in range(input.shape[1]):
         #     print("i=", i)
