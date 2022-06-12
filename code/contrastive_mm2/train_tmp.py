@@ -78,7 +78,7 @@ def get_log_name(args, dc):
     """
     Returns name of the current run.
     """
-    log_name = "run2-{}_{}_{}_{}_{}_{}".format(args.loss_type, args.text_proj_head, 
+    log_name = "tmp-{}_{}_{}_{}_{}_{}".format(args.loss_type, args.text_proj_head, 
             args.audio_proj_head, args.final_projection_dim, dc.pad_pack,
             datetime.now().strftime("%Y-%m-%d_%H-%M-%S"))
     log_name = os.path.join(args.log_dir, log_name)
@@ -92,6 +92,8 @@ def setup_config(args, dc, device='cpu'):
     set_seed(args)
     log_name = get_log_name(args, dc)
     os.makedirs(log_name, exist_ok=True)
+    os.makedirs(os.path.join(log_name, 'output'), exist_ok=True)
+
 
     # Create a configuration file from CL arguments. 
     config = vars(args)
@@ -174,38 +176,42 @@ class MMloader(object):
             self.val_loader.collate_fn = self.val_dataset.collate_fn
         print("[MMloader] val dataset loaded, length: ", len(val_dataset))
 
-        if test_dataset_name == "sp_sample" and not CFG.weak_shuffle:
+        if test_dataset_name == "sp_sample":
             test_dataset = self.get_sp_dataset(CFG, directory=conf.sp_sample_path,  traintest="test", load_full=self.load_full, device=self.device)
             self.test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, drop_last=True, **kwargs) 
-            self.test_loader.collate_fn = self.test_dataset.collate_fn
-        elif test_dataset_name == "sp" and not CFG.weak_shuffle:
+            
+        elif test_dataset_name == "sp":
             test_dataset = self.get_sp_dataset(CFG, directory=conf.sp_path,  traintest="test",  load_full=self.load_full, device=self.device)
             self.test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, drop_last=True, **kwargs)
-            self.test_loader.collate_fn = self.test_dataset.collate_fn
-        elif test_dataset_name == "sp_sample" and CFG.weak_shuffle:
-            test_dataset = self.get_sp_dataset(CFG, directory=conf.sp_sample_path,  traintest="test", load_full=self.load_full, device=self.device)
-            self.test_loader = DataLoader(
-                test_dataset, batch_size=None,  # must be disabled when using samplers
-                sampler=BatchSampler(RandomBatchSampler(test_dataset, batch_size), batch_size=batch_size, drop_last=True)
-            )
-        elif test_dataset_name == "sp" and CFG.weak_shuffle:
-            test_dataset = self.get_sp_dataset(CFG, directory=conf.sp_path,  traintest="test", load_full=self.load_full, device=self.device)
-            self.test_loader = DataLoader(
-                test_dataset, batch_size=None,  # must be disabled when using samplers
-                sampler=BatchSampler(RandomBatchSampler(test_dataset, batch_size), batch_size=batch_size, drop_last=True)
-            )
+            
+        # elif test_dataset_name == "sp_sample" and CFG.weak_shuffle:
+        #     test_dataset = self.get_sp_dataset(CFG, directory=conf.sp_sample_path,  traintest="test", load_full=self.load_full, device=self.device)
+        #     self.test_loader = DataLoader(
+        #         test_dataset, batch_size=None,  # must be disabled when using samplers
+        #         sampler=BatchSampler(RandomBatchSampler(test_dataset, batch_size), batch_size=batch_size, drop_last=True)
+        #     )
+        # elif test_dataset_name == "sp" and CFG.weak_shuffle:
+        #     test_dataset = self.get_sp_dataset(CFG, directory=conf.sp_path,  traintest="test", load_full=self.load_full, device=self.device)
+        #     self.test_loader = DataLoader(
+        #         test_dataset, batch_size=None,  # must be disabled when using samplers
+        #         sampler=BatchSampler(RandomBatchSampler(test_dataset, batch_size), batch_size=batch_size, drop_last=True)
+        #     )
         else:
             raise Exception('Unknown dataset')
         self.test_dataset = test_dataset
+        self.test_loader.collate_fn = self.test_dataset.collate_fn
+        self.test_loader.collate_fn = self.test_dataset.collate_fn
         
         print("[MMloader] test dataset loaded, length: ", len(test_dataset))
 
     def get_sp_dataset(self, CFG, directory=conf.sp_sample_path, traintest="train", load_full=False, device=None):
-        if CFG.weak_shuffle:
+        if CFG.weak_shuffle and not traintest=="test":
             dataset =  spDatasetWeakShuffle(CFG, directory=directory, traintest=traintest,  load_full=load_full, device=device)
         else:
             dataset =  spDatasetNoMemory(CFG, directory=directory, traintest=traintest,  load_full=load_full, device=device)
+        
         return dataset
+
 
 class spDatasetNoMemory(datautil.Dataset):
     """
@@ -1248,7 +1254,7 @@ class RandomBatchSampler(Sampler):
 
 @dataclass
 class Cfg:
-    batch_size: int = 128
+    # batch_size: int = 128
     num_epochs: int = 1
     loss_type: str = 'simcse_loss'
     lr: float = 5e-5
@@ -1302,38 +1308,29 @@ class Cfg:
     weak_shuffle: bool = False
 
     # NEW
-    pretrained = True # for both image encoder and text encoder
-    trainable = True # for both image encoder and text encoder
-    temperature = 1.0
-    batch_size = 32
-    num_workers = 4
-    head_lr = 1e-3
+    pretrained:bool = True # for both image encoder and text encoder
+    trainable:bool = True # for both image encoder and text encoder
+    temperature:float = 1.0
+    batch_size:int = 32
+    
+    image_embedding: int= 768
+    text_encoder_model: str = "distilbert-base-uncased"
+    text_embedding: int = 768
+    text_tokenizer: str = "distilbert-base-uncased"
+    max_length: int = 200
+
+    # for projection head; used for both image and text encoders
+    # num_projection_layers = 1
+    projection_dim: int = 256 
+    dropout: int = 0.1
+
+    head_lr: float = 1e-3
     image_encoder_lr = 1e-4
     text_encoder_lr = 1e-5
     weight_decay = 1e-3
-    patience = 1
-    factor = 0.8
+    patience = 1                    # opt
+    factor = 0.8                    # opt
     epochs = 12
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-    model_name = 'resnet50'
-    image_embedding = 768
-    text_encoder_model = "distilbert-base-uncased"
-    text_embedding = 768
-    text_tokenizer = "distilbert-base-uncased"
-    max_length = 200
-
-    pretrained = True # for both image encoder and text encoder
-    trainable = True # for both image encoder and text encoder
-    temperature = 1.0
-
-    # image size
-    size = 224
-
-    # for projection head; used for both image and text encoders
-    num_projection_layers = 1
-    projection_dim = 256 
-    dropout = 0.1
 
 class AvgMeter:
     def __init__(self, name="Metric"):
@@ -1565,7 +1562,7 @@ def valid_epoch(model, valid_loader):
         tqdm_object.set_postfix(valid_loss=loss_meter.avg)
 
         count += 1
-        if count > 500:
+        if count > 1:
             print("[del] break for now")
             break
     return loss_meter
@@ -1615,7 +1612,8 @@ def main(args):
         
         if valid_loss.avg < best_loss:
             best_loss = valid_loss.avg
-            torch.save(model.state_dict(), "best.pt")
+            outname = os.path.join(FullCfg.log_name, "output/best_model_weights.pt")
+            torch.save(model.state_dict(), outname)
             print("Saved Best Model!")
         
         lr_scheduler.step(valid_loss.avg)
@@ -1720,3 +1718,6 @@ if __name__ == "__main__":
     args, unparsed = parser.parse_known_args()
 
     main(args)
+
+
+    

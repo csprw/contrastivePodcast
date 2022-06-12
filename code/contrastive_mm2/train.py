@@ -410,8 +410,10 @@ class spDatasetWeakShuffle(datautil.Dataset):
                 h5py_idx, sent_idx = self.idx2file[i]
                 if h5py_idx != last_idx:
                     # Clear memory
-                    # del self.mean_embeds
                     self.f.close()
+                    del self.mean_embeds
+                    gc.collect()
+                    print("[del3] Garbage collected")
 
                     h5py_file = self.h5py_idx2file[h5py_idx]
                     self.f = h5py.File(h5py_file, 'r')
@@ -453,8 +455,10 @@ class spDatasetWeakShuffle(datautil.Dataset):
 
                 if h5py_idx != last_idx:
                     # Clear memory
-                    del self.mean_embeds
                     self.f.close()
+                    del self.mean_embeds
+                    gc.collect()
+                    print("Garbage collected")
 
                     h5py_file = self.h5py_idx2file[h5py_idx]
                     self.f = h5py.File(h5py_file, 'r')
