@@ -363,7 +363,7 @@ class spDatasetWeakShuffle(datautil.Dataset):
 
         for h5idx, h5py_file in enumerate(h5py_files):    
             f = h5py.File(h5py_file, 'r')
-            print("[spdataset] loading {}/{}: ".format(h5idx, len(h5py_files), h5py_file))
+            print("[spdataset] loading {}/{}: {}".format(h5idx, len(h5py_files), h5py_file))
             self.max_embed_dim = max(self.max_embed_dim, f.attrs['max_embed_dim'])  # TODO: can be removed?
 
             for sentidx in range(len(f['sentences'])):
