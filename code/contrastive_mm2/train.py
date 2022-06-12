@@ -411,7 +411,7 @@ class spDatasetWeakShuffle(datautil.Dataset):
                 if h5py_idx != last_idx:
                     # Clear memory
                     self.f.close()
-                    del self.mean_embeds
+                    # del self.mean_embeds
                     gc.collect()
                     print("[del3] Garbage collected")
 
