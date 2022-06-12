@@ -168,7 +168,7 @@ class Evaluator(object):
                 text_logits = audio_logits.t()
                 audio_probs = audio_logits.softmax(dim=-1).cpu().numpy()
                 text_probs = text_logits.softmax(dim=-1).cpu().numpy()
-                ground_truth = torch.arange(self.bs,  dtype=torch.long, device=self.device)
+                ground_truth = torch.arange(self.bs,  dtype=torch.long).cpu()
                 audio_acc = torch.eq(torch.tensor(audio_probs.argmax(axis=0)), ground_truth).sum() / ground_truth.shape[0]
                 text_acc = torch.eq(torch.tensor(text_probs.argmax(axis=0)), ground_truth).sum() / ground_truth.shape[0]
                 accs.append((audio_acc.item() + text_acc.item()) / 2)
