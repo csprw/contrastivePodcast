@@ -422,7 +422,7 @@ class spDatasetWeakShuffle(datautil.Dataset):
             lengths  = []
 
             last_idx = self.last_idx
-            # del_lens = []
+            del_lens = []
             # del_lens2 = []
 
             for enum, i in enumerate(index):
@@ -441,6 +441,9 @@ class spDatasetWeakShuffle(datautil.Dataset):
                 sent = self.f['sentences'][sent_idx].decode("utf-8")
                 full_embeds = torch.Tensor(np.array(self.f[str(sent_idx)]))
 
+                print("sent: ", sent)
+                del_lens.append(len(sent.split(' ')))
+
                 # Collate fn
                 full_text.append(sent)
                 text_embeds.append(sent)
@@ -449,6 +452,7 @@ class spDatasetWeakShuffle(datautil.Dataset):
 
                 last_idx = h5py_idx
 
+            print("lens: ", del_lens)
             self.last_idx = last_idx
 
              # Pad the audio embeddings
@@ -518,7 +522,8 @@ class RandomBatchSampler(Sampler):
         self.batch_size = batch_size
         self.dataset_length = len(dataset)
         self.n_batches = self.dataset_length / self.batch_size
-        self.batch_ids = torch.randperm(int(self.n_batches))
+        # self.batch_ids = torch.randperm(int(self.n_batches))
+        self.batch_ids = torch.arange(int(self.n_batches))
 
     def __len__(self):
         return self.batch_size
@@ -1392,42 +1397,69 @@ class AudioEncoderRNN(nn.Module):
         self.hidden_dim = 768
         self.dropout = 0.1
 
+        self.num_layers = 2
 
         #self.embedding = nn.Embedding(self.input_dim , self.hidden_dim)
-        self.gru = nn.GRU(self.input_dim, self.hidden_dim, batch_first=True)
+        # self.gru = nn.GRU(self.input_dim, self.hidden_dim, batch_first=True)
+        # self.gru = nn.LSTM(
+        #     input_size=self.input_dim,
+        #     hidden_size=self.hidden_dim,
+        #     num_layers=self.num_layers,
+        #     batch_first=True,
+        # )
+        # self.gru =  nn.GRU(
+        #     input_size=self.input_dim, 
+        #     hidden_size=self.hidden_dim, 
+        #     num_layers=self.num_layers, 
+        #     batch_first=True)
+
+        self.gru = nn.RNN(
+            self.input_dim, self.hidden_dim, self.num_layers, batch_first=True, dropout=0.1
+        )
         self.dropout = nn.Dropout(self.dropout)
 
         self.fc = nn.Linear(self.hidden_dim, self.hidden_dim)
+        # self.fc = nn.Linear(self.hidden_dim, self.hidden_dim)
         self.relu = nn.ReLU()
         self.batch_size = 128
 
     def forward(self, input):
-
-        # print("[DEL] shape of input: ", input.shape)
+        # print("[del3] INPUT encoder: ", input)
+       
         hidden = self.initHidden(input.shape)
+        # print("[DEL] shape of input: ", input.shape, hidden.shape)
         # print("Input forward: ", input.shape)
 
         # for i in range(input.shape[1]):
         #     print("i=", i)
         #     cur_embed = input[:,i,:]
-        #     print("Cur embed: ", cur_embed.shape)
+        #     print("Cur embed: ", cur_embed.shape, hidden.shape)
         #     #cur_embed = cur_embed.float()
         #     # print("Cur embed: ", cur_embed)
         #     #embedded = self.embedding(cur_embed)
         #     # print("Embedded: ", embedded.shape)
         #     #output = embedded.view(1, 1, -1)
-            # print("OUtput: ", output.shape)
-        output, hidden = self.gru(input, hidden)
+        #     # print("OUtput: ", output.shape)
+        #     output, hidden = self.gru(cur_embed, hidden)
+        output, hidden = self.gru(input, hidden.detach())
 
         # TODO: this is the same result, but a different backward propagation.
         # Option 1:
-        output = self.fc(self.relu(output[:,-1]))
+        # output = self.fc(self.relu(output[:,-1]))
         # Option 2:
-        # output = self.fc(self.relu(output[:, -1, :]))
+        output = self.fc(self.relu(output[:, -1, :]))
+
+        # print("[del3] Output encoder:  in train_tmp", output.shape, output)
+
         return output
 
     def initHidden(self, s):
-        return torch.zeros(1, s[0], self.hidden_dim, device=Cfg.device)
+        # return torch.zeros(1, s[0], self.hidden_dim, device=Cfg.device)
+        # h0 = torch.zeros(self.num_layers, s[0], self.hidden_dim)
+        h0= torch.randn(self.num_layers, s[0], self.hidden_dim).requires_grad_()
+        # torch.zeros(self.layer_dim, features.size(0), self.hidden_dim).requires_grad_().to(self.device)
+        return h0
+        # return torch.zeros(1, 1, self.hidden_dim, device=Cfg.device)
 
 
 class TextEncoder(nn.Module):
@@ -1576,7 +1608,7 @@ def valid_epoch(model, valid_loader):
         tqdm_object.set_postfix(valid_loss=loss_meter.avg)
 
         count += 1
-        if count > 1:
+        if count > 500:
             print("[del] break for now")
             break
     return loss_meter

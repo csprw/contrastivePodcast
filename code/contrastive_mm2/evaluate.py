@@ -95,7 +95,8 @@ class Evaluator(object):
         self.calc_acc = calc_acc
         self.acc = 0.0
 
-        self.topic_output =  os.path.join(conf.yamnet_embed_path, "topic_embeddings")   # TODO: change to CFG
+        # self.topic_output =  os.path.join(conf.yamnet_embed_path, "topic_embeddings")   # TODO: change to CFG
+        self.topic_output =  os.path.join(conf.yamnet_embed_path, "topic_embeddings", os.path.split(model_path)[-1]) 
         Path(self.topic_output).mkdir(parents=True, exist_ok=True)
 
         
