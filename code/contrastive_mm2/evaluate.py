@@ -47,28 +47,28 @@ def rec_at_k(scores, num_rel, k):
     return rec
         
 
-def text_to_embed(tokenizer, text, full_model):
-    tokenized_text = tokenizer(
-        text, padding=True, truncation=True, max_length=32, return_tensors='pt', return_token_type_ids=True,
-    )
+# def text_to_embed(tokenizer, text, full_model):
+#     tokenized_text = tokenizer(
+#         text, padding=True, truncation=True, max_length=32, return_tensors='pt', return_token_type_ids=True,
+#     )
     
-    with torch.no_grad():
-        reps_sentences = full_model.text_model(tokenized_text)['sentence_embedding']
-        embed = reps_sentences / reps_sentences.norm(dim=1, keepdim=True)
+#     with torch.no_grad():
+#         reps_sentences = full_model.text_model(tokenized_text)['sentence_embedding']
+#         embed = reps_sentences / reps_sentences.norm(dim=1, keepdim=True)
 
-    return embed
+#     return embed
 
 
-def audio_to_embed(CFG, yamnets, query_lengths, full_model):
-    if CFG.audio_proj_head == 'gru':
-        padded_yamnets = pad_sequence(yamnets, batch_first=True)
+# def audio_to_embed(CFG, yamnets, query_lengths, full_model):
+#     if CFG.audio_proj_head == 'gru':
+#         padded_yamnets = pad_sequence(yamnets, batch_first=True)
 
-        with torch.no_grad():
-            reps_audio = full_model.audio_model((padded_yamnets, query_lengths))
-            embed = reps_audio / reps_audio.norm(dim=1, keepdim=True)
-    else:
-        raise NotImplementedError
-    return embed
+#         with torch.no_grad():
+#             reps_audio = full_model.audio_model((padded_yamnets, query_lengths))
+#             embed = reps_audio / reps_audio.norm(dim=1, keepdim=True)
+#     else:
+#         raise NotImplementedError
+#     return embed
 
 
 class Evaluator(object):
@@ -122,6 +122,19 @@ class Evaluator(object):
             raise NotImplementedError
         return embed
 
+    def text_to_embed(self, text):
+        tokenized_text = self.tokenizer(
+            text, padding=True, truncation=True, max_length=32, return_tensors='pt', return_token_type_ids=True,
+        )
+        
+        
+        with torch.no_grad():
+            tokenized_text = tokenized_text.to(self.device)
+            reps_sentences = self.model.text_model(tokenized_text)['sentence_embedding']
+            embed = reps_sentences / reps_sentences.norm(dim=1, keepdim=True)
+
+        return embed
+
     @torch.no_grad()  
     def encode_testset_new(self, max_samples):
         accs = []
@@ -150,6 +163,7 @@ class Evaluator(object):
 
                 reps_sentences = self.model.text_model(tok_sentences)['sentence_embedding']
                 reps_audio = self.model.audio_model((audio_features, seq_len))
+                print(reps_audio)
 
                 audio_batch = reps_audio / reps_audio.norm(dim=1, keepdim=True)
                 text_batch = reps_sentences / reps_sentences.norm(dim=1, keepdim=True)
@@ -200,12 +214,12 @@ class Evaluator(object):
             embed_path = conf.yamnet_query_embed_path
             # Read queries
             self.queries = topics_df[query_field].tolist()
-            self.query_text_encoding = text_to_embed(self.tokenizer, self.queries, self.model)
+            self.query_text_encoding = self.text_to_embed(self.queries)
         
         elif query_field == 'description':
             embed_path = conf.yamnet_descr_embed_path
             self.query_descr = topics_df[query_field].tolist()
-            self.descr_text_encoding = text_to_embed(self.tokenizer, self.query_descr, self.model)
+            self.descr_text_encoding = self.text_to_embed(self.query_descr)
         self.query_nums  = topics_df['num'].tolist()
 
         # Read yamnet embeddings for queries
@@ -366,6 +380,9 @@ def main(args):
     evaluator = Evaluator(CFG, model_path, full_model, data_loader, 
             args.save_intermediate, args.calc_acc)
     max_samples = evaluator.get_max_data()
+
+    max_samples = 128 * 4
+    print("deleteeeee")
 
     evaluator.encode_testset_new(max_samples)
     evaluator.encode_queries(topics_df, query_field='query')

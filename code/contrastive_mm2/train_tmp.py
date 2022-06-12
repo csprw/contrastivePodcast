@@ -272,7 +272,7 @@ class spDatasetNoMemory(datautil.Dataset):
             h5py_file = self.h5py_idx2file[h5py_idx]
 
             f = h5py.File(h5py_file, 'r')
-            sent = f['sentences'][sent_idx]
+            sent = f['sentences'][sent_idx].decode("utf-8")
             full_embeds = torch.Tensor(np.array(f[str(sent_idx)]))
             target = f['seg_ts'][sent_idx].decode("utf-8") 
             sample = (sent, full_embeds, target)
@@ -1279,7 +1279,7 @@ class Cfg:
     text_activation: str = 'gelu'
     mutual_embedding_dim: int = 768
 
-    final_projection_dim: int = 768  # [256 or 768]
+    final_projection_dim: int = 256  # [256 or 768]
     audio_dropout: float = 0.1
     text_dropout: float = 0.1
     weight_decay: float = 0.01
@@ -1322,7 +1322,7 @@ class Cfg:
     # for projection head; used for both image and text encoders
     # num_projection_layers = 1
     projection_dim: int = 256 
-    dropout: int = 0.1
+    dropout: float = 0.1
 
     head_lr: float = 1e-3
     image_encoder_lr = 1e-4
@@ -1358,14 +1358,16 @@ class AudioEncoder(nn.Module):
     Encode images to a fixed size vector
     """
     def __init__(
-        self, model_name="ImageEncoder", pretrained=Cfg.pretrained, trainable=Cfg.trainable
+        self, FullCfg
     ):
         super().__init__()
 
-        print("Would create model for name: ", model_name)
+        # print("Would create model for name: ", model_name)
         # self.model = timm.create_model(
         #     model_name, pretrained, num_classes=0, global_pool="avg"
         # )
+        pretrained=FullCfg.pretrained
+        trainable=FullCfg.trainable
         self.input_dim = 1024
         self.hidden_dim = 768
         self.output_dim = 768
@@ -1383,7 +1385,7 @@ class AudioEncoder(nn.Module):
         return self.model(x)
 
 class AudioEncoderRNN(nn.Module):
-    def __init__(self):
+    def __init__(self, FullCfg):
         super(AudioEncoderRNN, self).__init__()
 
         self.input_dim = 1024
@@ -1401,7 +1403,8 @@ class AudioEncoderRNN(nn.Module):
 
     def forward(self, input):
 
-        hidden = self.initHidden()
+        # print("[DEL] shape of input: ", input.shape)
+        hidden = self.initHidden(input.shape)
         # print("Input forward: ", input.shape)
 
         # for i in range(input.shape[1]):
@@ -1423,13 +1426,17 @@ class AudioEncoderRNN(nn.Module):
         # output = self.fc(self.relu(output[:, -1, :]))
         return output
 
-    def initHidden(self):
-        return torch.zeros(1, self.batch_size, self.hidden_dim, device=Cfg.device)
+    def initHidden(self, s):
+        return torch.zeros(1, s[0], self.hidden_dim, device=Cfg.device)
 
 
 class TextEncoder(nn.Module):
-    def __init__(self, model_name=Cfg.text_encoder_model, pretrained=Cfg.pretrained, trainable=Cfg.trainable):
+    def __init__(self, FullCfg):
         super().__init__()
+        model_name=FullCfg.text_encoder_model
+        pretrained=FullCfg.pretrained
+        trainable=FullCfg.trainable
+
         if pretrained:
             self.model = DistilBertModel.from_pretrained(model_name)
         else:
@@ -1449,11 +1456,13 @@ class TextEncoder(nn.Module):
 class ProjectionHead(nn.Module):
     def __init__(
         self,
-        embedding_dim,
-        projection_dim=Cfg.projection_dim,
-        dropout=Cfg.dropout
+        FullCfg
     ):
         super().__init__()
+        embedding_dim = FullCfg.mutual_embedding_dim
+        projection_dim=FullCfg.projection_dim
+        dropout=FullCfg.dropout
+
         self.embedding_dim = embedding_dim
         self.projection = nn.Linear(embedding_dim, projection_dim)
         self.gelu = nn.GELU()
@@ -1472,22 +1481,27 @@ class ProjectionHead(nn.Module):
 
 class CLIPModel(nn.Module):
     def __init__(
-        self, 
-        temperature=Cfg.temperature,
-        image_embedding=Cfg.image_embedding,
-        text_embedding=Cfg.text_embedding,
+        self, FullCfg, 
+        # temperature=Cfg.temperature,
+        # image_embedding=Cfg.image_embedding,
+        # text_embedding=Cfg.text_embedding,
     ):
         super().__init__()
-        self.audio_proj_head = args.audio_proj_head
+
+        temperature = FullCfg.temperature
+        image_embedding = FullCfg.image_embedding
+        text_embedding = FullCfg.text_embedding
+
+        self.audio_proj_head = FullCfg.audio_proj_head
         if self.audio_proj_head == 'sph':
-            self.audio_encoder = AudioEncoder()
+            self.audio_encoder = AudioEncoder(FullCfg)
         elif self.audio_proj_head == 'gru':
-            self.audio_encoder = AudioEncoderRNN()
+            self.audio_encoder = AudioEncoderRNN(FullCfg)
         else: 
             raise NotImplementedError
-        self.text_encoder = TextEncoder()
-        self.audio_projection = ProjectionHead(embedding_dim=image_embedding)
-        self.text_projection = ProjectionHead(embedding_dim=text_embedding)
+        self.text_encoder = TextEncoder(FullCfg)
+        self.audio_projection = ProjectionHead(FullCfg)
+        self.text_projection = ProjectionHead(FullCfg)
         self.temperature = temperature
 
     def forward(self, batch):
@@ -1585,7 +1599,7 @@ def main(args):
     test_loader = data_loader.test_loader # Not used!
     steps_per_epoch = int(len(data_loader.train_dataset) / FullCfg.batch_size)
 
-    model = CLIPModel().to(FullCfg.device)
+    model = CLIPModel(FullCfg).to(FullCfg.device)
 
     params = [
         {"params": model.audio_encoder.parameters(), "lr": FullCfg.image_encoder_lr},
@@ -1662,7 +1676,7 @@ if __name__ == "__main__":
     parser.add_argument('--batch_size', type=int, default=128, 
                         help='batch_size')
 
-    parser.add_argument('--final_projection_dim', type=int, default=768, 
+    parser.add_argument('--final_projection_dim', type=int, default=256, 
                     nargs='?', choices=[256, 768],
                     help='Final output dimensions of the embeddings')
     parser.add_argument('--loss_type', default='simcse_loss', const='simcse_loss',
