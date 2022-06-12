@@ -415,7 +415,7 @@ class spDatasetWeakShuffle(datautil.Dataset):
                     self.f = h5py.File(h5py_file, 'r')
 
                     print("[del2] loaded new h5py file: ", h5py_idx, h5py_file)
-
+                
                 # sent = f['sentences'][sent_idx]
                 sent = self.f['sentences'][sent_idx].decode("utf-8")
                 full_embeds = torch.Tensor(np.array(self.f[str(sent_idx)]))
@@ -640,8 +640,9 @@ class RandomBatchSampler(Sampler):
     def __iter__(self):
         for id in self.batch_ids:
             idx = torch.arange(id * self.batch_size, (id + 1) * self.batch_size)
-            t = torch.randperm(idx.shape[0])
-            idx= idx[t].view(idx.size())
+            # TODO: only do this if in the same file
+            # t = torch.randperm(idx.shape[0])
+            # idx= idx[t].view(idx.size())
             for index in idx:
                 yield int(index)
         if int(self.n_batches) < self.n_batches:
