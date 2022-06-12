@@ -520,8 +520,8 @@ class RandomBatchSampler(Sampler):
     def __iter__(self):
         for id in self.batch_ids:
             idx = torch.arange(id * self.batch_size, (id + 1) * self.batch_size)
-            t = torch.randperm(idx.shape[0])
-            idx= idx[t].view(idx.size())
+            # t = torch.randperm(idx.shape[0])
+            # idx= idx[t].view(idx.size())
             for index in idx:
                 yield int(index)
         if int(self.n_batches) < self.n_batches:
@@ -1492,9 +1492,6 @@ class CLIPModel(nn.Module):
         self.audio_projection = ProjectionHead(embedding_dim=image_embedding)
         self.text_projection = ProjectionHead(embedding_dim=text_embedding)
         self.temperature = temperature
-
-
-        
 
     def forward(self, batch):
         sent_features, audio_features, seq_len = batch

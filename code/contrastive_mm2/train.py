@@ -159,34 +159,36 @@ class MMloader(object):
             self.val_loader.collate_fn = self.val_dataset.collate_fn
         print("[MMloader] val dataset loaded, length: ", len(val_dataset))
 
-        if test_dataset_name == "sp_sample" and not CFG.weak_shuffle:
+        if test_dataset_name == "sp_sample":
             test_dataset = self.get_sp_dataset(CFG, directory=conf.sp_sample_path,  traintest="test", load_full=self.load_full, device=self.device)
             self.test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, drop_last=True, **kwargs) 
-            self.test_loader.collate_fn = self.test_dataset.collate_fn
-        elif test_dataset_name == "sp" and not CFG.weak_shuffle:
+            
+        elif test_dataset_name == "sp":
             test_dataset = self.get_sp_dataset(CFG, directory=conf.sp_path,  traintest="test",  load_full=self.load_full, device=self.device)
             self.test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, drop_last=True, **kwargs)
-            self.test_loader.collate_fn = self.test_dataset.collate_fn
-        elif test_dataset_name == "sp_sample" and CFG.weak_shuffle:
-            test_dataset = self.get_sp_dataset(CFG, directory=conf.sp_sample_path,  traintest="test", load_full=self.load_full, device=self.device)
-            self.test_loader = DataLoader(
-                test_dataset, batch_size=None,  # must be disabled when using samplers
-                sampler=BatchSampler(RandomBatchSampler(test_dataset, batch_size), batch_size=batch_size, drop_last=True)
-            )
-        elif test_dataset_name == "sp" and CFG.weak_shuffle:
-            test_dataset = self.get_sp_dataset(CFG, directory=conf.sp_path,  traintest="test", load_full=self.load_full, device=self.device)
-            self.test_loader = DataLoader(
-                test_dataset, batch_size=None,  # must be disabled when using samplers
-                sampler=BatchSampler(RandomBatchSampler(test_dataset, batch_size), batch_size=batch_size, drop_last=True)
-            )
+            
+        # elif test_dataset_name == "sp_sample" and CFG.weak_shuffle:
+        #     test_dataset = self.get_sp_dataset(CFG, directory=conf.sp_sample_path,  traintest="test", load_full=self.load_full, device=self.device)
+        #     self.test_loader = DataLoader(
+        #         test_dataset, batch_size=None,  # must be disabled when using samplers
+        #         sampler=BatchSampler(RandomBatchSampler(test_dataset, batch_size), batch_size=batch_size, drop_last=True)
+        #     )
+        # elif test_dataset_name == "sp" and CFG.weak_shuffle:
+        #     test_dataset = self.get_sp_dataset(CFG, directory=conf.sp_path,  traintest="test", load_full=self.load_full, device=self.device)
+        #     self.test_loader = DataLoader(
+        #         test_dataset, batch_size=None,  # must be disabled when using samplers
+        #         sampler=BatchSampler(RandomBatchSampler(test_dataset, batch_size), batch_size=batch_size, drop_last=True)
+        #     )
         else:
             raise Exception('Unknown dataset')
         self.test_dataset = test_dataset
+        self.test_loader.collate_fn = self.test_dataset.collate_fn
+        self.test_loader.collate_fn = self.test_dataset.collate_fn
         
         print("[MMloader] test dataset loaded, length: ", len(test_dataset))
 
     def get_sp_dataset(self, CFG, directory=conf.sp_sample_path, traintest="train", load_full=False, device=None):
-        if CFG.weak_shuffle:
+        if CFG.weak_shuffle and not traintest=="test":
             dataset =  spDatasetWeakShuffle(CFG, directory=directory, traintest=traintest,  load_full=load_full, device=device)
         else:
             dataset =  spDatasetNoMemory(CFG, directory=directory, traintest=traintest,  load_full=load_full, device=device)
@@ -252,7 +254,7 @@ class spDatasetNoMemory(datautil.Dataset):
             h5py_file = self.h5py_idx2file[h5py_idx]
 
             f = h5py.File(h5py_file, 'r')
-            sent = f['sentences'][sent_idx]
+            sent = f['sentences'][sent_idx].decode("utf-8") 
             full_embeds = torch.Tensor(np.array(f[str(sent_idx)]))
             target = f['seg_ts'][sent_idx].decode("utf-8") 
             sample = (sent, full_embeds, target)
@@ -414,7 +416,7 @@ class spDatasetWeakShuffle(datautil.Dataset):
                     h5py_file = self.h5py_idx2file[h5py_idx]
                     self.f = h5py.File(h5py_file, 'r')
 
-                    print("[del2] loaded new h5py file: ", h5py_idx, h5py_file)
+                    print("[del3] loaded new h5py file: ", h5py_idx, h5py_file)
                 
                 # sent = f['sentences'][sent_idx]
                 sent = self.f['sentences'][sent_idx].decode("utf-8")

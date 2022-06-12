@@ -9,7 +9,7 @@ yamnet_processed_path: ../../data/yamnet/processed/          # Changed to yamnet
 
 
 # yamnet_embed_dir: ../data/sp/yamnet/embedding             # Changed to yamnet_embed_path
-yamnet_embed_path: ../../data/yamnet/embedding_new  
+yamnet_embed_path: ../../data/yamnet/embedding  
 
 
 yamnet_embed_dir_cloud: /Users/casper/Library/CloudStorage/Box-Box/Spotify-Podcasts/yamnet/embedding
