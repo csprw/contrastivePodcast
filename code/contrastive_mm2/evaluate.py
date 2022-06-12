@@ -175,8 +175,8 @@ class Evaluator(object):
 
             cur_idx = step * self.bs
             next_idx = cur_idx + len(targets)
-            text_encoding[cur_idx:next_idx] = text_batch
-            audio_encoding[cur_idx:next_idx] = audio_batch
+            text_encoding[cur_idx:next_idx] = text_batch.cpu().numpy()
+            audio_encoding[cur_idx:next_idx] = audio_batch.cpu().numpy()
             
             all_sents[cur_idx:next_idx] = sents
             all_targs[cur_idx:next_idx] = targets
@@ -395,14 +395,14 @@ if __name__ == "__main__":
     # Parse flags in command line arguments
     parser = ArgumentParser()
 
-    parser.add_argument('--model_path', type=str, default="logs/windows_gru2_15m",
+    parser.add_argument('--model_path', type=str, default="logs/run-clip_loss_None_gru_768_5e-05_2022-06-09_17-08-26",
                         help='Folder where model weights are saved.')
 
     
     parser.add_argument('--save_intermediate', action='store_true', default=False,
                     help='Whether to save intermediate embeddings.')
-    parser.add_argument('--tmp_files_path', type=str, default="logs/windows_gru2_15m",
-                        help='Folder where model weights are saved.')
+    # parser.add_argument('--tmp_files_path', type=str, default="logs/windows_gru2_15m",
+    #                     help='Folder where model weights are saved.')
     parser.add_argument('--calc_acc', action='store_true', default=False,
                     help='Whether to output accuracy.')
     args, unparsed = parser.parse_known_args()
