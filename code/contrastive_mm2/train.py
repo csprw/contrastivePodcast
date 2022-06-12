@@ -144,7 +144,7 @@ class MMloader(object):
             val_dataset = self.get_sp_dataset(CFG, directory=conf.sp_sample_path,  traintest="val", load_full=self.load_full, device=self.device)
         elif val_dataset_name == "sp":
             val_dataset = self.get_sp_dataset(CFG, directory=conf.sp_path,  traintest="val",  load_full=self.load_full, device=self.device)
-            self.val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=True, drop_last=True, **kwargs)
+            #self.val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=True, drop_last=True, **kwargs)
         else:
             raise Exception('Unknown dataset')
         if CFG.weak_shuffle:
@@ -186,7 +186,7 @@ class MMloader(object):
         print("[MMloader] test dataset loaded, length: ", len(test_dataset))
 
     def get_sp_dataset(self, CFG, directory=conf.sp_sample_path, traintest="train", load_full=False, device=None):
-        if CFG.weak_shuffle and traintest=='train':
+        if CFG.weak_shuffle:
             dataset =  spDatasetWeakShuffle(CFG, directory=directory, traintest=traintest,  load_full=load_full, device=device)
         else:
             dataset =  spDatasetNoMemory(CFG, directory=directory, traintest=traintest,  load_full=load_full, device=device)
