@@ -220,7 +220,7 @@ class spDatasetNoMemory(datautil.Dataset):
             self.max_embed_dim = max(self.max_embed_dim, f.attrs['max_embed_dim'])  # TODO: can be removed?
             
             if h5idx % 10 == 0:
-                print("[spdataset] loading {}/{}".format(h5idx, len(h5py_files)))
+                print("[spdataset] loading {}/{}: {}".format(h5idx, len(h5py_files), h5py_file))
 
             for sentidx in range(len(f['sentences'])):
                 idx2file[sample_idx] = (h5idx, sentidx)
