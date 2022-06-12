@@ -441,7 +441,6 @@ class spDatasetWeakShuffle(datautil.Dataset):
                 sent = self.f['sentences'][sent_idx].decode("utf-8")
                 full_embeds = torch.Tensor(np.array(self.f[str(sent_idx)]))
 
-                print("sent: ", sent)
                 del_lens.append(len(sent.split(' ')))
 
                 # Collate fn
@@ -452,7 +451,6 @@ class spDatasetWeakShuffle(datautil.Dataset):
 
                 last_idx = h5py_idx
 
-            print("lens: ", del_lens)
             self.last_idx = last_idx
 
              # Pad the audio embeddings
@@ -1392,7 +1390,7 @@ class AudioEncoder(nn.Module):
 class AudioEncoderRNN(nn.Module):
     def __init__(self, FullCfg):
         super(AudioEncoderRNN, self).__init__()
-
+        self.device = FullCfg.device
         self.input_dim = 1024
         self.hidden_dim = 768
         self.dropout = 0.1
@@ -1441,7 +1439,7 @@ class AudioEncoderRNN(nn.Module):
         #     #output = embedded.view(1, 1, -1)
         #     # print("OUtput: ", output.shape)
         #     output, hidden = self.gru(cur_embed, hidden)
-        output, hidden = self.gru(input, hidden.detach())
+        output, hidden = self.gru(input, hidden.detach().to(self.device))
 
         # TODO: this is the same result, but a different backward propagation.
         # Option 1:
