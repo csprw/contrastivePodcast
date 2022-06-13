@@ -273,7 +273,7 @@ def evaluate_topk(evaluator, query_encodings, pod_encodings):
             pod_encoding = tup[0]
 
             print("[del] query: ", query_encoding.is_cuda)
-            print("[del] pod_encoding: ", pod_encoding.is_cuda)
+            # print("[del] pod_encoding: ", pod_encoding.is_cuda)
 
             full_results[name] = defaultdict(list)
             similarity = (100.0 * query_encoding @ pod_encoding.T).softmax(dim=-1)
