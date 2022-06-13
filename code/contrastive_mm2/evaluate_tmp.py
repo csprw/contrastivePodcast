@@ -23,12 +23,12 @@ from sklearn.metrics import roc_auc_score
 
 import torch 
 from torch.nn.utils.rnn import pad_sequence, pad_packed_sequence, pack_padded_sequence
-
+import torch.nn.functional as F
 
 sys.path.append('../scripts/') 
 from prepare_index_sentencelevel2 import read_metadata_subset
-from train import mmModule, Cfg
-from train import MMloader
+from train_tmp import CLIPModel, Cfg
+from train_tmp import MMloader
 from src.data import load_metadata, find_paths, relative_file_path
 conf = OmegaConf.load("./config.yaml")
 
@@ -43,7 +43,7 @@ def prec_at_k(scores, k):
 def rec_at_k(scores, num_rel, k):
     # (of recommended items that are relevant @k)/(total # of relevant items)
     scores_k = scores[:k]
-    rec = np.sum(scores_k) / num_rel 
+    rec = np.sum(scores_k) / num_rel
     return rec
         
 
@@ -53,10 +53,13 @@ def rec_at_k(scores, num_rel, k):
 #     )
     
 #     with torch.no_grad():
-#         reps_sentences = full_model.text_model(tokenized_text)['sentence_embedding']
-#         embed = reps_sentences / reps_sentences.norm(dim=1, keepdim=True)
+#         text_embeddings = full_model.encoder(tokenized_text)
+#         text_embeddings = full_model.text_projection(text_embeddings)
 
-#     return embed
+#         text_embeddings_n = F.normalize(text_embeddings, p=2, dim=-1)
+
+
+#     return text_embeddings_n
 
 
 # def audio_to_embed(CFG, yamnets, query_lengths, full_model):
@@ -78,11 +81,12 @@ class Evaluator(object):
         Evaluator object
         """
         self.model_path = model_path
+        # self.model_name = os.path.split(model_path)[-1]
         self.model = full_model
         self.device = CFG.device
         self.scale = CFG.scale
         self.bs = CFG.batch_size
-        self.embed_dim = CFG.mutual_embedding_dim
+        self.embed_dim = CFG.final_projection_dim
         self.tokenizer =  data_loader.test_dataset.tokenizer
         self.test_loader = data_loader.test_loader
 
@@ -95,10 +99,8 @@ class Evaluator(object):
         self.calc_acc = calc_acc
         self.acc = 0.0
 
-        # self.topic_output =  os.path.join(conf.yamnet_embed_path, "topic_embeddings")   # TODO: change to CFG
         self.topic_output =  os.path.join(conf.topic_embed_path, "topic_embeddings", os.path.split(model_path)[-1]) 
         Path(self.topic_output).mkdir(parents=True, exist_ok=True)
-
         
     def get_max_data(self):
         "returns max number of sentences to encode"
@@ -118,30 +120,36 @@ class Evaluator(object):
             padded_yamnets = pad_sequence(yamnets, batch_first=True).to(self.device)
 
             with torch.no_grad():
-                reps_audio = self.model.audio_model((padded_yamnets, query_lengths))
-                embed = reps_audio / reps_audio.norm(dim=1, keepdim=True)
+                audio_features = padded_yamnets.to(self.device)  
+
+                audio_embeddings = self.model.audio_encoder(audio_features)
+                audio_embeddings = self.model.audio_projection(audio_embeddings)
         else:
             with torch.no_grad():
-
                 yamnets_mean = [torch.tensor(y.mean(dim=0)) for y in yamnets]
-
                 audio_features = torch.stack(yamnets_mean).to(self.device)
-                reps_audio = self.model.audio_model((audio_features, query_lengths))
-                embed = reps_audio / reps_audio.norm(dim=1, keepdim=True)
-        return embed.cpu()
+                audio_embeddings = self.model.audio_encoder(audio_features)
+                audio_embeddings = self.model.audio_projection(audio_embeddings)
 
+        return audio_embeddings.cpu()
+
+        
     def text_to_embed(self, text):
+        # print("Input of text_to_embeds: ", text)
         tokenized_text = self.tokenizer(
             text, padding=True, truncation=True, max_length=32, return_tensors='pt', return_token_type_ids=True,
         )
-        
+        # print("tokenized: ", tokenized_text)
         
         with torch.no_grad():
             tokenized_text = tokenized_text.to(self.device)
-            reps_sentences = self.model.text_model(tokenized_text)['sentence_embedding']
-            embed = reps_sentences / reps_sentences.norm(dim=1, keepdim=True)
 
-        return embed.cpu()
+            text_embeddings = self.model.text_encoder(input_ids=tokenized_text["input_ids"], attention_mask=tokenized_text["attention_mask"])
+            text_embeddings = self.model.text_projection(text_embeddings)
+
+            text_embeddings_n = F.normalize(text_embeddings, p=2, dim=-1)
+
+        return text_embeddings_n.cpu()
 
     @torch.no_grad()  
     def encode_testset_new(self, max_samples):
@@ -153,7 +161,7 @@ class Evaluator(object):
         all_targs = np.zeros(max_samples, dtype=object)
         
         for step, (tok_sentences, audio_features, seq_len, targets, sents) in enumerate(self.test_loader):
-            
+            # sent_features, audio_features, seq_len = batch
             #my_tmp_file = os.path.join("tmpv5", targets[0] +'_'+ str(step)+".hdf5") # for new datasets change this!
             my_tmp_file = os.path.join(self.topic_output, str(step)+".hdf5")
             
@@ -166,33 +174,55 @@ class Evaluator(object):
                 
             else:
                 print("Calculating: ", step, len(self.test_loader), my_tmp_file)
-                tok_sentences = tok_sentences.to(self.device)
-                audio_features = audio_features.to(self.device)  
+                with torch.no_grad():
+                    tok_sentences = tok_sentences.to(self.device)
+                    audio_features = audio_features.to(self.device)  
 
-                reps_sentences = self.model.text_model(tok_sentences)['sentence_embedding']
-                reps_audio = self.model.audio_model((audio_features, seq_len))
+                    audio_embeddings = self.model.audio_encoder(audio_features)
+                    audio_embeddings = self.model.audio_projection(audio_embeddings)
+                    
+                    # print("Audio embedding: ",audio_embeddings )
+                    text_embeddings = self.model.text_encoder(input_ids=tok_sentences["input_ids"], attention_mask=tok_sentences["attention_mask"])
+                    text_embeddings = self.model.text_projection(text_embeddings)
 
-                audio_batch = reps_audio / reps_audio.norm(dim=1, keepdim=True)
-                text_batch = reps_sentences / reps_sentences.norm(dim=1, keepdim=True)
+                    audio_embeddings_n = F.normalize(audio_embeddings, p=2, dim=-1)
+                    text_embeddings_n = F.normalize(text_embeddings, p=2, dim=-1)
+                    # dot_similarity = text_embeddings_n @ audio_embeddings_n.T
 
-                if self.save_intermediate:
-                    f1 = h5py.File(my_tmp_file, "w")
-                    f1.create_dataset('text_batch', data=text_batch.cpu())
-                    f1.create_dataset('audio_batch', data=audio_batch.cpu())
-                    f1.create_dataset('targets', data=np.array(targets, dtype=h5py.special_dtype(vlen=str)))
-                    f1.create_dataset('sents', data=np.array(sents, dtype=h5py.special_dtype(vlen=str)))
-                    f1.close()
+                    text_batch = text_embeddings_n
+                    audio_batch = audio_embeddings_n
+
+                    # ground_truth = torch.arange(self.bs,  dtype=torch.long).reshape(-1,1).cpu()
+                    ground_truth = torch.arange(self.bs,  dtype=torch.long).cpu()
+
+                    # print("shape3: ", text_embeddings_n.shape, audio_embeddings_n.shape)
+                    audio_acc = np.sum(np.array((audio_embeddings_n.argmax(dim=-1) == ground_truth).float()))
+                    text_acc = np.sum(np.array((text_embeddings_n.argmax(dim=-1) == ground_truth).float()))
+
+                    # print("aucio: ", audio_embeddings_n, audio_acc)
+                    # audio_acc = torch.eq(torch.tensor(audio_embeddings_n.argmax(axis=1)), ground_truth).sum() / ground_truth.shape[1]
+                    # text_acc = torch.eq(torch.tensor(text_embeddings_n.argmax(axis=1)), ground_truth).sum() / ground_truth.shape[1]
+                    accs.append((audio_acc + text_acc) / 2)
+                    # print("ACC: ", accs[-1])
+  
+                    if self.save_intermediate:
+                        f1 = h5py.File(my_tmp_file, "w")
+                        f1.create_dataset('text_batch', data=text_batch.cpu())
+                        f1.create_dataset('audio_batch', data=audio_batch.cpu())
+                        f1.create_dataset('targets', data=np.array(targets, dtype=h5py.special_dtype(vlen=str)))
+                        f1.create_dataset('sents', data=np.array(sents, dtype=h5py.special_dtype(vlen=str)))
+                        f1.close()
 
             # calculate accuracy
-            if self.calc_acc:
-                audio_logits =  (audio_batch @ text_batch.t()) * self.fixed_scale
-                text_logits = audio_logits.t()
-                audio_probs = audio_logits.softmax(dim=-1).cpu().numpy()
-                text_probs = text_logits.softmax(dim=-1).cpu().numpy()
-                ground_truth = torch.arange(self.bs,  dtype=torch.long).cpu()
-                audio_acc = torch.eq(torch.tensor(audio_probs.argmax(axis=0)), ground_truth).sum() / ground_truth.shape[0]
-                text_acc = torch.eq(torch.tensor(text_probs.argmax(axis=0)), ground_truth).sum() / ground_truth.shape[0]
-                accs.append((audio_acc.item() + text_acc.item()) / 2)
+            # if self.calc_acc:
+            #     audio_logits =  (audio_batch @ text_batch.t()) * self.fixed_scale
+            #     text_logits = audio_logits.t()
+            #     audio_probs = audio_logits.softmax(dim=-1).cpu().numpy()
+            #     text_probs = text_logits.softmax(dim=-1).cpu().numpy()
+            #     ground_truth = torch.arange(self.bs,  dtype=torch.long).cpu()
+            #     audio_acc = torch.eq(torch.tensor(audio_probs.argmax(axis=0)), ground_truth).sum() / ground_truth.shape[0]
+            #     text_acc = torch.eq(torch.tensor(text_probs.argmax(axis=0)), ground_truth).sum() / ground_truth.shape[0]
+            #     accs.append((audio_acc.item() + text_acc.item()) / 2)
 
             cur_idx = step * self.bs
             next_idx = cur_idx + len(targets)
@@ -226,7 +256,7 @@ class Evaluator(object):
         elif query_field == 'description':
             embed_path = conf.yamnet_descr_embed_path
             self.query_descr = topics_df[query_field].tolist()
-            self.descr_text_encoding = self.text_to_embed(self.query_descr)
+            self.descr_text_encoding = self.text_to_embed( self.query_descr)
         self.query_nums  = topics_df['num'].tolist()
 
         # Read yamnet embeddings for queries
@@ -240,15 +270,13 @@ class Evaluator(object):
             query_lengths.append(len(inbetween_yamnet_embeds))
             tmp = torch.Tensor(inbetween_yamnet_embeds.values)
             query_yamnets.append(tmp)
-
-        # padded_audio_embeds = pad_sequence(audio_embeds, batch_first=True).to(self.device)
             
         if query_field == 'query':
             # Create query embeddings
-            self.query_audio_encoding = self.audio_to_embed(query_yamnets, query_lengths).cpu()
+            self.query_audio_encoding = self.audio_to_embed(query_yamnets, query_lengths)
             print("Queries encoded ", self.query_audio_encoding.shape, self.query_text_encoding.shape)
         elif query_field == 'description':
-            self.descr_audio_encoding = self.audio_to_embed(query_yamnets, query_lengths).cpu()
+            self.descr_audio_encoding = self.audio_to_embed(query_yamnets, query_lengths)
             print("Descriptions encoded ", self.query_audio_encoding.shape, self.query_text_encoding.shape)
 
     def add_query_labels(self, topics_df, val_df):
@@ -277,10 +305,6 @@ def evaluate_topk(evaluator, query_encodings, pod_encodings):
             print("------- Results for: ", name)
             query_encoding = query_tup[0]
             pod_encoding = tup[0]
-
-            print("[del] query: ", query_encoding.is_cuda)
-            # print("[del] pod_encoding: ", pod_encoding.is_cuda)
-
             full_results[name] = defaultdict(list)
             similarity = (100.0 * query_encoding @ pod_encoding.T).softmax(dim=-1)
             
@@ -370,7 +394,7 @@ def main(args):
     # Loading the model.
     model_path = args.model_path
     print("[Load model] from ", model_path)
-    model_weights_path = os.path.join(model_path, "output/full_model_weights.pth")
+    model_weights_path = os.path.join(model_path, "output/best_model_weights.pt")
     model_config_path = os.path.join(model_path, 'config.json')
 
     # Opening JSON file
@@ -385,7 +409,7 @@ def main(args):
     data_loader = MMloader(CFG)
 
     # Load the model
-    full_model = mmModule(CFG)
+    full_model = CLIPModel(CFG)
     full_model.load_state_dict(torch.load(model_weights_path,  map_location=CFG.device))              
     full_model = full_model.to(CFG.device)     
     full_model.eval()
@@ -395,8 +419,8 @@ def main(args):
             args.save_intermediate, args.calc_acc)
     max_samples = evaluator.get_max_data()
 
-    # max_samples = 128 * 4
-    # print("deleteeeee")
+    max_samples = 128 * 4
+    print("deleteeeee")
 
     evaluator.encode_testset_new(max_samples)
     evaluator.encode_queries(topics_df, query_field='query')
@@ -414,7 +438,6 @@ def main(args):
 
     full_results = evaluate_topk(evaluator, query_encodings, pod_encodings)
 
-
     # Save results      # TODO: seperate function
     save_eval_results(full_results, evaluator)
     
@@ -426,14 +449,12 @@ if __name__ == "__main__":
     # Parse flags in command line arguments
     parser = ArgumentParser()
 
-    parser.add_argument('--model_path', type=str, default="logs/run2-clip_loss_None_gru_768_False_2022-06-12_12-41-49",
+    parser.add_argument('--model_path', type=str, default="logs/tmp-simcse_loss_None_gru_256_False_2022-06-12_19-41-49",
                         help='Folder where model weights are saved.')
 
     
     parser.add_argument('--save_intermediate', action='store_true', default=False,
                     help='Whether to save intermediate embeddings.')
-    # parser.add_argument('--tmp_files_path', type=str, default="logs/windows_gru2_15m",
-    #                     help='Folder where model weights are saved.')
     parser.add_argument('--calc_acc', action='store_true', default=False,
                     help='Whether to output accuracy.')
     args, unparsed = parser.parse_known_args()
