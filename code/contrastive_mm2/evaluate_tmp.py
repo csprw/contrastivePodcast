@@ -189,15 +189,15 @@ class Evaluator(object):
                     text_embeddings_n = F.normalize(text_embeddings, p=2, dim=-1)
                     # dot_similarity = text_embeddings_n @ audio_embeddings_n.T
 
-                    text_batch = text_embeddings_n
-                    audio_batch = audio_embeddings_n
+                    text_batch = text_embeddings_n.cpu()
+                    audio_batch = audio_embeddings_n.cpu()
 
                     # ground_truth = torch.arange(self.bs,  dtype=torch.long).reshape(-1,1).cpu()
                     ground_truth = torch.arange(self.bs,  dtype=torch.long).cpu()
 
                     # print("shape3: ", text_embeddings_n.shape, audio_embeddings_n.shape)
-                    audio_acc = np.sum(np.array((audio_embeddings_n.argmax(dim=-1) == ground_truth).float()))
-                    text_acc = np.sum(np.array((text_embeddings_n.argmax(dim=-1) == ground_truth).float()))
+                    audio_acc = np.sum(np.array((text_batch.argmax(dim=-1) == ground_truth).float()))
+                    text_acc = np.sum(np.array((audio_batch.argmax(dim=-1) == ground_truth).float()))
 
                     # print("aucio: ", audio_embeddings_n, audio_acc)
                     # audio_acc = torch.eq(torch.tensor(audio_embeddings_n.argmax(axis=1)), ground_truth).sum() / ground_truth.shape[1]
@@ -207,8 +207,8 @@ class Evaluator(object):
   
                     if self.save_intermediate:
                         f1 = h5py.File(my_tmp_file, "w")
-                        f1.create_dataset('text_batch', data=text_batch.cpu())
-                        f1.create_dataset('audio_batch', data=audio_batch.cpu())
+                        f1.create_dataset('text_batch', data=text_batch)
+                        f1.create_dataset('audio_batch', data=audio_batch)
                         f1.create_dataset('targets', data=np.array(targets, dtype=h5py.special_dtype(vlen=str)))
                         f1.create_dataset('sents', data=np.array(sents, dtype=h5py.special_dtype(vlen=str)))
                         f1.close()
