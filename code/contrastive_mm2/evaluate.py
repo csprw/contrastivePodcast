@@ -112,9 +112,10 @@ class Evaluator(object):
         print("same? ", max_samples)
     
         return max_samples
+        
     def audio_to_embed(self, yamnets, query_lengths):
         if self.audio_proj_head == 'gru':
-            padded_yamnets = pad_sequence(yamnets, batch_first=True)
+            padded_yamnets = pad_sequence(yamnets, batch_first=True).to(self.device)
 
             with torch.no_grad():
                 reps_audio = self.model.audio_model((padded_yamnets, query_lengths))
@@ -233,6 +234,8 @@ class Evaluator(object):
             query_lengths.append(len(inbetween_yamnet_embeds))
             tmp = torch.Tensor(inbetween_yamnet_embeds.values)
             query_yamnets.append(tmp)
+
+        # padded_audio_embeds = pad_sequence(audio_embeds, batch_first=True).to(self.device)
             
         if query_field == 'query':
             # Create query embeddings
