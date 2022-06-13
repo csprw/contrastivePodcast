@@ -14,6 +14,7 @@ import json, csv
 import os
 from pathlib import Path
 import math
+import random
 import pandas as pd
 import numpy as np
 from matplotlib import pyplot as plt
@@ -362,11 +363,13 @@ class spDatasetWeakShuffle(datautil.Dataset):
 
         self.tokenizer = AutoTokenizer.from_pretrained(CFG.text_model_name)
         self.text_max_length = CFG.text_max_length
+        self.file_startstop = []
 
         for h5idx, h5py_file in enumerate(h5py_files):    
             f = h5py.File(h5py_file, 'r')
             print("[spdataset] loading {}/{}: {}".format(h5idx, len(h5py_files), h5py_file))
             self.max_embed_dim = max(self.max_embed_dim, f.attrs['max_embed_dim'])  # TODO: can be removed?
+            start_idx = sample_idx
 
             for sentidx in range(len(f['sentences'])):
                 idx2file[sample_idx] = (h5idx, sentidx)
@@ -375,9 +378,11 @@ class spDatasetWeakShuffle(datautil.Dataset):
                 if CFG.max_train_samples > 0 and traintest == 'train' and sample_idx >= CFG.max_train_samples:
                     print("[del] Max exceeded {}".format(sample_idx))
                     f.close()
+                    self.file_startstop.append((start_idx, sample_idx))
                     break
             else:
                 f.close()
+                self.file_startstop.append((start_idx, sample_idx))
                 continue
             break
 
@@ -640,8 +645,20 @@ class RandomBatchSampler(Sampler):
         self.n_batches = self.dataset_length / self.batch_size
         # self.batch_ids = torch.randperm(int(self.n_batches)) # sorted
 
-        self.batch_ids = torch.arange(int(self.n_batches))
-        # TODO: idx2file gebruiken om dit te kunnen sorteren? idee?
+        # Not shuffled:
+        #self.batch_ids = torch.arange(int(self.n_batches))
+
+        # Shuffled:
+        self.batch_idx = self.shuffle_within_file(dataset)
+
+
+    def shuffle_within_file(self, dataset):
+        batch_ids = np.arange(int(self.n_batches))
+        file_startstop = [(int(i[0]/self.batch_size), int(i[1]/ self.batch_size)) for i in dataset.file_startstop]
+        blocks = [list(batch_ids[i[0]:i[1]]) for i in file_startstop]
+        blocks = [random.sample(b, len(b)) for b in blocks]
+        batch_ids[:] = [b for bs in blocks for b in bs]
+        return torch.tensor(batch_ids)
 
     def __len__(self):
         return self.batch_size

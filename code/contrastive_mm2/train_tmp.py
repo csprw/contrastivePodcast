@@ -520,8 +520,22 @@ class RandomBatchSampler(Sampler):
         self.batch_size = batch_size
         self.dataset_length = len(dataset)
         self.n_batches = self.dataset_length / self.batch_size
-        # self.batch_ids = torch.randperm(int(self.n_batches))
-        self.batch_ids = torch.arange(int(self.n_batches))
+        # self.batch_ids = torch.randperm(int(self.n_batches)) # sorted
+
+        # Not shuffled:
+        #self.batch_ids = torch.arange(int(self.n_batches))
+
+        # Shuffled:
+        self.batch_idx = self.shuffle_within_file(dataset)
+
+
+    def shuffle_within_file(self, dataset):
+        batch_ids = np.arange(int(self.n_batches))
+        file_startstop = [(int(i[0]/self.batch_size), int(i[1]/ self.batch_size)) for i in dataset.file_startstop]
+        blocks = [list(batch_ids[i[0]:i[1]]) for i in file_startstop]
+        blocks = [random.sample(b, len(b)) for b in blocks]
+        batch_ids[:] = [b for bs in blocks for b in bs]
+        return torch.tensor(batch_ids)
 
     def __len__(self):
         return self.batch_size
@@ -529,6 +543,7 @@ class RandomBatchSampler(Sampler):
     def __iter__(self):
         for id in self.batch_ids:
             idx = torch.arange(id * self.batch_size, (id + 1) * self.batch_size)
+            # TODO: only do this if in the same file
             # t = torch.randperm(idx.shape[0])
             # idx= idx[t].view(idx.size())
             for index in idx:
@@ -537,7 +552,6 @@ class RandomBatchSampler(Sampler):
             idx = torch.arange(int(self.n_batches) * self.batch_size, self.dataset_length)
             for index in idx:
                 yield int(index)
-
 
 # ################################################################################
 # # Textmodules

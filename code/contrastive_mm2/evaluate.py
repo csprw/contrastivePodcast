@@ -121,7 +121,10 @@ class Evaluator(object):
                 reps_audio = self.model.audio_model((padded_yamnets, query_lengths))
                 embed = reps_audio / reps_audio.norm(dim=1, keepdim=True)
         else:
-            raise NotImplementedError
+            with torch.no_grad():
+                audio_features = torch.stack(yamnets).to(self.device)
+                reps_audio = self.model.audio_model((audio_features, query_lengths))
+                embed = reps_audio / reps_audio.norm(dim=1, keepdim=True)
         return embed.cpu()
 
     def text_to_embed(self, text):
