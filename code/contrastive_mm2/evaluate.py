@@ -341,7 +341,7 @@ def save_eval_results(full_results, evaluator):
         json.dump(mean_results, f, indent=4)
     out = os.path.join(evaluator.model_path, "topictask_results.csv")
     df = pd.DataFrame(mean_results)
-    df.to_csv(out )
+    df.T.to_csv(out, sep=';')
     print(df.T.to_string())
 
 
