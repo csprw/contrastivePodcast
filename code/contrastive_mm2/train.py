@@ -251,15 +251,27 @@ class spDatasetNoMemory(datautil.Dataset):
     def __getitem__(self, index):
         """ Return one item from the df """
         if self.traintest == 'test':
-            h5py_idx, sent_idx = self.idx2file[index]
-            h5py_file = self.h5py_idx2file[h5py_idx]
+            if self.load_full:
+                h5py_idx, sent_idx = self.idx2file[index]
+                h5py_file = self.h5py_idx2file[h5py_idx]
 
-            f = h5py.File(h5py_file, 'r')
-            sent = f['sentences'][sent_idx].decode("utf-8") 
-            full_embeds = torch.Tensor(np.array(f[str(sent_idx)]))
-            target = f['seg_ts'][sent_idx].decode("utf-8") 
-            sample = (sent, full_embeds, target)
-            f.close()
+                f = h5py.File(h5py_file, 'r')
+                sent = f['sentences'][sent_idx].decode("utf-8") 
+                full_embeds = torch.Tensor(np.array(f[str(sent_idx)]))
+                target = f['seg_ts'][sent_idx].decode("utf-8") 
+                sample = (sent, full_embeds, target)
+                f.close()
+            else:
+                h5py_idx, sent_idx = self.idx2file[index]
+                h5py_file = self.h5py_idx2file[h5py_idx]
+
+                f = h5py.File(h5py_file, 'r')
+                sent = f['sentences'][sent_idx].decode("utf-8") 
+                full_embeds = torch.Tensor(np.array(f[str(sent_idx)]))
+                target = f['seg_ts'][sent_idx].decode("utf-8") 
+                mean_embeds = torch.Tensor(f['mean_embeddings'][sent_idx])
+                sample = (sent, mean_embeds, target)
+                f.close()
 
         elif self.load_full:
             h5py_idx, sent_idx = self.idx2file[index]
@@ -325,11 +337,12 @@ class spDatasetNoMemory(datautil.Dataset):
         text_embeds = []
         audio_embeds = []
         lengths  = []
+        full_text = []
         for example in batch:
+            full_text.append(example[0])
             text_embeds.append(example[0])
             audio_embeds.append(example[1])
 
-        # Combine audio embeddings to a Tensor
         audio_embeds = torch.stack(audio_embeds).to(self.device)
 
         # Tokenize text
@@ -338,8 +351,14 @@ class spDatasetNoMemory(datautil.Dataset):
             text_embeds, padding=True, truncation=True, max_length=max_length, return_tensors='pt'
         ).to(self.device)
         
-        return text_embeds, audio_embeds, lengths
-
+        # return text_embeds, audio_embeds, lengths
+        if self.traintest == 'test':
+            targs = []
+            for example in batch:
+                targs.append(example[2])
+            return text_embeds, audio_embeds, lengths, targs, full_text
+        else:
+            return text_embeds, audio_embeds, lengths
 
 class spDatasetWeakShuffle(datautil.Dataset):
     """

@@ -122,7 +122,10 @@ class Evaluator(object):
                 embed = reps_audio / reps_audio.norm(dim=1, keepdim=True)
         else:
             with torch.no_grad():
-                audio_features = torch.stack(yamnets).to(self.device)
+
+                yamnets_mean = [torch.tensor(y.mean(dim=0)) for y in yamnets]
+
+                audio_features = torch.stack(yamnets_mean).to(self.device)
                 reps_audio = self.model.audio_model((audio_features, query_lengths))
                 embed = reps_audio / reps_audio.norm(dim=1, keepdim=True)
         return embed.cpu()
@@ -392,7 +395,7 @@ def main(args):
             args.save_intermediate, args.calc_acc)
     max_samples = evaluator.get_max_data()
 
-    # max_samples = 128 * 400
+    # max_samples = 128 * 4
     # print("deleteeeee")
 
     evaluator.encode_testset_new(max_samples)
