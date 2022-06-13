@@ -668,7 +668,7 @@ class RandomBatchSampler(Sampler):
         #self.batch_ids = torch.arange(int(self.n_batches))
 
         # Shuffled:
-        self.batch_idx = self.shuffle_within_file(dataset)
+        self.batch_ids = self.shuffle_within_file(dataset)
 
 
     def shuffle_within_file(self, dataset):
