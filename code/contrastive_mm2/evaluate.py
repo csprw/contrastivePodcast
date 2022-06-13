@@ -122,7 +122,7 @@ class Evaluator(object):
                 embed = reps_audio / reps_audio.norm(dim=1, keepdim=True)
         else:
             raise NotImplementedError
-        return embed
+        return embed.cpu()
 
     def text_to_embed(self, text):
         tokenized_text = self.tokenizer(
@@ -135,7 +135,7 @@ class Evaluator(object):
             reps_sentences = self.model.text_model(tokenized_text)['sentence_embedding']
             embed = reps_sentences / reps_sentences.norm(dim=1, keepdim=True)
 
-        return embed
+        return embed.cpu()
 
     @torch.no_grad()  
     def encode_testset_new(self, max_samples):
@@ -271,6 +271,10 @@ def evaluate_topk(evaluator, query_encodings, pod_encodings):
             print("------- Results for: ", name)
             query_encoding = query_tup[0]
             pod_encoding = tup[0]
+
+            print("[del] query: ", query_encoding.is_cuda)
+            print("[del] pod_encoding: ", pod_encoding.is_cuda)
+
             full_results[name] = defaultdict(list)
             similarity = (100.0 * query_encoding @ pod_encoding.T).softmax(dim=-1)
             
