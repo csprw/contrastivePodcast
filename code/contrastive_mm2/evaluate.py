@@ -261,7 +261,7 @@ class Evaluator(object):
     
 def evaluate_topk(evaluator, query_encodings, pod_encodings):
     full_results = defaultdict(list)
-    k = 250
+    k = 500
     pred =[[1]* 50 + [0] * 50]
     
     targets = evaluator.all_targs
@@ -297,6 +297,7 @@ def evaluate_topk(evaluator, query_encodings, pod_encodings):
                 if len(predicted_epis) < 100:
                     print("TODO: increase K above")
                     print(len(predicted_epis))
+                    continue
                 
                 scores_epis = [1 if e in relevant_eps[query_idx] else 0 for e in predicted_epis]
                 scores_segs = [1 if e in relevant_segs[query_idx] else 0 for e in predicted_segs]
