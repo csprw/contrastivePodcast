@@ -358,7 +358,6 @@ class spDatasetNoMemory(datautil.Dataset):
         return text_embeds, audio_embeds, lengths
 
 
-
 class spDatasetWeakShuffle(datautil.Dataset):
     """
     Spotify Podcast dataset dataloader. 
@@ -381,11 +380,13 @@ class spDatasetWeakShuffle(datautil.Dataset):
 
         self.tokenizer = AutoTokenizer.from_pretrained(CFG.text_model_name)
         self.text_max_length = CFG.text_max_length
+        self.file_startstop = []
 
         for h5idx, h5py_file in enumerate(h5py_files):    
             f = h5py.File(h5py_file, 'r')
             print("[spdataset] loading {}/{}: {}".format(h5idx, len(h5py_files), h5py_file))
             self.max_embed_dim = max(self.max_embed_dim, f.attrs['max_embed_dim'])  # TODO: can be removed?
+            start_idx = sample_idx
 
             for sentidx in range(len(f['sentences'])):
                 idx2file[sample_idx] = (h5idx, sentidx)
@@ -394,13 +395,16 @@ class spDatasetWeakShuffle(datautil.Dataset):
                 if CFG.max_train_samples > 0 and traintest == 'train' and sample_idx >= CFG.max_train_samples:
                     print("[del] Max exceeded {}".format(sample_idx))
                     f.close()
+                    self.file_startstop.append((start_idx, sample_idx))
                     break
             else:
                 f.close()
+                self.file_startstop.append((start_idx, sample_idx))
                 continue
             break
 
         self.idx2file = idx2file
+        
         self.last_idx = -1
         self.mean_embeds = None
         self.f =  h5py.File(h5py_file, 'r')
@@ -422,26 +426,26 @@ class spDatasetWeakShuffle(datautil.Dataset):
             lengths  = []
 
             last_idx = self.last_idx
-            del_lens = []
+            # del_lens = []
             # del_lens2 = []
 
             for enum, i in enumerate(index):
                 h5py_idx, sent_idx = self.idx2file[i]
                 if h5py_idx != last_idx:
                     # Clear memory
-                    # del self.mean_embeds
                     self.f.close()
+                    # del self.mean_embeds
+                    gc.collect()
+                    print("[del3] Garbage collected")
 
                     h5py_file = self.h5py_idx2file[h5py_idx]
                     self.f = h5py.File(h5py_file, 'r')
 
-                    print("[del2] loaded new h5py file: ", h5py_idx, h5py_file)
-
+                    print("[del3] loaded new h5py file: ", h5py_idx, h5py_file)
+                
                 # sent = f['sentences'][sent_idx]
                 sent = self.f['sentences'][sent_idx].decode("utf-8")
                 full_embeds = torch.Tensor(np.array(self.f[str(sent_idx)]))
-
-                del_lens.append(len(sent.split(' ')))
 
                 # Collate fn
                 full_text.append(sent)
@@ -474,8 +478,10 @@ class spDatasetWeakShuffle(datautil.Dataset):
 
                 if h5py_idx != last_idx:
                     # Clear memory
-                    del self.mean_embeds
                     self.f.close()
+                    del self.mean_embeds
+                    gc.collect()
+                    print("Garbage collected")
 
                     h5py_file = self.h5py_idx2file[h5py_idx]
                     self.f = h5py.File(h5py_file, 'r')
@@ -505,6 +511,8 @@ class spDatasetWeakShuffle(datautil.Dataset):
             ).to(self.device)
 
             return text_embeds, audio_embeds, lengths
+     
+
      
 class RandomBatchSampler(Sampler):
     """Sampling class to create random sequential batches from a given dataset
