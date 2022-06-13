@@ -112,7 +112,7 @@ class Evaluator(object):
         print("same? ", max_samples)
     
         return max_samples
-        
+
     def audio_to_embed(self, yamnets, query_lengths):
         if self.audio_proj_head == 'gru':
             padded_yamnets = pad_sequence(yamnets, batch_first=True).to(self.device)
@@ -239,10 +239,10 @@ class Evaluator(object):
             
         if query_field == 'query':
             # Create query embeddings
-            self.query_audio_encoding = self.audio_to_embed(query_yamnets, query_lengths)
+            self.query_audio_encoding = self.audio_to_embed(query_yamnets, query_lengths).cpu()
             print("Queries encoded ", self.query_audio_encoding.shape, self.query_text_encoding.shape)
         elif query_field == 'description':
-            self.descr_audio_encoding = self.audio_to_embed(query_yamnets, query_lengths)
+            self.descr_audio_encoding = self.audio_to_embed(query_yamnets, query_lengths).cpu()
             print("Descriptions encoded ", self.query_audio_encoding.shape, self.query_text_encoding.shape)
 
     def add_query_labels(self, topics_df, val_df):
