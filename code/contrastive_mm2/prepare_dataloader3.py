@@ -349,21 +349,21 @@ if __name__ == "__main__":
         #     print("Filename already exists!")
         #     last_output_folder = outer_folders[idx]
         #     continue
-        if train_split[filename] == 'test':
-            print("Test set! continue")
+        if train_split[filename] != 'test':
+            print("Not test set! continue")
             continue
 
-        if int(outer_folder[0]) < 7:
-            last_output_folder = outer_folders[idx]
-            print("Already processed ", outer_folder)
-            continue
+        # if int(outer_folder[0]) < 7:
+        #     last_output_folder = outer_folders[idx]
+        #     print("Already processed ", outer_folder)
+        #     continue
         # print("okay: ", outer_folder)
         # exit(1)
         if outer_folder != last_output_folder:
             print("------------------------------------- Raise save count to: ", save_count + 1)
             save_count += 1
 
-            if save_count == save_every or outer_folder[0] != last_output_folder[0]:
+            if outer_folder[0] != last_output_folder[0]:
             # if outer_folder[0] != last_output_folder[0]:
                 if outer_folder[0] != last_output_folder[0]:
                     print("[del] saving because of end of outer folder ")

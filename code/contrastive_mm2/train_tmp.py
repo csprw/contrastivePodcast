@@ -1521,6 +1521,7 @@ class CLIPModel(nn.Module):
         temperature = FullCfg.temperature
         image_embedding = FullCfg.image_embedding
         text_embedding = FullCfg.text_embedding
+        self.batch_size = FullCfg.batch_size
 
         self.audio_proj_head = FullCfg.audio_proj_head
         if self.audio_proj_head == 'sph':
@@ -1534,18 +1535,16 @@ class CLIPModel(nn.Module):
         self.text_projection = ProjectionHead(FullCfg)
         self.temperature = temperature
 
-    def forward(self, batch):
+
+    def forward(self, batch, return_acc=False):
         sent_features, audio_features, seq_len = batch
 
         # Getting Image and Text Features
-        if self.audio_proj_head == 'sph':
-            audio_features = self.audio_encoder(audio_features)
-        elif self.audio_proj_head == 'gru':
-            audio_features = self.audio_encoder(audio_features)
-            
+        audio_features = self.audio_encoder(audio_features)
         text_features = self.text_encoder(
             input_ids=sent_features["input_ids"], attention_mask=sent_features["attention_mask"]
         )
+
         # Getting Image and Text Embeddings (with same dimension)
         audio_embeddings = self.audio_projection(audio_features)
         text_embeddings = self.text_projection(text_features)
@@ -1560,6 +1559,14 @@ class CLIPModel(nn.Module):
         texts_loss = cross_entropy(logits, targets, reduction='none')
         images_loss = cross_entropy(logits.T, targets.T, reduction='none')
         loss =  (images_loss + texts_loss) / 2.0 # shape: (batch_size)
+
+        if return_acc: 
+            contrastive_label = torch.arange(self.batch_size)
+            audio_acc = (logits.T.argmax(dim=-1) == contrastive_label).float()
+            text_acc = (logits.argmax(dim=-1) == contrastive_label).float()
+
+            acc = (torch.mean(audio_acc) + torch.mean(text_acc)) / 2
+            return loss.mean(), acc
         return loss.mean()
 
 
@@ -1596,9 +1603,11 @@ def valid_epoch(model, valid_loader):
 
     tqdm_object = tqdm(valid_loader, total=len(valid_loader))
     count = 0
+    accs = []
     for batch in tqdm_object:
         # batch = {k: v.to(Cfg.device) for k, v in batch.items() if k != "caption"}
-        loss = model(batch)
+        loss, acc = model(batch, return_acc = True)
+        accs.append(acc)
 
         count = Cfg.batch_size
         loss_meter.update(loss.item(), count)
@@ -1607,9 +1616,10 @@ def valid_epoch(model, valid_loader):
 
         count += 1
         if count > 500:
-            print("[del] break for now")
+            # print("[del] break for now")
             break
-    return loss_meter
+
+    return loss_meter, np.mean(accs)
 
 
 def main(args):
@@ -1618,6 +1628,15 @@ def main(args):
     set_logconfig()
     device = "cuda" if torch.cuda.is_available() else "cpu"
     FullCfg = setup_config(args, Cfg, device)
+
+    # Init logging
+    model_save_path = '{}/output'.format(FullCfg.log_name)
+    os.makedirs(model_save_path, exist_ok=True)
+    csv_filename = os.path.join(model_save_path, "train.csv")
+    train_csv_headers = ["epoch", "steps", "loss", 'acc']
+    with open(csv_filename, newline='', mode='w', encoding="utf-8") as f:
+        writer = csv.writer(f)
+        writer.writerow(train_csv_headers)
 
     tokenizer = DistilBertTokenizer.from_pretrained(FullCfg.text_tokenizer)
 
@@ -1649,10 +1668,10 @@ def main(args):
         print(f"Epoch: {epoch + 1}")
         model.train()
         train_loss = train_epoch(model, train_loader, optimizer, lr_scheduler, step)
-        print("Back from train_epoch loss: ", train_loss)
+
         model.eval()
         with torch.no_grad():
-            valid_loss = valid_epoch(model, val_loader)
+            valid_loss, valid_acc = valid_epoch(model, val_loader)
         
         if valid_loss.avg < best_loss:
             best_loss = valid_loss.avg
@@ -1661,6 +1680,10 @@ def main(args):
             print("Saved Best Model!")
         
         lr_scheduler.step(valid_loss.avg)
+
+        with open(csv_filename, newline='', mode="a", encoding="utf-8") as f:
+            writer = csv.writer(f)
+            writer.writerow([epoch, epoch, valid_loss, valid_acc])
 
     print("Done for now")
     exit(1)

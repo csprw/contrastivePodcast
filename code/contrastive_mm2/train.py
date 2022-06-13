@@ -382,6 +382,7 @@ class spDatasetWeakShuffle(datautil.Dataset):
             break
 
         self.idx2file = idx2file
+        
         self.last_idx = -1
         self.mean_embeds = None
         self.f =  h5py.File(h5py_file, 'r')
@@ -638,7 +639,9 @@ class RandomBatchSampler(Sampler):
         self.dataset_length = len(dataset)
         self.n_batches = self.dataset_length / self.batch_size
         # self.batch_ids = torch.randperm(int(self.n_batches)) # sorted
+
         self.batch_ids = torch.arange(int(self.n_batches))
+        # TODO: idx2file gebruiken om dit te kunnen sorteren? idee?
 
     def __len__(self):
         return self.batch_size

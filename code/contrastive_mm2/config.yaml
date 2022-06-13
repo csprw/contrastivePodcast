@@ -10,7 +10,7 @@ yamnet_processed_path: ../../data/yamnet/processed/          # Changed to yamnet
 
 # yamnet_embed_dir: ../data/sp/yamnet/embedding             # Changed to yamnet_embed_path
 yamnet_embed_path: ../../data/yamnet/embedding  
-
+topic_embed_path: ../../data/yamnet/embedding  
 
 yamnet_embed_dir_cloud: /Users/casper/Library/CloudStorage/Box-Box/Spotify-Podcasts/yamnet/embedding
 # yamnet_score_dir: ../../data/sp/yamnet/score          # changed to _path
@@ -18,7 +18,7 @@ yamnet_score_path: ../../data/yamnet/score
 
 yamnet_query_embed_path: ../../data/yamnet/query_embedding/query/fast
 yamnet_descr_embed_path: ../../data/yamnet/query_embedding/description/fast
-yamnet_topic_embed_path: ../../data/yamnet/processed_topictask
+# yamnet_topic_embed_path: ../../data/yamnet/processed_topictask
 
 ########################################
 # Paths for contrastive training

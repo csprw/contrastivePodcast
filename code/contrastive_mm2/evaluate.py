@@ -96,7 +96,7 @@ class Evaluator(object):
         self.acc = 0.0
 
         # self.topic_output =  os.path.join(conf.yamnet_embed_path, "topic_embeddings")   # TODO: change to CFG
-        self.topic_output =  os.path.join(conf.yamnet_embed_path, "topic_embeddings", os.path.split(model_path)[-1]) 
+        self.topic_output =  os.path.join(conf.topic_embed_path, "topic_embeddings", os.path.split(model_path)[-1]) 
         Path(self.topic_output).mkdir(parents=True, exist_ok=True)
 
         
@@ -164,7 +164,6 @@ class Evaluator(object):
 
                 reps_sentences = self.model.text_model(tok_sentences)['sentence_embedding']
                 reps_audio = self.model.audio_model((audio_features, seq_len))
-                print(reps_audio)
 
                 audio_batch = reps_audio / reps_audio.norm(dim=1, keepdim=True)
                 text_batch = reps_sentences / reps_sentences.norm(dim=1, keepdim=True)
@@ -413,7 +412,7 @@ if __name__ == "__main__":
     # Parse flags in command line arguments
     parser = ArgumentParser()
 
-    parser.add_argument('--model_path', type=str, default="logs/run-clip_loss_None_gru_768_5e-05_2022-06-09_17-08-26",
+    parser.add_argument('--model_path', type=str, default="logs/run2-clip_loss_None_gru_768_False_2022-06-12_12-41-49",
                         help='Folder where model weights are saved.')
 
     
