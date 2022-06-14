@@ -1203,7 +1203,7 @@ class mmModule(nn.Module):
         self.to(self.device)
 
         iterator = iter(self.val_loader)
-        total_len = 500   # for now I evaluate on a subset
+        total_len = 1000   # for now I evaluate on a subset
 
         with torch.no_grad():
             for step in range(total_len):
@@ -1263,18 +1263,18 @@ class mmModule(nn.Module):
 
     def save_model(self, extra_name=""):
         # Save the model
-        output_dir = os.path.join(self.model_save_path, '{}{}_weights.pth'.format('full_model', extra_name))
+        output_dir = os.path.join(self.model_save_path, '{}{}_weights.pt'.format('full_model', extra_name))
         torch.save(self.state_dict(), output_dir)
 
     def save_checkpoint(self, epoch, step, optimizer, scheduler):
         checkpoint = { 
             'epoch': epoch,
             'step': step,
-            'full_model': self,
-            'optimizer': optimizer,
+            'full_model': self.state_dict(),
+            'optimizer': optimizer.state_dict(),
             'lr_sched': scheduler.state_dict()
         }
-        output_dir = os.path.join(self.model_save_path, 'checkpoint.pth')
+        output_dir = os.path.join(self.model_save_path, 'checkpoint.pt')
         torch.save(checkpoint, output_dir)
 
 
@@ -1540,8 +1540,8 @@ def main(args):
         checkpoint = torch.load(args.load_checkpoint_path, map_location=torch.device(device))
         epoch = checkpoint['epoch']
         fstep = checkpoint['step']
-        full_model.load_state_dict(checkpoint['full_model'].state_dict())
-        loaded_optimizer_state = checkpoint['optimizer'].state_dict()
+        full_model.load_state_dict(checkpoint['full_model'])
+        loaded_optimizer_state = checkpoint['optimizer']
         loaded_sched_state = checkpoint['lr_sched']
         full_model.device = FullCfg.device
 
@@ -1650,14 +1650,14 @@ if __name__ == "__main__":
                         help='disables CUDA training')
     parser.add_argument('--save_model', dest='save_model', action='store_true',
                         help="Save the model weights.")
-    parser.add_argument('--load_model_path', type=str, default="./logs/load_test2/output/full_model_weights.pth",
+    parser.add_argument('--load_model_path', type=str, default="./logs/logname/output/full_model_weights.pt",
                         help='Folder where model weights are saved.')
     parser.add_argument('--load_model', dest='load_model', action='store_true',
                         help="Load the model in model_path to continue a downstream task")
 
     parser.add_argument('--save_checkpoint', dest='save_checkpoint', action='store_true',
                         help="Save the model, optimizer and scheduler weights.")
-    parser.add_argument('--load_checkpoint_path', type=str, default="./logs/load_test2/output/checkpoint.pth",
+    parser.add_argument('--load_checkpoint_path', type=str, default="./logs/logname/output/checkpoint.pt",
                         help='Folder where so save logs.')
     parser.add_argument('--load_checkpoint', dest='load_checkpoint', action='store_true',
                         help="Load a model, optimizer and scheduler to continue training.")
