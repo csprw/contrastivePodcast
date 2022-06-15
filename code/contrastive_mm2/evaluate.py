@@ -40,11 +40,20 @@ def prec_at_k(scores, k):
     prec = np.sum(scores_k) / len(scores_k)
     return prec
 
-def rec_at_k(scores, num_rel, k):
+def rec_at_k_norm(scores, num_rel, k):
     # (of recommended items that are relevant @k)/(total # of relevant items)
     scores_k = scores[:k]
     rec = np.sum(scores_k) / num_rel 
     return rec
+
+def rec_at_k(scores, k):
+    # (of recommended items that are relevant @k)/(total # of relevant items)
+    scores_k = scores[:k]
+    score = np.sum(scores_k) 
+    if score >= 1:
+        return 1
+    else:
+        return 0
         
 
 # def text_to_embed(tokenizer, text, full_model):
@@ -309,8 +318,9 @@ def evaluate_topk(evaluator, query_encodings, pod_encodings):
                 p10_ep = prec_at_k(scores_epis, k=10)
                 p10_seg = prec_at_k(scores_segs, k=10)
                 p100_ep = prec_at_k(scores_epis, k=100)
-                r100_ep = rec_at_k(scores_epis, num_rel, k=100)
-                r100_seg = rec_at_k(scores_segs, num_rel_segs, k=100)
+                r100_ep = rec_at_k(scores_epis, k=100)
+                r100_seg = rec_at_k(scores_segs, k=100)
+                r10_ep_norm = rec_at_k_norm(scores_epis, num_rel, k=10)
                 print("Metrics: ", p10_ep, p10_seg, r100_ep)
                 
                 if p10_ep > 0.5:
@@ -324,6 +334,7 @@ def evaluate_topk(evaluator, query_encodings, pod_encodings):
                 full_results[name]['p100_ep'].append(p100_ep)
                 full_results[name]['r100_ep'].append(r100_ep)
                 full_results[name]['r100_seg'].append(r100_seg) 
+                full_results[name]['r10_ep_norm'].append(r10_ep_norm)
                 full_results[name]['ndcg_ep'].append(ndcg_ep) 
                 
     return full_results
