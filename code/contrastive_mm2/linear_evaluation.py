@@ -594,6 +594,7 @@ class LinearEvaluationModel(nn.Module):
         self.projectionhead.to(self.device)
         self.text_model.to(self.device)
         self.audio_model.to(self.device)
+
         
     def forward(self, sentence_features: Iterable[Dict[str, Tensor]], audio_features: Tensor, seq_len, cats):
         with torch.no_grad():
@@ -612,9 +613,9 @@ class LinearEvaluationModel(nn.Module):
             preds = self.projectionhead(reps_audio)
 
         print("[del4]: ", preds.is_cuda, cats.is_cuda)
-        print("and this: ", self.device)
+        print("and this: ", self.is_cuda)
         loss = self.criterion(preds, cats)
-        metrics = self.get_metrics(preds.detach().cpu(), cats)
+        metrics = self.get_metrics(preds.detach().cpu(), cats.detach().cpu())
         return loss, metrics
         
     def get_metrics(self, preds, targets):
