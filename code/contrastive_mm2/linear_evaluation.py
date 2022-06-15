@@ -276,10 +276,13 @@ class spDatasetNoMemory(datautil.Dataset):
         ).to(self.device)
 
         if self.traintest == 'test':
-            targs = []
-            for example in batch:
-                targs.append(example[2])
-            return text_embeds, padded_audio_embeds, lengths, targs, full_text, torch.tensor(cats)
+            targs = [example[2] for example in batch]
+            # targs = []
+            # for example in batch:
+            #     targs.append(example[2])
+
+            cats = torch.tensor(cats).to(self.device)
+            return text_embeds, padded_audio_embeds, lengths, targs, full_text, cats
         else:
             return text_embeds, padded_audio_embeds, lengths
 
@@ -310,10 +313,11 @@ class spDatasetNoMemory(datautil.Dataset):
         
         # return text_embeds, audio_embeds, lengths
         if self.traintest == 'test':
-            targs = []
-            for example in batch:
-                targs.append(example[2])
-            return text_embeds, audio_embeds, lengths, targs, full_text, torch.tensor(cats)
+            targs = [example[2] for example in batch]
+            # for example in batch:
+            #     targs.append(example[2])
+            cats = torch.tensor(cats).to(self.device)
+            return text_embeds, audio_embeds, lengths, targs, full_text, cats
         else:
             return text_embeds, audio_embeds, lengths
 
@@ -434,7 +438,9 @@ class spDatasetWeakShuffleLinSep(datautil.Dataset):
                     cats.append(self.ep2cat[episode])
 
                 last_idx = h5py_idx
+
             self.last_idx = last_idx
+            cats = torch.tensor(cats).to(self.device)
 
              # Pad the audio embeddings
             audio_embeds = pad_sequence(audio_embeds, batch_first=True).to(self.device)
@@ -483,6 +489,7 @@ class spDatasetWeakShuffleLinSep(datautil.Dataset):
                 last_idx = h5py_idx
 
             self.last_idx = last_idx
+            cats = torch.tensor(cats).to(self.device)
 
             # Combine audio embeddings to a Tensor
             audio_embeds = torch.stack(audio_embeds).to(self.device)
@@ -494,7 +501,7 @@ class spDatasetWeakShuffleLinSep(datautil.Dataset):
             ).to(self.device)
 
         if self.lin_sep:
-            return text_embeds, audio_embeds, lengths, torch.tensor(cats)
+            return text_embeds, audio_embeds, lengths, cats
         else:
             return text_embeds, audio_embeds, lengths
 
@@ -587,7 +594,6 @@ class LinearEvaluationModel(nn.Module):
         self.projectionhead.to(self.device)
         
     def forward(self, sentence_features: Iterable[Dict[str, Tensor]], audio_features: Tensor, seq_len, cats):
-
         with torch.no_grad():
 
             # Encode features
@@ -603,6 +609,7 @@ class LinearEvaluationModel(nn.Module):
         else:
             preds = self.projectionhead(reps_audio)
 
+        print("[del4]: ", preds.is_cuda, cats.is_cuda)
         loss = self.criterion(preds, cats)
         metrics = self.get_metrics(preds.detach().cpu(), cats)
         return loss, metrics
@@ -786,8 +793,8 @@ if __name__ == "__main__":
     
     # parser.add_argument('--save_intermediate', action='store_true', default=False,
     #                 help='Whether to save intermediate embeddings.')
-    # parser.add_argument('--tmp_files_path', type=str, default="logs/windows_gru2_15m",
-    #                     help='Folder where model weights are saved.')
+    parser.add_argument('--num_epochs', type=int, default=1,
+                        help='Number of epochs to train')
     parser.add_argument('--mlp', action='store_true', default=False,
                     help='Whether to use multiple layers.')
     args, unparsed = parser.parse_known_args()
