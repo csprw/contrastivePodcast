@@ -110,7 +110,7 @@ class MMloader(object):
             self.test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, drop_last=True, **kwargs) 
         elif test_dataset_name == "sp":
             test_dataset = self.get_sp_dataset(CFG, directory=conf.sp_path,  traintest="test",  load_full=self.load_full, lin_sep=lin_sep, device=self.device)
-            self.test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, drop_last=True, **kwargs)
+            self.test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True, drop_last=True, **kwargs)
         else:
             raise Exception('Unknown dataset')
         self.test_dataset = test_dataset
@@ -618,7 +618,7 @@ class LinearEvaluationModel(nn.Module):
         metrics = {}
         y_pred = torch.argmax(preds, axis=1)
         
-        print("\t\t\t y_pred: ", torch.unique(y_pred), torch.bincount(targets))
+        # print("\t\t\t y_pred: ", torch.unique(y_pred), torch.bincount(targets))
         
         metrics['acc'] = torch.sum(y_pred == targets) / targets.shape[0]
         metrics['targets'] = targets.tolist()
@@ -679,15 +679,14 @@ class LinearEvalator(nn.Module):
 
                 loss, metrics = self.lin_eval_model(sent_features, audio_features, seq_len, cats)    
                 accs.append(metrics['acc'])
-                print("Loss: {} \t acc: {}".format(loss, metrics['acc']))
+                
 
                 loss.backward()
                 self.optimizer.step()
                 self.scheduler.step(loss)
                 
-                if step > 20:
-                    print("delete this")
-                    break
+                if step % 100 == 0:
+                    print("Loss: {} \t acc: {}".format(loss, metrics['acc']))
 
             print("-- Train epoch Mean acc: ", np.mean(accs))
             self.acc_per_epoch.append(np.mean(accs))
