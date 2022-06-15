@@ -177,9 +177,9 @@ class spDatasetNoMemory(datautil.Dataset):
                 idx2file[sample_idx] = (h5idx, sent_idx)
                 sample_idx += 1
                 
-                print("del del del!!")
-                if sample_idx > 500:
-                    break
+                # print("del del del!!")
+                # if sample_idx > 500:
+                #     break
 
                 if traintest == 'train' and CFG.max_train_samples > 0 and sample_idx >= CFG.max_train_samples:
                     print("[spdataset] Max exceeded: ", sample_idx)
@@ -336,7 +336,7 @@ class spDatasetWeakShuffleLinSep(datautil.Dataset):
         self.lin_sep = lin_sep
         
         ### DELETE [del4]
-        CFG.max_train_samples = 128 * 100
+        # CFG.max_train_samples = 128 * 100
         
         # TODO: func
         ep2cat_path = os.path.join(conf.dataset_path, 'ep2cat.json')
@@ -738,7 +738,7 @@ class LinearEvalator(nn.Module):
         df_cm = pd.DataFrame(cf_matrix/np.sum(cf_matrix), index = [i for i in classes],
             columns = [i for i in classes])
         plt.figure(figsize = (12,7))
-        sn.heatmap(df_cm, annot=True)
+        sn.heatmap(df_cm, annot=True, cmap='Blues')
         
         out = os.path.join(self.output_path, 
             '{}_linear_evaluation_cm.png'.format(self.modality))
