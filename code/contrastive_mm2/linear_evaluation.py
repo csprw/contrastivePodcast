@@ -613,7 +613,7 @@ class LinearEvaluationModel(nn.Module):
             preds = self.projectionhead(reps_audio)
 
         print("[del4]: ", preds.is_cuda, cats.is_cuda)
-        print("and this: ", self.is_cuda)
+        # print("and this: ", self.is_cuda)
         loss = self.criterion(preds, cats)
         metrics = self.get_metrics(preds.detach().cpu(), cats.detach().cpu())
         return loss, metrics
