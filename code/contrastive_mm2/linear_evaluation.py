@@ -734,7 +734,7 @@ class LinearEvalator(nn.Module):
         # Build confusion matrix
         print("[del4] this is make_cm: ", y_pred, y_true)
         print("And classes: ", classes)
-        cf_matrix = confusion_matrix(y_true, y_pred)
+        cf_matrix = confusion_matrix(y_true, y_pred, labels=np.arange(len(classes)))
         df_cm = pd.DataFrame(cf_matrix/np.sum(cf_matrix), index = [i for i in classes],
             columns = [i for i in classes])
         plt.figure(figsize = (12,7))
