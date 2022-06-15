@@ -335,8 +335,8 @@ class spDatasetWeakShuffleLinSep(datautil.Dataset):
         self.device = device
         self.lin_sep = lin_sep
         
-        ### DELETE
-        CFG.max_train_samples = 128 * 10
+        ### DELETE [del4]
+        CFG.max_train_samples = 128 * 100
         
         # TODO: func
         ep2cat_path = os.path.join(conf.dataset_path, 'ep2cat.json')
@@ -472,9 +472,7 @@ class spDatasetWeakShuffleLinSep(datautil.Dataset):
                     h5py_file = self.h5py_idx2file[h5py_idx]
                     self.f = h5py.File(h5py_file, 'r')
                     print("[del2] loaded new h5py file: ", h5py_idx, h5py_file)
-                    s1 = time()
                     self.mean_embeds = torch.Tensor(np.array(self.f['mean_embeddings']))
-                    print("[del2]              it took: ", time() - s1)
 
                 sent = self.f['sentences'][sent_idx].decode("utf-8")
                 mean_embeds = self.mean_embeds[sent_idx]
@@ -612,8 +610,6 @@ class LinearEvaluationModel(nn.Module):
         else:
             preds = self.projectionhead(reps_audio)
 
-        print("[del4]: ", preds.is_cuda, cats.is_cuda)
-        # print("and this: ", self.is_cuda)
         loss = self.criterion(preds, cats)
         metrics = self.get_metrics(preds.detach().cpu(), cats.detach().cpu())
         return loss, metrics
@@ -689,7 +685,7 @@ class LinearEvalator(nn.Module):
                 self.optimizer.step()
                 self.scheduler.step(loss)
                 
-                if step > 2:
+                if step > 20:
                     print("delete this")
                     break
 
@@ -722,22 +718,23 @@ class LinearEvalator(nn.Module):
         self.targets = targets
         
     def save_results(self):
-        # Save results
-        classes = list(self.data_loader.test_dataset.ep2cat_map.keys())
-        self.make_cm(self.preds, self.targets, classes)
-        
-        print("type: ", self.acc_per_epoch)
+        # Save results to csv
         lin_eval_res = {'eval_acc': self.eval_mean_acc,
                        'acc_per_epoch': list(self.acc_per_epoch)}
-        print("This is lin_eval_res: ", lin_eval_res)
         out = os.path.join(self.output_path, 
             '{}_linear_evaluation_results.csv'.format(self.modality))
         df = pd.DataFrame(lin_eval_res)
         df.T.to_csv(out, sep=';')
         print(df.T.to_string())
 
+        # Save results as confusion matrix
+        classes = list(self.data_loader.test_dataset.ep2cat_map.keys())
+        self.make_cm(self.preds, self.targets, classes)
+
     def make_cm(self, y_pred, y_true, classes):
         # Build confusion matrix
+        print("[del4] this is make_cm: ", y_pred, y_true)
+        print("And classes: ", classes)
         cf_matrix = confusion_matrix(y_true, y_pred)
         df_cm = pd.DataFrame(cf_matrix/np.sum(cf_matrix), index = [i for i in classes],
             columns = [i for i in classes])
