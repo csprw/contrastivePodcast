@@ -969,21 +969,20 @@ class epDataset(datautil.Dataset):
         a_embeds = self.mean_a_embeds[idx]
         t_embeds = self.mean_t_embeds[idx]
         targets =  self.mean_cats[idx]
-        print("In getitem!!!")
         return (a_embeds, t_embeds, targets)
 
     
-    def batching_collate(self, batch):
-        """ Return a batch containing samples of the SP dataset"""
-        print("[del4] in batching collate!")
-        # print("This is batch: ", batch)
-        print(len(batch))
-        print(type(batch[0]))
-        print(type(batch[1]))
-        print(type(batch[2]))
-        a_embeds, t_embeds, targets = batch
+    # def batching_collate(self, batch):
+    #     """ Return a batch containing samples of the SP dataset"""
+    #     print("[del4] in batching collate!")
+    #     # print("This is batch: ", batch)
+    #     print(len(batch))
+    #     print(type(batch[0]))
+    #     print(type(batch[1]))
+    #     print(type(batch[2]))
+    #     a_embeds, t_embeds, targets = batch
 
-        return  a_embeds.to(self.device), t_embeds.to(self.device), torch.tensor(targets).to(self.device)
+    #     return  a_embeds.to(self.device), t_embeds.to(self.device), torch.tensor(targets).to(self.device)
 
 
 
