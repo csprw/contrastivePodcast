@@ -66,7 +66,7 @@ class MMloader(object):
         # Get the datasets
         self.train_dataset, self.train_loader = self.create_dataset(CFG, name=train_dataset_name,  traintest="train")
         self.val_dataset, self.val_loader = self.create_dataset(CFG, name=val_dataset_name,  traintest="val")
-        self.test_dataset, self.ttes_loader = self.create_dataset(CFG, name=test_dataset_name,  traintest="test", shuffle=False)
+        self.test_dataset, self.test_loader = self.create_dataset(CFG, name=test_dataset_name,  traintest="test", shuffle=False)
 
     def create_dataset(self, CFG, name, traintest, shuffle=True):
         directory = conf.sp_sample_path if name == 'sp_sample' else conf.sp_path
