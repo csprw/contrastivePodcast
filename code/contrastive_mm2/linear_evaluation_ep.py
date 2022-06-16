@@ -1059,6 +1059,8 @@ class LinearEvaluatorEplevel(nn.Module):
                 else:
                     preds = self.projectionhead(mean_a_embeds)
 
+                print("[del4] 1: ", preds.is_cuda)
+                print("[del4] ", cats.is_cuda)
                 loss = self.criterion(preds, cats)
                 metrics = self.get_metrics(preds.detach().cpu(), cats.detach().cpu())
 
@@ -1213,7 +1215,7 @@ if __name__ == "__main__":
     # Parse flags in command line arguments
     parser = ArgumentParser()
 
-    parser.add_argument('--model_path', type=str, default="logs/AWS_run2-clip_loss_None_sph_768_False_2022-06-12_12-44-00",
+    parser.add_argument('--model_path', type=str, default="logs/run2-clip_loss_None_sph_768_False_2022-06-12_12-44-00",
                         help='Folder where model weights are saved.')
     parser.add_argument('--modality', default='text', const='text',
                     nargs='?', choices=['text', 'audio'],
