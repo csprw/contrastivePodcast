@@ -90,7 +90,7 @@ class Evaluator(object):
         self.model = full_model
         self.device = CFG.device
         self.scale = CFG.scale
-        self.bs = CFG.batch_size
+        self.bs = CFG.args.batch_size
         self.embed_dim = CFG.mutual_embedding_dim
         self.tokenizer =  data_loader.test_dataset.tokenizer
         self.test_loader = data_loader.test_loader
@@ -111,15 +111,13 @@ class Evaluator(object):
         
     def get_max_data(self):
         "returns max number of sentences to encode"
-        h5py_files = list(Path(self.test_dir).glob('*.h5'))
-        max_samples = 0
-        for h5idx, h5py_file in enumerate(h5py_files):    
-            f = h5py.File(h5py_file, 'r')
-            max_samples += len(f['sentences'])
-        print("same? ", max_samples)
+        # h5py_files = list(Path(self.test_dir).glob('*.h5'))
+        # max_samples = 0
+        # for h5idx, h5py_file in enumerate(h5py_files):    
+        #     f = h5py.File(h5py_file, 'r')
+        #     max_samples += len(f['sentences'])
+        # print("same? ", max_samples)
         max_samples =  len(self.test_loader) * self.bs
-        print("same? ", max_samples)
-    
         return max_samples
 
     def audio_to_embed(self, yamnets, query_lengths):
@@ -439,6 +437,8 @@ if __name__ == "__main__":
 
     parser.add_argument('--model_path', type=str, default="logs/run2-clip_loss_None_gru_768_False_2022-06-12_12-41-49",
                         help='Folder where model weights are saved.')
+    parser.add_argument('--batch_size', type=int, default=128,
+                        help='Batch size to use.')
     parser.add_argument('--save_intermediate', action='store_true', default=False,
                     help='Whether to save intermediate embeddings.')
     parser.add_argument('--calc_acc', action='store_true', default=False,

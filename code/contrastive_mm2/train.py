@@ -402,23 +402,17 @@ class spDatasetWeakShuffle(datautil.Dataset):
             audio_embeds = []
             full_text = []
             lengths  = []
-
             last_idx = self.last_idx
-            # del_lens = []
-            # del_lens2 = []
 
             for enum, i in enumerate(index):
                 h5py_idx, sent_idx = self.idx2file[i]
                 if h5py_idx != last_idx:
                     # Clear memory
                     self.f.close()
-                    # del self.mean_embeds
                     gc.collect()
-                    print("[del3] Garbage collected")
 
                     h5py_file = self.h5py_idx2file[h5py_idx]
                     self.f = h5py.File(h5py_file, 'r')
-
                     print("[del3] loaded new h5py file: ", h5py_idx, h5py_file)
                 
                 # sent = f['sentences'][sent_idx]
