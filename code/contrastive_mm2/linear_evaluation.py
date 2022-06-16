@@ -679,7 +679,6 @@ class LinearEvalator(nn.Module):
 
                 loss, metrics = self.lin_eval_model(sent_features, audio_features, seq_len, cats)    
                 accs.append(metrics['acc'])
-                
 
                 loss.backward()
                 self.optimizer.step()
@@ -690,7 +689,13 @@ class LinearEvalator(nn.Module):
 
             print("-- Train epoch Mean acc: ", np.mean(accs))
             self.acc_per_epoch.append(np.mean(accs))
+
         print("Train done, accs per epoch: ", self.acc_per_epoch)
+
+        # TODO: for now save intermediate, in the end only final round.
+        self.evaluate()
+        self.save_results(epoch)
+
 
         
     def evaluate(self):
@@ -716,21 +721,21 @@ class LinearEvalator(nn.Module):
         self.preds = preds
         self.targets = targets
         
-    def save_results(self):
+    def save_results(self, epoch=0):
         # Save results to csv
         lin_eval_res = {'eval_acc': self.eval_mean_acc,
                        'acc_per_epoch': list(self.acc_per_epoch)}
         out = os.path.join(self.output_path, 
-            '{}_linear_evaluation_results.csv'.format(self.modality))
+            '{}_{}_linear_evaluation_results.csv'.format(epoch, self.modality))
         df = pd.DataFrame(lin_eval_res)
         df.T.to_csv(out, sep=';')
         print(df.T.to_string())
 
         # Save results as confusion matrix
         classes = list(self.data_loader.test_dataset.ep2cat_map.keys())
-        self.make_cm(self.preds, self.targets, classes)
+        self.make_cm(self.preds, self.targets, classes, epoch)
 
-    def make_cm(self, y_pred, y_true, classes):
+    def make_cm(self, y_pred, y_true, classes, epoch=0):
         # Build confusion matrix
         print("[del4] this is make_cm: ", y_pred)
         print("And classes: ", classes)
@@ -741,7 +746,7 @@ class LinearEvalator(nn.Module):
         sn.heatmap(df_cm, annot=True, cmap='Blues')
         
         out = os.path.join(self.output_path, 
-            '{}_linear_evaluation_cm.png'.format(self.modality))
+            '{}_{}_linear_evaluation_cm.png'.format(epoch, self.modality))
         print("Saving to: ", out)
         plt.savefig(out)
         # plt.show()
@@ -774,8 +779,8 @@ def main(args):
     lin_eval_model = LinearEvaluationModel(full_model, fullcfg, data_loader)
     evaluator = LinearEvalator(lin_eval_model, fullcfg, data_loader, modality=modality)
     evaluator.fit()
-    evaluator.evaluate()
-    evaluator.save_results()
+    # evaluator.evaluate()
+    # evaluator.save_results(args.num_epochs)
 
 
 if __name__ == "__main__":
