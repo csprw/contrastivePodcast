@@ -707,6 +707,7 @@ class SequentialAudioModel(nn.Module):
         # Defining the number of layers and the nodes in each layer
         self.hidden_dim = CFG.audio_hidden_dim
         self.layer_dim = CFG.audio_layer_dim
+        self.direction = 1
         
         self.device = CFG.device
         self.audio_model = CFG.audio_proj_head
@@ -728,13 +729,17 @@ class SequentialAudioModel(nn.Module):
                     batch_first=True, dropout=CFG.audio_dropout,
                     bidirectional=True)
             self.layer_dim  = self.layer_dim + 2
-
-        # Fully connected layer
-        self.fc = nn.Linear(CFG.audio_hidden_dim, CFG.mutual_embedding_dim)
+            self.direction = 2
 
         # TODO: kan softmax niet beter weg?
         if self.audio_model == 'rnn':
+            # Fully connected layer
+            self.fc = nn.Linear(CFG.audio_hidden_dim, CFG.mutual_embedding_dim)
             self.softmax = nn.Softmax(dim=1)
+
+        elif self.audio_model == 'lstm':
+            # Fully connected layer
+            self.fc = nn.Linear(CFG.audio_hidden_dim * self.direction, CFG.mutual_embedding_dim)
 
         # pad_pack = args.pad_pack
         self.pad_pack = CFG.pad_pack
@@ -743,14 +748,18 @@ class SequentialAudioModel(nn.Module):
         features, length = audio_seq
 
         # Initializing hidden state for first input with zeros
-        h0 = torch.zeros(self.layer_dim, features.size(0), self.hidden_dim).requires_grad_().to(self.device)
+        # h0 = torch.zeros(self.layer_dim * self.direction, features.size(0), self.hidden_dim).requires_grad_().to(self.device)
+        
 
         if length != None:
+            print(features.shape)
             if self.pad_pack:
                 # Pack the features such that we do not compute zero products
                 features = pack_padded_sequence(features, length, batch_first=True, enforce_sorted=False)
 
-            out, h0 = self.seq_model(features, h0.detach())
+            
+            out, h0 = self.seq_model(features)
+            # print("-- hiero?")
             if self.pad_pack:
                 out, output_lengths = pad_packed_sequence(out, batch_first=True)
             do_trick = True # was originally true, changed to false
@@ -758,7 +767,7 @@ class SequentialAudioModel(nn.Module):
 
         else:
             # Forward propagation by passing in the input and hidden state into the model
-            out, h0 = self.seq_model(features, h0.detach())     # shape [bs, sl, hidden]
+            out, h0 = self.seq_model(features)     # shape [bs, sl, hidden]
             do_trick=False
 
         # Convert the final state to our desired output shape (batch_size, output_dim)
@@ -767,7 +776,9 @@ class SequentialAudioModel(nn.Module):
         else:
             # Reshaping the outputs
             # so that it can fit into the fully connected layer
+            # print("shape out1: ", out.shape)
             out = out[:, -1, :]     # shape [bs * hidden]
+            # print("shape out2: ", out.shape)
 
         out = self.fc(out)
         if self.audio_model == 'rnn':
