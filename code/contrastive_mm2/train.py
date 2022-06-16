@@ -707,6 +707,7 @@ class SequentialAudioModel(nn.Module):
         # Defining the number of layers and the nodes in each layer
         self.hidden_dim = CFG.audio_hidden_dim
         self.layer_dim = CFG.audio_layer_dim
+        
         self.device = CFG.device
         self.audio_model = CFG.audio_proj_head
 
@@ -726,6 +727,7 @@ class SequentialAudioModel(nn.Module):
                     hidden_size=CFG.audio_hidden_dim, num_layers=CFG.audio_layer_dim + 2, 
                     batch_first=True, dropout=CFG.audio_dropout,
                     bidirectional=True)
+            self.layer_dim  = self.layer_dim + 2
 
         # Fully connected layer
         self.fc = nn.Linear(CFG.audio_hidden_dim, CFG.mutual_embedding_dim)
