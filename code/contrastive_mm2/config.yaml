@@ -1,5 +1,5 @@
 ########################################
-# Paths for reading yamnet embeddings 
+data_path: ../../data/
 # dataset_input_path: ../data/sp/podcasts-no-audio-13GB/      # changed to dataset_input_path
 dataset_path: ../../data/podcasts-no-audio-13GB/
 
