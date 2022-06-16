@@ -439,12 +439,8 @@ if __name__ == "__main__":
 
     parser.add_argument('--model_path', type=str, default="logs/run2-clip_loss_None_gru_768_False_2022-06-12_12-41-49",
                         help='Folder where model weights are saved.')
-
-    
     parser.add_argument('--save_intermediate', action='store_true', default=False,
                     help='Whether to save intermediate embeddings.')
-    # parser.add_argument('--tmp_files_path', type=str, default="logs/windows_gru2_15m",
-    #                     help='Folder where model weights are saved.')
     parser.add_argument('--calc_acc', action='store_true', default=False,
                     help='Whether to output accuracy.')
     args, unparsed = parser.parse_known_args()
