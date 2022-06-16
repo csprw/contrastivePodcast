@@ -281,9 +281,6 @@ class spDatasetWeakShuffleLinSep(datautil.Dataset):
         self.lin_sep = lin_sep
         self.read_ep2cat()
         
-        ### DELETE [del4]
-        CFG.max_train_samples = 128 * 100
-        
         idx2file = {}
         sample_idx = 0
         self.h5py_idx2file = h5py_files
@@ -310,8 +307,8 @@ class spDatasetWeakShuffleLinSep(datautil.Dataset):
                 idx2file[sample_idx] = (h5idx, sent_idx)
                 sample_idx += 1
 
-                # if CFG.max_train_samples > 0 and traintest == 'train' and sample_idx >= CFG.max_train_samples:
-                if CFG.max_train_samples > 0 and sample_idx >= CFG.max_train_samples:
+                if CFG.max_train_samples > 0 and traintest == 'train' and sample_idx >= CFG.max_train_samples:
+                # if CFG.max_train_samples > 0 and sample_idx >= CFG.max_train_samples:
                     print("[del] Max exceeded {}".format(sample_idx))
                     f.close()
                     self.file_startstop.append((start_idx, sample_idx))
@@ -499,16 +496,17 @@ class spDatasetEpLevel(datautil.Dataset):
                 idx2file[sample_idx] = (h5idx, sent_idx)
                 sample_idx += 1
 
-                if CFG.max_train_samples > 0 and traintest == 'train' and sample_idx >= CFG.max_train_samples:
+                # if CFG.max_train_samples > 0 and traintest == 'train' and sample_idx >= CFG.max_train_samples:
+                if CFG.max_train_samples > 0  and sample_idx >= CFG.max_train_samples:
                     print("[del] Max exceeded {}".format(sample_idx))
                     f.close()
                     self.file_startstop.append((start_idx, sample_idx))
                     break
-                elif sample_idx > 128 * 200:
-                    f.close()
-                    self.file_startstop.append((start_idx, sample_idx))
-                    # del4
-                    break
+                # elif sample_idx > 128 * 200:
+                #     f.close()
+                #     self.file_startstop.append((start_idx, sample_idx))
+                #     # del4
+                #     break
             else:
                 f.close()
                 self.file_startstop.append((start_idx, sample_idx))
@@ -857,12 +855,11 @@ class epLevelCreator(nn.Module):
     """
         This loss expects as input a batch consisting of ... etc
     """
-    def __init__(self, full_model, CFG, data_loader, modality='text'):
+    def __init__(self, full_model, CFG, data_loader):
         """
         test
         """
         super(epLevelCreator, self).__init__()
-        self.modality=modality
         self.text_model = full_model.text_model
         self.audio_model = full_model.audio_model
 
@@ -1144,7 +1141,6 @@ class LinearEvaluatorEplevel(nn.Module):
 
 def main(args):
     model_path = args.model_path
-    modality = args.modality
     print("[Load model] from ", model_path)
     model_weights_path = os.path.join(model_path, "output/full_model_weights.pth")
     model_config_path = os.path.join(model_path, 'config.json')
@@ -1156,6 +1152,8 @@ def main(args):
     fullcfg.device = "cuda" if torch.cuda.is_available() else "cpu"
     fullcfg.ep_level = args.ep_level
     fullcfg.weak_shuffle = False            # For evaluation turn shuffling off
+    ### DELETE [del4]
+    fullcfg.max_train_samples = 128 * 1
     print("[Load model] config loaded: ", fullcfg)
 
     # Create dataloader
@@ -1168,35 +1166,23 @@ def main(args):
     full_model.eval()
 
     # Create representations on epiode level
-    eplevel = epLevelCreator(full_model, fullcfg, data_loader, modality=modality)
+    eplevel = epLevelCreator(full_model, fullcfg, data_loader)
     eplevel.create()
 
-    # print("Done creating")
-    # print(len(eplevel.mean_cats),len(eplevel.mean_a_embeds),len(eplevel.mean_t_embeds))
-    # print("CAATS: ", eplevel.mean_cats)
-    # print("and other: ", eplevel.mean_t_embeds[0])
+
     ep_dataset= epDataset(fullcfg, eplevel)
     ep_loader = DataLoader(ep_dataset, batch_size=6, shuffle=False, drop_last=True)
-    # ep_loader.collate_fn = ep_dataset.batching_collate
 
     # Calculate results for text
     classes = list(ep_dataset.ep2cat_map.keys())
-    evaluator = LinearEvaluatorEplevel(fullcfg, ep_loader, classes, modality=modality)
+    evaluator = LinearEvaluatorEplevel(fullcfg, ep_loader, classes, modality="text")
     evaluator.fit()
 
-    # for step, batch in enumerate(iter(ep_loader)):
-    #     mean_a_embeds, mean_t_embeds, cats = batch
+    # Calculate results for audio
+    classes = list(ep_dataset.ep2cat_map.keys())
+    evaluator = LinearEvaluatorEplevel(fullcfg, ep_loader, classes, modality="audio")
+    evaluator.fit()
 
-    #     print("Got it: ", mean_t_embeds)
-
-    #     exit(1)
-
-    # Perform evaluation
-    # lin_eval_model = LinearEvaluationModel(full_model, fullcfg, data_loader)
-    # evaluator = LinearEvalator(lin_eval_model, fullcfg, data_loader, modality=modality)
-    # evaluator.fit()
-    # evaluator.evaluate()
-    # evaluator.save_results(args.num_epochs)
 
 
 if __name__ == "__main__":
