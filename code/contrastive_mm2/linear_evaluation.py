@@ -643,7 +643,7 @@ class LinearEvalator(nn.Module):
         self.output_path = CFG.log_name
 
         # to config file
-        self.lin_max_epochs = 2
+        self.lin_max_epochs = args.num_epochs
         self.in_batch_size = 256
         lin_lr = 0.001
         lin_weight_decay = 1.0e-6
@@ -732,7 +732,7 @@ class LinearEvalator(nn.Module):
 
     def make_cm(self, y_pred, y_true, classes):
         # Build confusion matrix
-        print("[del4] this is make_cm: ", y_pred, y_true)
+        print("[del4] this is make_cm: ", y_pred)
         print("And classes: ", classes)
         cf_matrix = confusion_matrix(y_true, y_pred, labels=np.arange(len(classes)))
         df_cm = pd.DataFrame(cf_matrix/np.sum(cf_matrix), index = [i for i in classes],
