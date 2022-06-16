@@ -115,7 +115,7 @@ class MMloader(object):
         self.batch_size = batch_size
         self.device = CFG.device
 
-        if CFG.audio_proj_head in ['gru', 'rnn']:
+        if CFG.audio_proj_head in ['gru', 'rnn', 'lstm']:
             self.load_full = True
         else:
             self.load_full = False
@@ -385,7 +385,6 @@ class spDatasetWeakShuffle(datautil.Dataset):
         
         self.last_idx = -1
         self.mean_embeds = None
-        print("[del4] INITialized mean embeds to None")
         self.f =  h5py.File(h5py_file, 'r')
 
     def __len__(self):
@@ -485,7 +484,6 @@ class spDatasetWeakShuffle(datautil.Dataset):
             text_embeds = self.tokenizer(
                 text_embeds, padding=True, truncation=True, max_length=max_length, return_tensors='pt'
             ).to(self.device)
-
             return text_embeds, audio_embeds, lengths
 
 class RandomBatchSampler(Sampler):
