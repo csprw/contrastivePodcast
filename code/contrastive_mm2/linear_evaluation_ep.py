@@ -992,7 +992,7 @@ class LinearEvaluatorEplevel(nn.Module):
         # to config file
         self.lin_max_epochs = args.num_epochs
         # self.in_batch_size = 256
-        lin_lr = 0.001
+        lin_lr = 0.1
         lin_weight_decay = 1.0e-6
 
         self.classes = classes
@@ -1034,13 +1034,15 @@ class LinearEvaluatorEplevel(nn.Module):
         self.acc_per_epoch = []
         for epoch in range(self.lin_max_epochs):
             print("-- -- -- Epoch: ", epoch)
+            self.projectionhead.train()
+            self.train()
             accs =[]
             for step, batch in enumerate(iter(self.train_ep_loader)):
                 # sent_features, audio_features, seq_len, cats = batch
                 mean_a_embeds, mean_t_embeds, cats = batch
                 mean_a_embeds = mean_a_embeds.to(self.device)
                 mean_t_embeds = mean_t_embeds.to(self.device)
-                cats = torch.tensor(cats).to(self.device)
+                cats = cats.to(self.device)
 
                 self.optimizer.zero_grad()
                 # loss, metrics = self.projectionhead(sent_features, audio_features, seq_len, cats)    
@@ -1068,7 +1070,7 @@ class LinearEvaluatorEplevel(nn.Module):
             self.evaluate()
             self.save_results(epoch)
 
-        print("Train done, accs per epoch: ", self.acc_per_epoch)
+        # print("Train done, accs per epoch: ", self.acc_per_epoch)
         
         
     def evaluate(self):
@@ -1078,6 +1080,7 @@ class LinearEvaluatorEplevel(nn.Module):
         full_targets = []
         
         print("-- -- -- Start evaluation ")
+        self.projectionhead.eval()
         with torch.no_grad():
             for step, batch in enumerate(iter(self.val_ep_loader)):
                 # sent_features, audio_features, seq_len, targs, _, cats = batch
@@ -1098,6 +1101,7 @@ class LinearEvaluatorEplevel(nn.Module):
         self.preds = full_preds
         self.targets = full_targets
         print("Evaluaction accuracy: ", self.eval_mean_acc)
+        self.projectionhead.train()
 
     def get_metrics(self, preds, targets):
         metrics = {}
@@ -1116,7 +1120,7 @@ class LinearEvaluatorEplevel(nn.Module):
         out = os.path.join(self.output_path, 
             '{}_{}_ep_linear_evaluation_results.csv'.format(epoch, self.modality))
         df = pd.DataFrame(lin_eval_res)
-        df.T.to_csv(out, sep=';')
+        # df.T.to_csv(out, sep=';')
         print(df.T.to_string())
 
         # Save results as confusion matrix
@@ -1126,7 +1130,7 @@ class LinearEvaluatorEplevel(nn.Module):
     def make_cm(self, y_pred, y_true, classes, epoch=0):
         # Build confusion matrix
         print("[del4] this is make_cm: ",Counter(y_true), Counter(y_pred))
-        print("And classes: ", classes)
+        # print("And classes: ", classes)
         cf_matrix = confusion_matrix(y_true, y_pred, labels=np.arange(len(classes)), normalize=None)
         df_cm = pd.DataFrame(cf_matrix, index = [i for i in classes],
             columns = [i for i in classes])
@@ -1135,8 +1139,8 @@ class LinearEvaluatorEplevel(nn.Module):
         
         out = os.path.join(self.output_path, 
             '{}_{}_ep_linear_evaluation_cm.png'.format(epoch, self.modality))
-        print("Saving to: ", out)
-        plt.savefig(out)
+        # print("Saving to: ", out)
+        # plt.savefig(out)
         # plt.show()
 
 def main(args):
@@ -1153,7 +1157,7 @@ def main(args):
     fullcfg.ep_level = args.ep_level
     fullcfg.weak_shuffle = False            # For evaluation turn shuffling off
     ### DELETE [del4]
-    fullcfg.max_train_samples = 128 * 1
+    fullcfg.max_train_samples = 128 * 20
     print("[Load model] config loaded: ", fullcfg)
 
     # Create dataloader
@@ -1179,9 +1183,9 @@ def main(args):
     evaluator.fit()
 
     # Calculate results for audio
-    classes = list(ep_dataset.ep2cat_map.keys())
-    evaluator = LinearEvaluatorEplevel(fullcfg, ep_loader, classes, modality="audio")
-    evaluator.fit()
+    # classes = list(ep_dataset.ep2cat_map.keys())
+    # evaluator = LinearEvaluatorEplevel(fullcfg, ep_loader, classes, modality="audio")
+    # evaluator.fit()
 
 
 

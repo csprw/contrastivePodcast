@@ -724,10 +724,19 @@ class SequentialAudioModel(nn.Module):
                     input_size=CFG.audio_encoder_input, 
                     hidden_size=CFG.audio_hidden_dim, num_layers=CFG.audio_layer_dim, 
                     batch_first=True, dropout=CFG.audio_dropout)
+        elif self.audio_model == 'lstm':
+            self.seq_model = nn.LSTM(
+                    input_size=CFG.audio_encoder_input, 
+                    hidden_size=CFG.audio_hidden_dim, num_layers=CFG.audio_layer_dim + 2, 
+                    batch_first=True, dropout=CFG.audio_dropout,
+                    bidirectional=True)
 
         # Fully connected layer
         self.fc = nn.Linear(CFG.audio_hidden_dim, CFG.mutual_embedding_dim)
-        self.softmax = nn.Softmax(dim=1)
+
+        # TODO: kan softmax niet beter weg?
+        if self.audio_model == 'rnn':
+            self.softmax = nn.Softmax(dim=1)
 
         # pad_pack = args.pad_pack
         self.pad_pack = CFG.pad_pack
@@ -746,7 +755,8 @@ class SequentialAudioModel(nn.Module):
             out, h0 = self.seq_model(features, h0.detach())
             if self.pad_pack:
                 out, output_lengths = pad_packed_sequence(out, batch_first=True)
-            do_trick = True
+            do_trick = True # was originally true, changed to false
+            do_trick= False
 
         else:
             # Forward propagation by passing in the input and hidden state into the model
@@ -762,7 +772,8 @@ class SequentialAudioModel(nn.Module):
             out = out[:, -1, :]     # shape [bs * hidden]
 
         out = self.fc(out)
-        out = self.softmax(out)
+        if self.audio_model == 'rnn':
+            out = self.softmax(out)
         return out  # shape [bs*output]
 
 class simple_ProjectionHead(nn.Module):
@@ -842,7 +853,7 @@ class mmModule(nn.Module):
             pooling_model = Pooling(text_encoder.get_word_embedding_dimension())
             text_modules = [text_encoder, pooling_model]
 
-        if CFG.audio_proj_head in ['rnn', 'gru']:
+        if CFG.audio_proj_head in ['rnn', 'gru', 'lstm']:
             audio_encoder = SequentialAudioModel(CFG)
             audio_modules = [audio_encoder]
         elif CFG.audio_proj_head in ['sph']:
@@ -1434,7 +1445,7 @@ if __name__ == "__main__":
                     nargs='?', choices=['simcse_loss', 'clip_loss', 'clip_loss_simple'],
                     help='Name of scale_type (default: %(default)s)')
     parser.add_argument('--audio_proj_head', default='gru', const='gru',
-                    nargs='?', choices=['sph', 'rnn', 'gru'],
+                    nargs='?', choices=['sph', 'rnn', 'gru', 'lstm'],
                     help='Activation to use in simple proj head (default: %(default)s)')
     parser.add_argument('--text_proj_head', default='None', const='None',
                     nargs='?', choices=['sph', 'None'],
