@@ -458,15 +458,13 @@ class spDatasetWeakShuffle(datautil.Dataset):
                 if h5py_idx != last_idx:
                     # Clear memory
                     self.f.close()
-                    print("[del4] Gonna do del embeds")
                     del self.mean_embeds
                     gc.collect()
-                    print("Garbage collected")
 
                     h5py_file = self.h5py_idx2file[h5py_idx]
                     self.f = h5py.File(h5py_file, 'r')
 
-                    print("[del2] loaded new h5py file: ", h5py_idx, h5py_file)
+                    print("[del4] loaded new h5py file: ", h5py_idx, h5py_file)
                     self.mean_embeds = torch.Tensor(np.array(self.f['mean_embeddings']))
 
                 sent = self.f['sentences'][sent_idx].decode("utf-8")
