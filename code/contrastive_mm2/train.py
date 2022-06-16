@@ -750,14 +750,11 @@ class SequentialAudioModel(nn.Module):
         # Initializing hidden state for first input with zeros
         # h0 = torch.zeros(self.layer_dim * self.direction, features.size(0), self.hidden_dim).requires_grad_().to(self.device)
         
-
         if length != None:
-            print(features.shape)
             if self.pad_pack:
                 # Pack the features such that we do not compute zero products
                 features = pack_padded_sequence(features, length, batch_first=True, enforce_sorted=False)
 
-            
             out, h0 = self.seq_model(features)
             # print("-- hiero?")
             if self.pad_pack:
