@@ -969,11 +969,18 @@ class epDataset(datautil.Dataset):
         a_embeds = self.mean_a_embeds[idx]
         t_embeds = self.mean_t_embeds[idx]
         targets =  self.mean_cats[idx]
-        return a_embeds, t_embeds, targets
+        print("In getitem!!!")
+        return (a_embeds, t_embeds, targets)
 
     
     def batching_collate(self, batch):
         """ Return a batch containing samples of the SP dataset"""
+        print("[del4] in batching collate!")
+        # print("This is batch: ", batch)
+        print(len(batch))
+        print(type(batch[0]))
+        print(type(batch[1]))
+        print(type(batch[2]))
         a_embeds, t_embeds, targets = batch
 
         return  a_embeds.to(self.device), t_embeds.to(self.device), torch.tensor(targets).to(self.device)
@@ -1047,9 +1054,9 @@ class LinearEvaluatorEplevel(nn.Module):
             for step, batch in enumerate(iter(self.train_ep_loader)):
                 # sent_features, audio_features, seq_len, cats = batch
                 mean_a_embeds, mean_t_embeds, cats = batch
-                # mean_a_embeds = mean_a_embeds.to(self.device)
-                # mean_t_embeds = mean_t_embeds.to(self.device)
-                # cats = cats.to(self.device)
+                mean_a_embeds = mean_a_embeds.to(self.device)
+                mean_t_embeds = mean_t_embeds.to(self.device)
+                cats = torch.tensor(cats).to(self.device)
 
                 self.optimizer.zero_grad()
                 # loss, metrics = self.projectionhead(sent_features, audio_features, seq_len, cats)    
@@ -1184,9 +1191,8 @@ def main(args):
     # print("CAATS: ", eplevel.mean_cats)
     # print("and other: ", eplevel.mean_t_embeds[0])
     ep_dataset= epDataset(fullcfg, eplevel)
-    ep_dataset.collate_fn = ep_dataset.batching_collate
-
-    ep_loader = DataLoader(ep_dataset, batch_size=4, shuffle=False, drop_last=True)
+    ep_loader = DataLoader(ep_dataset, batch_size=6, shuffle=False, drop_last=True)
+    # ep_loader.collate_fn = ep_dataset.batching_collate
 
     # Calculate results for text
     classes = list(ep_dataset.ep2cat_map.keys())
