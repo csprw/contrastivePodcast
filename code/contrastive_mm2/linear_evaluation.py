@@ -129,11 +129,10 @@ class spDatasetNoMemory(datautil.Dataset):
                         
                 idx2file[sample_idx] = (h5idx, sent_idx)
                 sample_idx += 1
-                
-
-                if sample_idx > 500:
-                    print(" [del4] del del del!!")
-                    break
+            
+                # if sample_idx > 500:
+                #     print(" [del4] del del del!!")
+                #     break
 
                 if traintest == 'train' and CFG.max_train_samples > 0 and sample_idx >= CFG.max_train_samples:
                     print("[spdataset] Max exceeded: ", sample_idx)
@@ -280,7 +279,7 @@ class spDatasetWeakShuffleLinSep(datautil.Dataset):
         self.read_ep2cat()
         
         ### DELETE [del4]
-        CFG.max_train_samples = 128 * 100
+        # CFG.max_train_samples = 128 * 100
         
         idx2file = {}
         sample_idx = 0
@@ -464,7 +463,7 @@ class spDatasetEpLevel(datautil.Dataset):
         self.read_ep2cat()
         
         ### DELETE [del4]
-        CFG.max_train_samples = 128 * 100
+        # CFG.max_train_samples = 128 * 100
         
         idx2file = {}
         sample_idx = 0
@@ -484,16 +483,10 @@ class spDatasetEpLevel(datautil.Dataset):
             for sent_idx in range(len(f['sentences'])):
                 
                 # Only load data for wich we have a category label
-                
                 episode = f['seg_ts'][sent_idx].decode("utf-8").split('_')[0]
                 if lin_sep and episode not in self.ep2cat.keys():
                     print("[del4] continue")
                     continue
-
-                print(episode)
-                
-
-
 
                 idx2file[sample_idx] = (h5idx, sent_idx)
                 sample_idx += 1
@@ -804,6 +797,7 @@ def main(args):
     fullcfg = from_dict(data_class=Cfg, data=model_config)
     fullcfg.device = "cuda" if torch.cuda.is_available() else "cpu"
     fullcfg.ep_level = args.ep_level
+    # fullcfg.weak_shuffle = False            # For evaluation turn shuffling
     print("[Load model] config loaded: ", fullcfg)
 
     # Create dataloader
