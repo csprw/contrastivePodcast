@@ -72,7 +72,7 @@ class MMloader(object):
     def create_dataset(self, CFG, name, traintest, shuffle=True):
         directory = conf.sp_sample_path if name == 'sp_sample' else conf.sp_path
         dataset = self.get_sp_dataset(CFG, directory=directory,  traintest=traintest, load_full=self.load_full, lin_sep=self.lin_sep)
-        # print("[del4] len of dataset: ", len(dataset))
+
         if (CFG.weak_shuffle and traintest != 'test') or (CFG.ep_level):
             shuffle = False if CFG.ep_level else True
 
@@ -134,9 +134,9 @@ class spDatasetNoMemory(datautil.Dataset):
                 sample_idx += 1
                 
 
-                if sample_idx > 500:
-                    print(" [del4] del del del!!")
-                    break
+                # if sample_idx > 500:
+                #     print(" [del4] del del del!!")
+                #     break
 
                 if traintest == 'train' and CFG.max_train_samples > 0 and sample_idx >= CFG.max_train_samples:
                     print("[spdataset] Max exceeded: ", sample_idx)
@@ -310,7 +310,8 @@ class spDatasetWeakShuffleLinSep(datautil.Dataset):
                 idx2file[sample_idx] = (h5idx, sent_idx)
                 sample_idx += 1
 
-                if CFG.max_train_samples > 0 and traintest == 'train' and sample_idx >= CFG.max_train_samples:
+                # if CFG.max_train_samples > 0 and traintest == 'train' and sample_idx >= CFG.max_train_samples:
+                if CFG.max_train_samples > 0 and sample_idx >= CFG.max_train_samples:
                     print("[del] Max exceeded {}".format(sample_idx))
                     f.close()
                     self.file_startstop.append((start_idx, sample_idx))
@@ -465,7 +466,7 @@ class spDatasetEpLevel(datautil.Dataset):
         self.read_ep2cat()
         
         ### DELETE [del4]
-        CFG.max_train_samples = 128 * 1
+        # CFG.max_train_samples = 128 * 1
         self.return_targets = True
         
         idx2file = {}
@@ -908,23 +909,14 @@ class epLevelCreator(nn.Module):
 
                 if num_targs > 1 or self.cur_ep != targets[0]:
                     for idx, targ in enumerate(targets):
-                        # print(idx)
                         if self.cur_ep != targ:
-                            # print("Save mean!!")
                             if targ in self.processed_eps:
                                 print("DEBUG: already exists? should not be possible")
                                 raise
                             self.mean_cats.append(cats[idx].item())
-                            
-                            # print("Before mean: ", self.cur_a_embeds)
-                            # print("stacked: ", torch.stack(self.cur_a_embeds, dim=0))
-                            # print("mean: ", torch.mean(torch.stack(self.cur_a_embeds, dim=0), dim=-1))
-                            # print("mea2n: ", torch.mean(torch.stack(self.cur_a_embeds, dim=0), dim=-0))
                             self.mean_a_embeds.append(torch.mean(torch.stack(self.cur_a_embeds, dim=0), dim=0))
                             self.mean_t_embeds.append(torch.mean(torch.stack(self.cur_t_embeds, dim=0), dim=0))
                             self.processed_eps.append(targ)
-                            # print("after mean: ", len(self.mean_a_embeds), len(self.mean_t_embeds))
-                            # print("            ", self.mean_a_embeds[-1].shape, self.mean_t_embeds[-1].shape)
                             self.cur_ep = targ
 
                         self.cur_a_embeds.append(reps_audio[idx])
@@ -935,10 +927,6 @@ class epLevelCreator(nn.Module):
                 else:
                     self.cur_a_embeds.append(torch.mean(reps_audio, dim=0))
                     self.cur_t_embeds.append(torch.mean(reps_text, dim=0))
-
-                if step > 4:
-                    print("[del4] break for now")
-                    break
 
 
 
@@ -1065,8 +1053,6 @@ class LinearEvaluatorEplevel(nn.Module):
                 else:
                     preds = self.projectionhead(mean_a_embeds)
 
-                print("[del4] 1: ", preds.is_cuda)
-                print("[del4] ", cats.is_cuda)
                 loss = self.criterion(preds, cats)
                 metrics = self.get_metrics(preds.detach().cpu(), cats.detach().cpu())
 
