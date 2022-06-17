@@ -717,12 +717,17 @@ class SequentialAudioModel(nn.Module):
                     hidden_size=CFG.audio_hidden_dim, num_layers=CFG.audio_layer_dim, 
                     batch_first=True, dropout=CFG.audio_dropout)
         elif self.audio_model == 'lstm':
-            bidirectional = True
-            self.seq_model = nn.LSTM(
-                    input_size=CFG.audio_encoder_input, 
-                    hidden_size=CFG.audio_hidden_dim, num_layers=CFG.audio_layer_dim, 
-                    batch_first=True, dropout=CFG.audio_dropout,
-                    bidirectional=True)
+            bidirectional = False
+            # self.seq_model = nn.LSTM(
+            #         input_size=CFG.audio_encoder_input, 
+            #         hidden_size=CFG.audio_hidden_dim, num_layers=CFG.audio_layer_dim, 
+            #         batch_first=True, dropout=CFG.audio_dropout,
+            #         bidirectional=True)
+            self.seq_model = nn.GRU(
+                input_size=CFG.audio_encoder_input, 
+                hidden_size=CFG.audio_hidden_dim, num_layers=CFG.audio_layer_dim, 
+                batch_first=True, dropout=CFG.audio_dropout)
+
             # self.layer_dim  = self.layer_dim + 2
             self.direction = 2 if bidirectional else 1
 
@@ -735,6 +740,8 @@ class SequentialAudioModel(nn.Module):
         elif self.audio_model == 'lstm':
             # Fully connected layer
             self.fc = nn.Linear(CFG.audio_hidden_dim * self.direction, CFG.mutual_embedding_dim)
+            self.relu = nn.ReLU()
+            self.fc = nn.Linear(CFG.mutual_embedding_dim, CFG.mutual_embedding_dim)
 
         # pad_pack = args.pad_pack
         self.pad_pack = CFG.pad_pack
@@ -751,7 +758,7 @@ class SequentialAudioModel(nn.Module):
                 # Pack the features such that we do not compute zero products
                 features = pack_padded_sequence(features, length, batch_first=True, enforce_sorted=False)
 
-            if self.audio_model == 'lstm':
+            if self.audio_model == 'lstm_old':
                 c0 = torch.zeros(self.layer_dim * self.direction, features.size(0), self.hidden_dim).requires_grad_().to(self.device)
                 out, (h0, c0) = self.seq_model(features, (h0, c0))
                 do_trick = False
@@ -761,9 +768,6 @@ class SequentialAudioModel(nn.Module):
             
             if self.pad_pack:
                 out, output_lengths = pad_packed_sequence(out, batch_first=True)
-            
-
-
             
 
         else:

@@ -503,7 +503,7 @@ class spDatasetEpLevel(datautil.Dataset):
                     self.file_startstop.append((start_idx, sample_idx))
                     break
                 #elif sample_idx > 5000000:
-                elif sample_idx > 250000:
+                elif sample_idx > 500000:
                     f.close()
                     self.file_startstop.append((start_idx, sample_idx))
                     print("[del] Max exceeded {}".format(sample_idx))
@@ -907,7 +907,7 @@ class epLevelCreator(nn.Module):
 
                 if num_targs > 1 or self.cur_ep != targets[0]:
                     if num_targs > 1:
-                        print("OPT 0: Num targs > 1: ", targets)
+                        print("OPT 0: Num targs > 1: ",num_targs )
                     else:
                         print("OPT 1: entrie batch different")
                     for idx, targ in enumerate(targets):
