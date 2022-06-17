@@ -999,14 +999,24 @@ class LinearEvaluatorEplevel(nn.Module):
         self.hidden_dim = CFG.final_projection_dim
         self.output_dim = len(classes)
 
+        batchnorm = False
+
         if not args.mlp:
             self.projectionhead = nn.Sequential(nn.Linear(self.hidden_dim, self.output_dim))
+        elif batchnorm:
+            self.projectionhead = nn.Sequential( 
+               nn.Linear(self.hidden_dim, self.hidden_dim),
+               nn.ReLU(),
+               nn.BatchNorm1d(num_features=self.hidden_dim),
+               nn.Linear(self.hidden_dim, self.output_dim),
+            )
         else:
             self.projectionhead = nn.Sequential(
                nn.Linear(self.hidden_dim, self.hidden_dim),
                nn.ReLU(),
                nn.Linear(self.hidden_dim, self.output_dim),
             )
+
         self.criterion = nn.CrossEntropyLoss()
         self.projectionhead.to(self.device)
         
@@ -1118,7 +1128,7 @@ class LinearEvaluatorEplevel(nn.Module):
         lin_eval_res = {'eval_acc': self.eval_mean_acc,
                        'acc_per_epoch': list(self.acc_per_epoch)}
         out = os.path.join(self.output_path, 
-            '{}_{}_ep_linear_evaluation_results.csv'.format(epoch, self.modality))
+            'ep_{}_linear_evaluation_results.csv'.format(self.modality))
         df = pd.DataFrame(lin_eval_res)
         # df.T.to_csv(out, sep=';')
         print(df.T.to_string())
@@ -1138,7 +1148,7 @@ class LinearEvaluatorEplevel(nn.Module):
         sn.heatmap(df_cm, annot=True, cmap='Blues')
         
         out = os.path.join(self.output_path, 
-            '{}_{}_ep_linear_evaluation_cm.png'.format(epoch, self.modality))
+            'ep_{}_{}_linear_evaluation_cm.png'.format(epoch, self.modality))
         # print("Saving to: ", out)
         # plt.savefig(out)
         # plt.show()
@@ -1175,7 +1185,7 @@ def main(args):
 
 
     ep_dataset= epDataset(fullcfg, eplevel)
-    ep_loader = DataLoader(ep_dataset, batch_size=6, shuffle=False, drop_last=True)
+    ep_loader = DataLoader(ep_dataset, batch_size=args.lin_batch_size, shuffle=False, drop_last=True)
 
     # Calculate results for text
     classes = list(ep_dataset.ep2cat_map.keys())
@@ -1198,14 +1208,11 @@ if __name__ == "__main__":
 
     parser.add_argument('--model_path', type=str, default="logs/run2-clip_loss_None_sph_768_False_2022-06-12_12-44-00",
                         help='Folder where model weights are saved.')
-    parser.add_argument('--modality', default='text', const='text',
-                    nargs='?', choices=['text', 'audio'],
-                    help='Which modality to perform validation on (default: %(default)s)')
-    
-    # parser.add_argument('--save_intermediate', action='store_true', default=False,
-    #                 help='Whether to save intermediate embeddings.')
+
+    parser.add_argument('--lin_batch_size', type=int, default=256,
+                        help='Lineaer evaluation batchsize.')
     parser.add_argument('--num_epochs', type=int, default=1,
-                        help='Number of epochs to train')
+                        help='Number of epochs to train. ')
     parser.add_argument('--mlp', action='store_true', default=False,
                     help='Whether to use multiple layers.')
     parser.add_argument('--ep_level', action='store_true', default=False,

@@ -758,7 +758,7 @@ class LinearEvalator(nn.Module):
         lin_eval_res = {'eval_acc': self.eval_mean_acc,
                        'acc_per_epoch': list(self.acc_per_epoch)}
         out = os.path.join(self.output_path, 
-            '{}_{}_linear_evaluation_results.csv'.format(epoch, self.modality))
+            '{}_linear_evaluation_results.csv'.format(self.modality))
         df = pd.DataFrame(lin_eval_res)
         df.T.to_csv(out, sep=';')
         print(df.T.to_string())
@@ -772,7 +772,7 @@ class LinearEvalator(nn.Module):
         print("[del4] this is make_cm: ", y_pred)
         print("And classes: ", classes)
         cf_matrix = confusion_matrix(y_true, y_pred, labels=np.arange(len(classes)))
-        df_cm = pd.DataFrame(cf_matrix/np.sum(cf_matrix), index = [i for i in classes],
+        df_cm = pd.DataFrame(cf_matrix, index = [i for i in classes],
             columns = [i for i in classes])
         plt.figure(figsize = (12,7))
         sn.heatmap(df_cm, annot=True, cmap='Blues')

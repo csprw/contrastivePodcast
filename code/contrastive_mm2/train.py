@@ -717,13 +717,14 @@ class SequentialAudioModel(nn.Module):
                     hidden_size=CFG.audio_hidden_dim, num_layers=CFG.audio_layer_dim, 
                     batch_first=True, dropout=CFG.audio_dropout)
         elif self.audio_model == 'lstm':
+            bidirectional = True
             self.seq_model = nn.LSTM(
                     input_size=CFG.audio_encoder_input, 
-                    hidden_size=CFG.audio_hidden_dim, num_layers=CFG.audio_layer_dim + 2, 
+                    hidden_size=CFG.audio_hidden_dim, num_layers=CFG.audio_layer_dim, 
                     batch_first=True, dropout=CFG.audio_dropout,
                     bidirectional=True)
-            self.layer_dim  = self.layer_dim + 2
-            self.direction = 2
+            # self.layer_dim  = self.layer_dim + 2
+            self.direction = 2 if bidirectional else 1
 
         # TODO: kan softmax niet beter weg?
         if self.audio_model in ['rnn', 'gru']:
@@ -742,19 +743,20 @@ class SequentialAudioModel(nn.Module):
         features, length = audio_seq
 
         # Initializing hidden state for first input with zeros
-        # h0 = torch.zeros(self.layer_dim * self.direction, features.size(0), self.hidden_dim).requires_grad_().to(self.device)
-        
+        h0 = torch.zeros(self.layer_dim * self.direction, features.size(0), self.hidden_dim).requires_grad_().to(self.device)
+        c0 = torch.zeros(self.layer_dim * self.direction, features.size(0), self.hidden_dim).requires_grad_().to(self.device)
+
         if length != None:
             if self.pad_pack:
                 # Pack the features such that we do not compute zero products
                 features = pack_padded_sequence(features, length, batch_first=True, enforce_sorted=False)
 
-            out, h0 = self.seq_model(features)
-            # print("-- hiero?")
+            out, (h0, c0) = self.seq_model(features, (h0, c0))
+            
             if self.pad_pack:
                 out, output_lengths = pad_packed_sequence(out, batch_first=True)
             do_trick = True # was originally true, changed to false
-            do_trick= False
+            do_trick = False
 
         else:
             # Forward propagation by passing in the input and hidden state into the model
