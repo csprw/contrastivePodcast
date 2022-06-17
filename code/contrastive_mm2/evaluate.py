@@ -90,7 +90,7 @@ class Evaluator(object):
         self.model = full_model
         self.device = CFG.device
         self.scale = CFG.scale
-        self.bs = CFG.args.batch_size
+        self.bs = args.batch_size
         self.embed_dim = CFG.mutual_embedding_dim
         self.tokenizer =  data_loader.test_dataset.tokenizer
         self.test_loader = data_loader.test_loader
