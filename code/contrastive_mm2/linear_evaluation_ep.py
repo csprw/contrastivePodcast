@@ -921,7 +921,6 @@ class epLevelCreator(nn.Module):
 
                             self.mean_a_embeds.append(torch.mean(torch.stack(self.cur_a_embeds, dim=0), dim=0).detach().cpu())
                             self.mean_t_embeds.append(torch.mean(torch.stack(self.cur_t_embeds, dim=0), dim=0).detach().cpu())
-                            print("Appending: ", targ)
                             self.processed_eps.append(targ)
                             self.cur_ep = targ
 
@@ -1098,6 +1097,9 @@ class LinearEvaluatorEplevel(nn.Module):
                 
                 # sent_features, audio_features, seq_len, targs, _, cats = batch
                 mean_a_embeds, mean_t_embeds, cats = batch
+                mean_a_embeds = mean_a_embeds.to(self.device)
+                mean_t_embeds = mean_t_embeds.to(self.device)
+                cats = cats.to(self.device)
                 
                 if self.embed_norm:
                     mean_a_embeds = mean_a_embeds / (torch.sum(mean_a_embeds, 1).unsqueeze(-1))
