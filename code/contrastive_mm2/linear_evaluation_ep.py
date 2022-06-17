@@ -916,6 +916,10 @@ class epLevelCreator(nn.Module):
                                 print("DEBUG: already exists? should not be possible")
                                 raise
                             self.mean_cats.append(cats[idx].item())
+
+                            print("this is appended: ", self.cur_a_embeds)
+                            print("this is appended2 : ",torch.stack(self.cur_a_embeds, dim=0), dim=0)
+                            exit(1)
                             self.mean_a_embeds.append(torch.mean(torch.stack(self.cur_a_embeds, dim=0), dim=0))
                             self.mean_t_embeds.append(torch.mean(torch.stack(self.cur_t_embeds, dim=0), dim=0))
                             self.processed_eps.append(targ)
