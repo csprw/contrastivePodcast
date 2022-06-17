@@ -377,10 +377,12 @@ def main(args):
 
 
     # Loading the model.
-
     model_path = Path(args.model_weights_path).parents[1]
     #model_weights_path = os.path.join(model_path, "output/full_model_weights.pth")
     model_weights_path = args.model_weights_path
+    print("[del] paths: ", model_path)
+    print("[del] paths: ", model_weights_path)
+
     model_config_path = os.path.join(model_path, 'config.json')
 
     # Opening JSON file
