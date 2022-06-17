@@ -921,7 +921,8 @@ class epLevelCreator(nn.Module):
 
                             self.mean_a_embeds.append(torch.mean(torch.stack(self.cur_a_embeds, dim=0), dim=0).detach().cpu())
                             self.mean_t_embeds.append(torch.mean(torch.stack(self.cur_t_embeds, dim=0), dim=0).detach().cpu())
-                            self.processed_eps.append(targ.cpu())
+                            print("Appending: ", targ)
+                            self.processed_eps.append(targ)
                             self.cur_ep = targ
 
                         self.cur_a_embeds.append(reps_audio[idx])
