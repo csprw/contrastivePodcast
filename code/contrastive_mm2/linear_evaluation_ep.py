@@ -991,30 +991,26 @@ class LinearEvaluatorEplevel(nn.Module):
 
         # to config file
         self.lin_max_epochs = args.num_epochs
-        # self.in_batch_size = 256
-        lin_lr = 0.1
+        # self.lin_max_epochs = 500
+
+        lin_lr = 0.01
         lin_weight_decay = 1.0e-6
 
         self.classes = classes
         self.hidden_dim = CFG.final_projection_dim
         self.output_dim = len(classes)
 
-        batchnorm = False
+        self.embed_norm = True
 
-        if not args.mlp:
+        mlp = args.mlp
+        if not mlp:
             self.projectionhead = nn.Sequential(nn.Linear(self.hidden_dim, self.output_dim))
-        elif batchnorm:
-            self.projectionhead = nn.Sequential( 
-               nn.Linear(self.hidden_dim, self.hidden_dim),
-               nn.ReLU(),
-               nn.BatchNorm1d(num_features=self.hidden_dim),
-               nn.Linear(self.hidden_dim, self.output_dim),
-            )
         else:
             self.projectionhead = nn.Sequential(
-               nn.Linear(self.hidden_dim, self.hidden_dim),
-               nn.ReLU(),
-               nn.Linear(self.hidden_dim, self.output_dim),
+                nn.BatchNorm1d(self.hidden_dim),
+                nn.Linear(self.hidden_dim, self.hidden_dim),
+                nn.ReLU(),
+                nn.Linear(self.hidden_dim, self.output_dim),
             )
 
         self.criterion = nn.CrossEntropyLoss()
@@ -1024,18 +1020,6 @@ class LinearEvaluatorEplevel(nn.Module):
             self.projectionhead.parameters(),
             lr=lin_lr,
             weight_decay=lin_weight_decay,
-        )
-        self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-            self.optimizer,
-            mode="min",
-            factor=0.1,
-            patience=5,
-            threshold=0.0001,
-            threshold_mode="rel",
-            cooldown=0,
-            min_lr=0,
-            eps=1e-08,
-            verbose=False,
         )
 
         
@@ -1054,34 +1038,46 @@ class LinearEvaluatorEplevel(nn.Module):
                 mean_t_embeds = mean_t_embeds.to(self.device)
                 cats = cats.to(self.device)
 
-                self.optimizer.zero_grad()
-                # loss, metrics = self.projectionhead(sent_features, audio_features, seq_len, cats)    
-                
+                if self.embed_norm:
+                    mean_a_embeds = mean_a_embeds / (torch.sum(mean_a_embeds, 1).unsqueeze(-1))
+                    mean_t_embeds = mean_t_embeds / (torch.sum(mean_t_embeds, 1).unsqueeze(-1))
+
                 if self.modality == 'text':
-                    preds = self.projectionhead(mean_t_embeds)
+                    output = self.projectionhead(mean_t_embeds)
                 else:
-                    preds = self.projectionhead(mean_a_embeds)
+                    output = self.projectionhead(mean_a_embeds)
 
-                loss = self.criterion(preds, cats)
-                metrics = self.get_metrics(preds.detach().cpu(), cats.detach().cpu())
-
-                accs.append(metrics['acc'])
+                # Forward pass
+                self.optimizer.zero_grad()
+                loss = self.criterion(output, cats)
 
                 loss.backward()
+
                 self.optimizer.step()
-                self.scheduler.step(loss)
+
+                y_pred = torch.argmax(output, axis=1)
+
                 
+                metrics = self.get_metrics(output.detach().cpu(), cats.detach().cpu())
+                accs.append(metrics['acc'])
+                if torch.equal(y_pred.detach().cpu(), cats.detach().cpu()):
+                    print("SAMMEEE ", step, step)
+                    raise
+
+                if step > 0:
+                    break
+
                 if step % 100 == 0:
-                    print("Loss: {} \t acc: {}".format(loss, metrics['acc']))
+                    print("___________________________________________________")
+                    print("output:" , epoch, step, loss.item(), (y_pred[:10]), (cats[:10]))
+                    print(Counter(cats), Counter(y_pred))
+                    # print("Loss: {} \t acc: {}".format(loss, metrics['acc']))
 
             print("-- Train epoch Mean acc: ", np.mean(accs))
             self.acc_per_epoch.append(np.mean(accs))
             # TODO: for now save intermediate, in the end only final round.
             self.evaluate()
             self.save_results(epoch)
-
-        # print("Train done, accs per epoch: ", self.acc_per_epoch)
-        
         
     def evaluate(self):
         accs = []
@@ -1093,19 +1089,30 @@ class LinearEvaluatorEplevel(nn.Module):
         self.projectionhead.eval()
         with torch.no_grad():
             for step, batch in enumerate(iter(self.val_ep_loader)):
+                
                 # sent_features, audio_features, seq_len, targs, _, cats = batch
                 mean_a_embeds, mean_t_embeds, cats = batch
+                
+                if self.embed_norm:
+                    mean_a_embeds = mean_a_embeds / (torch.sum(mean_a_embeds, 1).unsqueeze(-1))
+                    mean_t_embeds = mean_t_embeds / (torch.sum(mean_t_embeds, 1).unsqueeze(-1))
 
                 if self.modality == 'text':
-                    preds = self.projectionhead(mean_t_embeds)
+                    output = self.projectionhead(mean_t_embeds)
                 else:
-                    preds = self.projectionhead(mean_a_embeds)
+                    output = self.projectionhead(mean_a_embeds)
 
                 
-                metrics = self.get_metrics(preds.detach().cpu(), cats.detach().cpu())
+                metrics = self.get_metrics(output.detach().cpu(), cats.detach().cpu())
                 accs.append(metrics['acc'])
                 full_preds.extend(metrics['preds'])
                 full_targets.extend(metrics['targets'])
+                
+                # y_pred = torch.argmax(output, axis=1)
+                #print("eval step: ", step, (y_pred[:10]), (cats[:10]))
+                
+                if step > 1: #TODO 
+                    break
 
         self.eval_mean_acc = np.mean(accs)
         self.preds = full_preds
