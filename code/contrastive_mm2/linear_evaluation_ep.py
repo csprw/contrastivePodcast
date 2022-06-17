@@ -918,12 +918,10 @@ class epLevelCreator(nn.Module):
                                 raise
                             self.mean_cats.append(cats[idx].item())
 
-                            print("this is appended: ", self.cur_a_embeds)
-                            print("this is appended2 : ",torch.stack(self.cur_a_embeds, dim=0), dim=0)
-                            exit(1)
-                            self.mean_a_embeds.append(torch.mean(torch.stack(self.cur_a_embeds, dim=0), dim=0))
-                            self.mean_t_embeds.append(torch.mean(torch.stack(self.cur_t_embeds, dim=0), dim=0))
-                            self.processed_eps.append(targ)
+
+                            self.mean_a_embeds.append(torch.mean(torch.stack(self.cur_a_embeds, dim=0), dim=0).detach().cpu())
+                            self.mean_t_embeds.append(torch.mean(torch.stack(self.cur_t_embeds, dim=0), dim=0).detach().cpu())
+                            self.processed_eps.append(targ.detach().cpu())
                             self.cur_ep = targ
 
                         self.cur_a_embeds.append(reps_audio[idx])
@@ -1163,8 +1161,8 @@ class LinearEvaluatorEplevel(nn.Module):
         
         out = os.path.join(self.output_path, 
             'ep_{}_{}_linear_evaluation_cm.png'.format(epoch, self.modality))
-        # print("Saving to: ", out)
-        # plt.savefig(out)
+        print("Saving to: ", out)
+        plt.savefig(out)
         # plt.show()
 
 def main(args):
