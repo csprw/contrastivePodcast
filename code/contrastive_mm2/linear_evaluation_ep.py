@@ -1064,13 +1064,13 @@ class LinearEvaluatorEplevel(nn.Module):
                     print("SAMMEEE ", step, step)
                     raise
 
-                if step > 0:
-                    break
+                # if step > 0:
+                #     break
 
                 if step % 100 == 0:
                     print("___________________________________________________")
                     print("output:" , epoch, step, loss.item(), (y_pred[:10]), (cats[:10]))
-                    print(Counter(cats), Counter(y_pred))
+                    print(Counter(cats.detach().cpu().tolist()), Counter(y_pred.detach().cpu().tolist()))
                     # print("Loss: {} \t acc: {}".format(loss, metrics['acc']))
 
             print("-- Train epoch Mean acc: ", np.mean(accs))
@@ -1111,7 +1111,7 @@ class LinearEvaluatorEplevel(nn.Module):
                 # y_pred = torch.argmax(output, axis=1)
                 #print("eval step: ", step, (y_pred[:10]), (cats[:10]))
                 
-                if step > 1: #TODO 
+                if step > 1000: #TODO 
                     break
 
         self.eval_mean_acc = np.mean(accs)
