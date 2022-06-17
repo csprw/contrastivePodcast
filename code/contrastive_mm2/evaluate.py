@@ -319,6 +319,7 @@ def evaluate_topk(evaluator, query_encodings, pod_encodings):
                 r10_ep = rec_at_k(scores_epis, k=10)
                 r100_ep = rec_at_k(scores_epis, k=100)
                 r100_seg = rec_at_k(scores_segs, k=100)
+                r1000_seg = rec_at_k(scores_segs, k=1000)
                 r10_ep_norm = rec_at_k_norm(scores_epis, num_rel, k=10)
                 print("Metrics: ", p10_ep, p10_seg, r100_ep)
                 
@@ -334,6 +335,7 @@ def evaluate_topk(evaluator, query_encodings, pod_encodings):
                 full_results[name]['r10_ep'].append(r10_ep)
                 full_results[name]['r100_ep'].append(r100_ep)
                 full_results[name]['r100_seg'].append(r100_seg) 
+                full_results[name]['r1000_seg'].append(r1000_seg) 
                 full_results[name]['r10_ep_norm'].append(r10_ep_norm)
                 full_results[name]['ndcg_ep'].append(ndcg_ep) 
                 

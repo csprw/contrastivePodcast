@@ -361,7 +361,7 @@ class spDatasetWeakShuffleLinSep(datautil.Dataset):
                     gc.collect()
                     h5py_file = self.h5py_idx2file[h5py_idx]
                     self.f = h5py.File(h5py_file, 'r')
-                    print("[del3] loaded new h5py file: ", h5py_idx, h5py_file)
+                    print("[del1] loaded new h5py file: ", h5py_idx, h5py_file)
                     if not self.load_full:
                         self.mean_embeds = torch.Tensor(np.array(self.f['mean_embeddings']))
                 
@@ -502,11 +502,12 @@ class spDatasetEpLevel(datautil.Dataset):
                     f.close()
                     self.file_startstop.append((start_idx, sample_idx))
                     break
-                # elif sample_idx > 128 * 200:
-                #     f.close()
-                #     self.file_startstop.append((start_idx, sample_idx))
-                #     # del4
-                #     break
+                #elif sample_idx > 5000000:
+                elif sample_idx > 50:
+                    f.close()
+                    self.file_startstop.append((start_idx, sample_idx))
+                    print("[del] Max exceeded {}".format(sample_idx))
+                    break
             else:
                 f.close()
                 self.file_startstop.append((start_idx, sample_idx))
@@ -562,7 +563,7 @@ class spDatasetEpLevel(datautil.Dataset):
                     gc.collect()
                     h5py_file = self.h5py_idx2file[h5py_idx]
                     self.f = h5py.File(h5py_file, 'r')
-                    print("[del3] loaded new h5py file: ", h5py_idx, h5py_file)
+                    print("[del2] loaded new h5py file: ", h5py_idx, h5py_file)
                     if not self.load_full:
                         self.mean_embeds = torch.Tensor(np.array(self.f['mean_embeddings']))
                 
@@ -887,7 +888,7 @@ class epLevelCreator(nn.Module):
 
     def create(self):
 
-        print("-- -- -- Create ")
+        print("-------- Creating embeddings")
         with torch.no_grad():
             for step, batch in enumerate(iter(self.data_loader.train_loader)):
                 sent_features, audio_features, seq_len, cats, targets = batch
@@ -905,6 +906,7 @@ class epLevelCreator(nn.Module):
                     self.cur_ep = targets[0]
 
                 if num_targs > 1 or self.cur_ep != targets[0]:
+                    print("OPT 1: Num targs > 1")
                     for idx, targ in enumerate(targets):
                         if self.cur_ep != targ:
                             if targ in self.processed_eps:
@@ -917,15 +919,12 @@ class epLevelCreator(nn.Module):
                             self.cur_ep = targ
 
                         self.cur_a_embeds.append(reps_audio[idx])
-                        self.cur_a_embeds.append(reps_audio[idx]) #del!
-                        self.cur_t_embeds.append(reps_text[idx])
                         self.cur_t_embeds.append(reps_text[idx])
 
                 else:
+                    print("OPT 2: append")
                     self.cur_a_embeds.append(torch.mean(reps_audio, dim=0))
                     self.cur_t_embeds.append(torch.mean(reps_text, dim=0))
-
-
 
 ### zometeen naar boven
 class epDataset(datautil.Dataset):
@@ -1218,7 +1217,7 @@ if __name__ == "__main__":
 
     parser.add_argument('--lin_batch_size', type=int, default=256,
                         help='Lineaer evaluation batchsize.')
-    parser.add_argument('--num_epochs', type=int, default=1,
+    parser.add_argument('--num_epochs', type=int, default=10,
                         help='Number of epochs to train. ')
     parser.add_argument('--mlp', action='store_true', default=False,
                     help='Whether to use multiple layers.')
