@@ -907,7 +907,7 @@ class epLevelCreator(nn.Module):
 
                 if num_targs > 1 or self.cur_ep != targets[0]:
                     if num_targs > 1:
-                        print("OPT 0: Num targs > 1")
+                        print("OPT 0: Num targs > 1: ", targets)
                     else:
                         print("OPT 1: entrie batch different")
                     for idx, targ in enumerate(targets):
