@@ -744,19 +744,27 @@ class SequentialAudioModel(nn.Module):
 
         # Initializing hidden state for first input with zeros
         h0 = torch.zeros(self.layer_dim * self.direction, features.size(0), self.hidden_dim).requires_grad_().to(self.device)
-        c0 = torch.zeros(self.layer_dim * self.direction, features.size(0), self.hidden_dim).requires_grad_().to(self.device)
+        
 
         if length != None:
             if self.pad_pack:
                 # Pack the features such that we do not compute zero products
                 features = pack_padded_sequence(features, length, batch_first=True, enforce_sorted=False)
 
-            out, (h0, c0) = self.seq_model(features, (h0, c0))
+            if self.audio_model == 'lstm':
+                c0 = torch.zeros(self.layer_dim * self.direction, features.size(0), self.hidden_dim).requires_grad_().to(self.device)
+                out, (h0, c0) = self.seq_model(features, (h0, c0))
+                do_trick = False
+            else:
+                out, h0 = self.seq_model(features, h0)
+                do_trick = True # was originally true, changed to false
             
             if self.pad_pack:
                 out, output_lengths = pad_packed_sequence(out, batch_first=True)
-            do_trick = True # was originally true, changed to false
-            do_trick = False
+            
+
+
+            
 
         else:
             # Forward propagation by passing in the input and hidden state into the model
