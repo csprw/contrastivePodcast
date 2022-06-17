@@ -377,9 +377,10 @@ def main(args):
 
 
     # Loading the model.
-    model_path = args.model_path
-    print("[Load model] from ", model_path)
-    model_weights_path = os.path.join(model_path, "output/full_model_weights.pth")
+
+    model_path = Path(args.model_weights_path).parents[1]
+    #model_weights_path = os.path.join(model_path, "output/full_model_weights.pth")
+    model_weights_path = args.model_weights_path
     model_config_path = os.path.join(model_path, 'config.json')
 
     # Opening JSON file
@@ -435,7 +436,7 @@ if __name__ == "__main__":
     # Parse flags in command line arguments
     parser = ArgumentParser()
 
-    parser.add_argument('--model_path', type=str, default="logs/run2-clip_loss_None_gru_768_False_2022-06-12_12-41-49",
+    parser.add_argument('--model_weights_path', type=str, default="logs/run2-clip_loss_None_gru_768_False_2022-06-12_12-41-49/output/full_model_weights.pt",
                         help='Folder where model weights are saved.')
     parser.add_argument('--batch_size', type=int, default=128,
                         help='Batch size to use.')
