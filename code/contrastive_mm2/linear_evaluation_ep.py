@@ -1174,7 +1174,7 @@ def main(args):
     fullcfg.ep_level = args.ep_level
     fullcfg.weak_shuffle = False            # For evaluation turn shuffling off
     ### DELETE [del4]
-    fullcfg.max_train_samples = 128 * 20
+    # fullcfg.max_train_samples = 128 * 20
     print("[Load model] config loaded: ", fullcfg)
 
     # Create dataloader
