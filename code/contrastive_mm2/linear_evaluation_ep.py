@@ -503,7 +503,7 @@ class spDatasetEpLevel(datautil.Dataset):
                     break
                 elif sample_idx > 5000000:
                 # elif sample_idx > 10000000:
-                # elif sample_idx > 1000000:
+                # elif sample_idx > 500:
                     f.close()
                     self.file_startstop.append((start_idx, sample_idx))
                     print("[del] Max exceeded {}".format(sample_idx))
@@ -906,10 +906,10 @@ class epLevelCreator(nn.Module):
                     self.cur_ep = targets[0]
 
                 if num_targs > 1 or self.cur_ep != targets[0]:
-                    if num_targs > 1:
-                        print("OPT 0: Num targs > 1: ",num_targs )
-                    else:
-                        print("OPT 1: entrie batch different")
+                    # if num_targs > 1:
+                    #     print("OPT 0: Num targs > 1: ",num_targs )
+                    # else:
+                    #     print("OPT 1: entrie batch different")
                     for idx, targ in enumerate(targets):
 
                         if self.cur_ep != targ:
@@ -931,7 +931,7 @@ class epLevelCreator(nn.Module):
                         self.cur_t_embeds.append(reps_text[idx])
 
                 else:
-                    print("OPT 2: append")
+                    # print("OPT 2: append")
                     self.cur_a_embeds.append(torch.mean(reps_audio, dim=0))
                     self.cur_t_embeds.append(torch.mean(reps_text, dim=0))
 
@@ -1170,11 +1170,11 @@ class LinearEvaluatorEplevel(nn.Module):
         # Build confusion matrix
         print("[del4] this is make_cm: ",Counter(y_true), Counter(y_pred))
         # print("And classes: ", classes)
-        cf_matrix = confusion_matrix(y_true, y_pred, labels=np.arange(len(classes)), normalize=None, values_format='.5f')
+        cf_matrix = confusion_matrix(y_true, y_pred, labels=np.arange(len(classes)), normalize=None)
         df_cm = pd.DataFrame(cf_matrix, index = [i for i in classes],
             columns = [i for i in classes])
         plt.figure(figsize = (12,7))
-        sn.heatmap(df_cm, annot=True, cmap='Blues')
+        sn.heatmap(df_cm, annot=True, cmap='Blues', fmt='g')
         
         out = os.path.join(self.output_path, 
             'ep_{}_{}_linear_evaluation_cm.png'.format(self.modality, epoch))

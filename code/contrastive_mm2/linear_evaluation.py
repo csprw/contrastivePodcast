@@ -689,18 +689,18 @@ class LinearEvalator(nn.Module):
             lr=lin_lr,
             weight_decay=lin_weight_decay,
         )
-        self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-            self.optimizer,
-            mode="min",
-            factor=0.1,
-            patience=5,
-            threshold=0.0001,
-            threshold_mode="rel",
-            cooldown=0,
-            min_lr=0,
-            eps=1e-08,
-            verbose=False,
-        )
+        # self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+        #     self.optimizer,
+        #     mode="min",
+        #     factor=0.1,
+        #     patience=5,
+        #     threshold=0.0001,
+        #     threshold_mode="rel",
+        #     cooldown=0,
+        #     min_lr=0,
+        #     eps=1e-08,
+        #     verbose=False,
+        # )
 
         
     def fit(self):
@@ -708,6 +708,7 @@ class LinearEvalator(nn.Module):
         self.acc_per_epoch = []
         for epoch in range(self.lin_max_epochs):
             print("-- -- -- Epoch: ", epoch)
+            self.lin_eval_model.projectionhead.train()
             accs =[]
             for step, batch in enumerate(iter(self.data_loader.train_loader)):
                 sent_features, audio_features, seq_len, cats = batch
@@ -718,7 +719,7 @@ class LinearEvalator(nn.Module):
 
                 loss.backward()
                 self.optimizer.step()
-                self.scheduler.step(loss)
+                # self.scheduler.step(loss)
                 
                 if step % 100 == 0:
                     print("Loss: {} \t acc: {}".format(loss, metrics['acc']))
