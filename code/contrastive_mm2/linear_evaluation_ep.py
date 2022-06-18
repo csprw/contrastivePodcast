@@ -503,7 +503,7 @@ class spDatasetEpLevel(datautil.Dataset):
                     self.file_startstop.append((start_idx, sample_idx))
                     break
                 #elif sample_idx > 5000000:
-                elif sample_idx > 1000000:
+                elif sample_idx > 10000000:
                 # elif sample_idx > 500:
                     f.close()
                     self.file_startstop.append((start_idx, sample_idx))
@@ -1145,7 +1145,7 @@ class LinearEvaluatorEplevel(nn.Module):
         out = os.path.join(self.output_path, 
             'ep_{}_linear_evaluation_results.csv'.format(self.modality))
         df = pd.DataFrame(lin_eval_res)
-        # df.T.to_csv(out, sep=';')
+        df.T.to_csv(out, sep=';')
         print(df.T.to_string())
 
         # Save results as confusion matrix
