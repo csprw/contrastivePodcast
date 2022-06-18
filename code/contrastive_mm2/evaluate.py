@@ -338,7 +338,9 @@ def evaluate_topk(evaluator, query_encodings, pod_encodings):
                 full_results[name]['r1000_seg'].append(r1000_seg) 
                 full_results[name]['r10_ep_norm'].append(r10_ep_norm)
                 full_results[name]['ndcg_ep'].append(ndcg_ep) 
-                
+    print("Check if this is possible: ")
+    print(relevant_segs[query_idx])
+    print(predicted_epis[:50])          
     return full_results
 
 def save_eval_results(full_results, evaluator):
