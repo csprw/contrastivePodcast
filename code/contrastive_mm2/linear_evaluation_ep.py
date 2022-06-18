@@ -503,8 +503,8 @@ class spDatasetEpLevel(datautil.Dataset):
                     self.file_startstop.append((start_idx, sample_idx))
                     break
                 #elif sample_idx > 5000000:
-                elif sample_idx > 10000000:
-                # elif sample_idx > 500:
+                # elif sample_idx > 10000000:
+                elif sample_idx > 500:
                     f.close()
                     self.file_startstop.append((start_idx, sample_idx))
                     print("[del] Max exceeded {}".format(sample_idx))
@@ -912,17 +912,21 @@ class epLevelCreator(nn.Module):
                     else:
                         print("OPT 1: entrie batch different")
                     for idx, targ in enumerate(targets):
+
                         if self.cur_ep != targ:
                             if targ in self.processed_eps:
                                 print("DEBUG: already exists? should not be possible")
                                 raise
                             self.mean_cats.append(cats[idx].item())
 
-
                             self.mean_a_embeds.append(torch.mean(torch.stack(self.cur_a_embeds, dim=0), dim=0).detach().cpu())
                             self.mean_t_embeds.append(torch.mean(torch.stack(self.cur_t_embeds, dim=0), dim=0).detach().cpu())
                             self.processed_eps.append(targ)
                             self.cur_ep = targ
+
+                            # Dit toegevoegd... dat moet toch..?
+                            self.cur_a_embeds = []
+                            self.cur_t_embeds = []
 
                         self.cur_a_embeds.append(reps_audio[idx])
                         self.cur_t_embeds.append(reps_text[idx])
