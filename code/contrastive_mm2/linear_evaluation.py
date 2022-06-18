@@ -312,6 +312,12 @@ class spDatasetWeakShuffleLinSep(datautil.Dataset):
                     f.close()
                     self.file_startstop.append((start_idx, sample_idx))
                     break
+
+                if CFG.max_train_samples > 10000:
+                    print("[del] Max exceeded {}".format(sample_idx))
+                    f.close()
+                    self.file_startstop.append((start_idx, sample_idx))
+                    break
             else:
                 f.close()
                 self.file_startstop.append((start_idx, sample_idx))
@@ -725,10 +731,6 @@ class LinearEvalator(nn.Module):
             self.save_results(epoch)
 
         print("Train done, accs per epoch: ", self.acc_per_epoch)
-
-        
-
-
         
     def evaluate(self):
         accs = []
@@ -758,7 +760,7 @@ class LinearEvalator(nn.Module):
         lin_eval_res = {'eval_acc': self.eval_mean_acc,
                        'acc_per_epoch': list(self.acc_per_epoch)}
         out = os.path.join(self.output_path, 
-            '{}_linear_evaluation_results.csv'.format(self.modality))
+            'sent_{}_linear_evaluation_results.csv'.format(self.modality))
         df = pd.DataFrame(lin_eval_res)
         df.T.to_csv(out, sep=';')
         print(df.T.to_string())
@@ -778,7 +780,7 @@ class LinearEvalator(nn.Module):
         sn.heatmap(df_cm, annot=True, cmap='Blues')
         
         out = os.path.join(self.output_path, 
-            '{}_{}_linear_evaluation_cm.png'.format(epoch, self.modality))
+            'sent_{}_{}_linear_evaluation_cm.png'.format( self.modality, epoch))
         print("Saving to: ", out)
         plt.savefig(out)
         # plt.show()
