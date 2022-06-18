@@ -504,7 +504,7 @@ class spDatasetEpLevel(datautil.Dataset):
                     break
                 #elif sample_idx > 5000000:
                 # elif sample_idx > 10000000:
-                elif sample_idx > 500:
+                elif sample_idx > 1000000:
                     f.close()
                     self.file_startstop.append((start_idx, sample_idx))
                     print("[del] Max exceeded {}".format(sample_idx))
