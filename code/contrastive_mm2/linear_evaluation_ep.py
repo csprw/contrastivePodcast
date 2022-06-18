@@ -1153,9 +1153,9 @@ class LinearEvaluatorEplevel(nn.Module):
         # Save results to csv
         lin_eval_res = {'eval_acc': self.eval_mean_acc,
                        'acc_per_epoch': list(self.acc_per_epoch),
-                       'acc_per_epoch': list(self.acc_per_epoch)
-                       'acc_per_epoch': list(self.acc_per_epoch)
-                       'acc_per_epoch': list(self.acc_per_epoch)}
+                       'p_per_epoch': list(self.p_per_epoch),
+                       'r_per_epoch': list(self.r_per_epoch),
+                       'f1_per_epoch': list(self.f1_per_epoch)}
         out = os.path.join(self.output_path, 
             'ep_{}_linear_evaluation_results.csv'.format(self.modality))
         df = pd.DataFrame(lin_eval_res)
@@ -1177,7 +1177,7 @@ class LinearEvaluatorEplevel(nn.Module):
         sn.heatmap(df_cm, annot=True, cmap='Blues')
         
         out = os.path.join(self.output_path, 
-            'ep_{}_{}_linear_evaluation_cm.png'.format(epoch, self.modality))
+            'ep_{}_{}_linear_evaluation_cm.png'.format(self.modality, epoch))
         print("Saving to: ", out)
         plt.savefig(out)
         # plt.show()
