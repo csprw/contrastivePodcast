@@ -6,10 +6,9 @@ Usage: python evaluate.py
 import sys
 import os
 from collections import defaultdict, Counter
-
 from argparse import ArgumentParser
 import pandas as pd
-from sklearn.metrics import confusion_matrix
+from sklearn.metrics import confusion_matrix, precision_recall_fscore_support
 import seaborn as sn
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -502,9 +501,9 @@ class spDatasetEpLevel(datautil.Dataset):
                     f.close()
                     self.file_startstop.append((start_idx, sample_idx))
                     break
-                #elif sample_idx > 5000000:
+                elif sample_idx > 5000000:
                 # elif sample_idx > 10000000:
-                elif sample_idx > 1000000:
+                # elif sample_idx > 1000000:
                     f.close()
                     self.file_startstop.append((start_idx, sample_idx))
                     print("[del] Max exceeded {}".format(sample_idx))
@@ -1031,10 +1030,14 @@ class LinearEvaluatorEplevel(nn.Module):
             weight_decay=lin_weight_decay,
         )
 
+        self.acc_per_epoch = []
+        self.p_per_epoch = []
+        self.r_per_epoch = []
+        self.f1_per_epoch = []
         
     def fit(self):
         #self.lin_eval_model.projectionhead.train()
-        self.acc_per_epoch = []
+       
         for epoch in range(self.lin_max_epochs):
             print("-- -- -- Epoch: ", epoch)
             self.projectionhead.train()
@@ -1119,17 +1122,21 @@ class LinearEvaluatorEplevel(nn.Module):
                 accs.append(metrics['acc'])
                 full_preds.extend(metrics['preds'])
                 full_targets.extend(metrics['targets'])
-                
+
                 # y_pred = torch.argmax(output, axis=1)
                 #print("eval step: ", step, (y_pred[:10]), (cats[:10]))
                 
                 if step > 1000: #TODO 
                     break
 
+        p, r, f1, _ = precision_recall_fscore_support(full_preds, full_targets, average='macro')
+        self.p_per_epoch.append(p)
+        self.r_per_epoch.append(r)
+        self.f1_per_epoch.append(f1)
         self.eval_mean_acc = np.mean(accs)
         self.preds = full_preds
         self.targets = full_targets
-        print("Evaluaction accuracy: ", self.eval_mean_acc)
+        print("Evaluaction accuracy: {} \t f1 {} ".format(self.eval_mean_acc, self.f1_per_epoch[-1]))
         self.projectionhead.train()
 
     def get_metrics(self, preds, targets):
@@ -1145,6 +1152,9 @@ class LinearEvaluatorEplevel(nn.Module):
     def save_results(self, epoch=0):
         # Save results to csv
         lin_eval_res = {'eval_acc': self.eval_mean_acc,
+                       'acc_per_epoch': list(self.acc_per_epoch),
+                       'acc_per_epoch': list(self.acc_per_epoch)
+                       'acc_per_epoch': list(self.acc_per_epoch)
                        'acc_per_epoch': list(self.acc_per_epoch)}
         out = os.path.join(self.output_path, 
             'ep_{}_linear_evaluation_results.csv'.format(self.modality))
@@ -1160,7 +1170,7 @@ class LinearEvaluatorEplevel(nn.Module):
         # Build confusion matrix
         print("[del4] this is make_cm: ",Counter(y_true), Counter(y_pred))
         # print("And classes: ", classes)
-        cf_matrix = confusion_matrix(y_true, y_pred, labels=np.arange(len(classes)), normalize=None)
+        cf_matrix = confusion_matrix(y_true, y_pred, labels=np.arange(len(classes)), normalize=None, values_format='.5f')
         df_cm = pd.DataFrame(cf_matrix, index = [i for i in classes],
             columns = [i for i in classes])
         plt.figure(figsize = (12,7))
