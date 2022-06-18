@@ -1012,8 +1012,8 @@ class LinearEvaluatorEplevel(nn.Module):
             self.projectionhead = nn.Sequential(nn.Linear(self.hidden_dim, self.output_dim))
         else:
             self.projectionhead = nn.Sequential(
-                nn.BatchNorm1d(self.hidden_dim),
                 nn.Linear(self.hidden_dim, self.hidden_dim),
+                nn.BatchNorm1d(self.hidden_dim),
                 nn.ReLU(),
                 nn.Linear(self.hidden_dim, self.output_dim),
             )
@@ -1208,9 +1208,9 @@ def main(args):
     evaluator.fit()
 
     # Calculate results for audio
-    # classes = list(ep_dataset.ep2cat_map.keys())
-    # evaluator = LinearEvaluatorEplevel(fullcfg, ep_loader, classes, modality="audio")
-    # evaluator.fit()
+    classes = list(ep_dataset.ep2cat_map.keys())
+    evaluator = LinearEvaluatorEplevel(fullcfg, ep_loader, classes, modality="audio")
+    evaluator.fit()
 
 
 

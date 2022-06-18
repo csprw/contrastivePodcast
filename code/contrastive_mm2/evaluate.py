@@ -121,7 +121,7 @@ class Evaluator(object):
         return max_samples
 
     def audio_to_embed(self, yamnets, query_lengths):
-        if self.audio_proj_head == 'gru':
+        if self.audio_proj_head in ['gru', 'rnn', 'lstm']:
             padded_yamnets = pad_sequence(yamnets, batch_first=True).to(self.device)
 
             with torch.no_grad():
@@ -130,7 +130,7 @@ class Evaluator(object):
         else:
             with torch.no_grad():
 
-                yamnets_mean = [torch.tensor(y.mean(dim=0)) for y in yamnets]
+                yamnets_mean = [torch.tensor(y.mean(dim=0).clone().detach()) for y in yamnets]
 
                 audio_features = torch.stack(yamnets_mean).to(self.device)
                 reps_audio = self.model.audio_model((audio_features, query_lengths))
