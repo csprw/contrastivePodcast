@@ -34,16 +34,12 @@ from transformers import AutoTokenizer, AutoModel, AdamW, AutoConfig
 from transformers import get_constant_schedule, get_constant_schedule_with_warmup, get_linear_schedule_with_warmup
 from dacite import from_dict
 
-
-
 sys.path.append('../scripts/') 
 from train import mmModule, multimodal_loss
 from src.data import load_metadata, find_paths, relative_file_path
 
 from omegaconf import OmegaConf
 conf = OmegaConf.load("./config.yaml")
-
-
 
 
 ###############################################################################
@@ -501,9 +497,9 @@ class spDatasetEpLevel(datautil.Dataset):
                     f.close()
                     self.file_startstop.append((start_idx, sample_idx))
                     break
-                elif sample_idx > 5000000:
+                # elif sample_idx > 5000000:
                 # elif sample_idx > 10000000:
-                # elif sample_idx > 500:
+                elif sample_idx > 500:
                     f.close()
                     self.file_startstop.append((start_idx, sample_idx))
                     print("[del] Max exceeded {}".format(sample_idx))
@@ -986,7 +982,7 @@ class LinearEvaluatorEplevel(nn.Module):
     """
         This loss expects as input a batch consisting of ... etc
     """
-    def __init__(self, CFG, train_ep_loader, classes, modality='text'):
+    def __init__(self, CFG, train_ep_loader, classes, modality='text', lin_lr = 0.01):
         """
         test
         """
@@ -995,13 +991,14 @@ class LinearEvaluatorEplevel(nn.Module):
         self.device = CFG.device
         self.train_ep_loader = train_ep_loader
         self.val_ep_loader = train_ep_loader
-        self.output_path = CFG.log_name
+
+        self.lin_lr = lin_lr
+        self.output_path = os.path.join(CFG.log_name, "lin_eval", lin_lr)
+        Path(self.output_path).mkdir(parents=True, exist_ok=True)
 
         # to config file
         self.lin_max_epochs = args.num_epochs
         # self.lin_max_epochs = 500
-
-        lin_lr = 0.01
         lin_weight_decay = 1.0e-6
 
         self.classes = classes
@@ -1026,7 +1023,7 @@ class LinearEvaluatorEplevel(nn.Module):
         
         self.optimizer = torch.optim.Adam(
             self.projectionhead.parameters(),
-            lr=lin_lr,
+            lr=self.lin_lr,
             weight_decay=lin_weight_decay,
         )
 
@@ -1073,8 +1070,8 @@ class LinearEvaluatorEplevel(nn.Module):
                 metrics = self.get_metrics(output.detach().cpu(), cats.detach().cpu())
                 accs.append(metrics['acc'])
                 if torch.equal(y_pred.detach().cpu(), cats.detach().cpu()):
-                    print("SAMMEEE ", step, step)
-                    raise
+                    print("All values the same ! ", step, step)
+                    # raise
 
                 # if step > 0:
                 #     break
@@ -1216,15 +1213,17 @@ def main(args):
     ep_dataset= epDataset(fullcfg, eplevel)
     ep_loader = DataLoader(ep_dataset, batch_size=args.lin_batch_size, shuffle=False, drop_last=True)
 
-    # Calculate results for text
-    classes = list(ep_dataset.ep2cat_map.keys())
-    evaluator = LinearEvaluatorEplevel(fullcfg, ep_loader, classes, modality="text")
-    evaluator.fit()
+    for lr in [0.1, 0.01, 0.001, 0.0001]:
+        print("Results for lr: ", lr)
+        # Calculate results for text
+        classes = list(ep_dataset.ep2cat_map.keys())
+        evaluator = LinearEvaluatorEplevel(fullcfg, ep_loader, classes, modality="text", lin_lr=lr)
+        evaluator.fit()
 
-    # Calculate results for audio
-    classes = list(ep_dataset.ep2cat_map.keys())
-    evaluator = LinearEvaluatorEplevel(fullcfg, ep_loader, classes, modality="audio")
-    evaluator.fit()
+        # Calculate results for audio
+        classes = list(ep_dataset.ep2cat_map.keys())
+        evaluator = LinearEvaluatorEplevel(fullcfg, ep_loader, classes, modality="audio", lin_lr=lr)
+        evaluator.fit()
 
 
 
