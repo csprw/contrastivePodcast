@@ -993,7 +993,7 @@ class LinearEvaluatorEplevel(nn.Module):
         self.val_ep_loader = train_ep_loader
 
         self.lin_lr = lin_lr
-        self.output_path = os.path.join(CFG.log_name, "lin_eval", lin_lr)
+        self.output_path = os.path.join(CFG.log_name, "lin_eval", str(lin_lr))
         Path(self.output_path).mkdir(parents=True, exist_ok=True)
 
         # to config file
