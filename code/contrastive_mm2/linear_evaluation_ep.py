@@ -1185,7 +1185,7 @@ class LinearEvaluatorEplevel(nn.Module):
 def main(args):
     model_path = args.model_path
     print("[Load model] from ", model_path)
-    model_weights_path = os.path.join(model_path, "output/full_model_weights.pth")
+    model_weights_path = os.path.join(model_path, "output/full_model_weights.pt")
     model_config_path = os.path.join(model_path, 'config.json')
 
     # Opening JSON file
