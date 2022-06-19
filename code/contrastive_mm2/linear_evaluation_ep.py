@@ -498,7 +498,7 @@ class spDatasetEpLevel(datautil.Dataset):
                     self.file_startstop.append((start_idx, sample_idx))
                     break
                 # elif sample_idx > 5000000:
-                elif sample_idx > 10000000:
+                elif sample_idx > 10000000:     # Raised cpu memory problem
                 # elif sample_idx > 500:
                     f.close()
                     self.file_startstop.append((start_idx, sample_idx))
@@ -1087,9 +1087,11 @@ class LinearEvaluatorEplevel(nn.Module):
 
             print("-- Train epoch Mean acc: ", np.mean(accs))
             self.acc_per_epoch.append(np.mean(accs))
+            
             # TODO: for now save intermediate, in the end only final round.
-            self.evaluate()
-            self.save_results(epoch)
+            if epoch % 10 == 0 or epoch == self.lin_max_epochs - 1:
+                self.evaluate()
+                self.save_results(epoch)
         
     def evaluate(self):
         accs = []
@@ -1137,6 +1139,11 @@ class LinearEvaluatorEplevel(nn.Module):
         self.preds = full_preds
         self.targets = full_targets
         print("Evaluaction accuracy: {} \t f1 {} ".format(self.eval_mean_acc, self.f1_per_epoch[-1]))
+
+        del full_preds
+        del full_targets
+        del accs
+        gc.collect()
         self.projectionhead.train()
 
     def get_metrics(self, preds, targets):
@@ -1212,21 +1219,27 @@ def main(args):
     eplevel = epLevelCreator(full_model, fullcfg, data_loader)
     eplevel.create()
 
-
     ep_dataset= epDataset(fullcfg, eplevel)
     ep_loader = DataLoader(ep_dataset, batch_size=args.lin_batch_size, shuffle=False, drop_last=True)
+    del data_loader
 
-    for lr in [0.1, 0.01, 0.001, 0.0001]:
+    for lr in [0.001, 0.0001, 0.0001]:
         print("Results for lr: ", lr)
         # Calculate results for text
         classes = list(ep_dataset.ep2cat_map.keys())
         evaluator = LinearEvaluatorEplevel(fullcfg, ep_loader, classes, modality="text", lin_lr=lr)
         evaluator.fit()
 
+        del evaluator
+        gc.collect()
+
         # Calculate results for audio
         classes = list(ep_dataset.ep2cat_map.keys())
         evaluator = LinearEvaluatorEplevel(fullcfg, ep_loader, classes, modality="audio", lin_lr=lr)
         evaluator.fit()
+        del evaluator
+        gc.collect()
+
 
 
 
