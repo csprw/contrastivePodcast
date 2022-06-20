@@ -56,7 +56,7 @@ class MMloader(object):
 
         self.batch_size = CFG.batch_size
         self.device = CFG.device
-        self.load_full = True if CFG.audio_proj_head in ['gru', 'rnn'] else False
+        self.load_full = True if CFG.audio_proj_head in ['gru', 'rnn', 'lstm'] else False
         self.lin_sep = lin_sep
 
         # Get the datasets
@@ -498,8 +498,8 @@ class spDatasetEpLevel(datautil.Dataset):
                     self.file_startstop.append((start_idx, sample_idx))
                     break
                 # elif sample_idx > 5000000:
-                # elif sample_idx > 10000000:     # Raised cpu memory problem
-                elif sample_idx > 500:
+                elif sample_idx > 10000000:     # Raised cpu memory problem
+                # elif sample_idx > 500:
                     f.close()
                     self.file_startstop.append((start_idx, sample_idx))
                     print("[del] Max exceeded {}".format(sample_idx))
