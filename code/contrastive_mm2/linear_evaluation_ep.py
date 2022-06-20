@@ -499,8 +499,8 @@ class spDatasetEpLevel(datautil.Dataset):
                     break
                 # elif sample_idx > 5000000:
                 # elif sample_idx > 10000000:     # Raised cpu memory problem
-                elif sample_idx > 8000000:     # Raised cpu memory problem
-                # elif sample_idx > 500:
+                # elif sample_idx > 8000000:    
+                elif sample_idx > 5000:
                     f.close()
                     self.file_startstop.append((start_idx, sample_idx))
                     print("[del] Max exceeded {}".format(sample_idx))
@@ -854,7 +854,7 @@ class epLevelCreator(nn.Module):
     """
         This loss expects as input a batch consisting of ... etc
     """
-    def __init__(self, full_model, CFG, data_loader):
+    def __init__(self, full_model, CFG, data_loader, split='train'):
         """
         test
         """
@@ -868,7 +868,12 @@ class epLevelCreator(nn.Module):
         freeze_network(self.text_model)
         freeze_network(self.audio_model)
         
-        self.data_loader = data_loader
+
+        if split == 'train':
+            self.data_split_loader = data_loader.train_loader
+        elif split == 'val':
+            self.data_split_loader = data_loader.val_loader
+
         self.output_path = CFG.log_name
 
         self.save_intermediate = os.path.join(conf.data_path, os.path.split(CFG.log_name)[-1], "len_eval.h5")
@@ -888,7 +893,7 @@ class epLevelCreator(nn.Module):
 
         print("-------- Creating embeddings")
         with torch.no_grad():
-            for step, batch in enumerate(iter(self.data_loader.train_loader)):
+            for step, batch in enumerate(iter(self.data_split_loader)):
                 sent_features, audio_features, seq_len, cats, targets = batch
 
                 # Encode features
@@ -964,14 +969,11 @@ class epDataset(datautil.Dataset):
         return (a_embeds, t_embeds, targets)
 
 
-
-
-
 class LinearEvaluatorEplevel(nn.Module):
     """
         This loss expects as input a batch consisting of ... etc
     """
-    def __init__(self, CFG, train_ep_loader, classes, modality='text', lin_lr = 0.01):
+    def __init__(self, CFG, train_ep_loader, val_ep_loader, classes, modality='text', lin_lr = 0.01):
         """
         test
         """
@@ -979,7 +981,7 @@ class LinearEvaluatorEplevel(nn.Module):
         self.modality=modality
         self.device = CFG.device
         self.train_ep_loader = train_ep_loader
-        self.val_ep_loader = train_ep_loader
+        self.val_ep_loader = val_ep_loader
 
         self.lin_lr = lin_lr
         self.output_path = os.path.join(CFG.log_name, "lin_eval", str(lin_lr))
@@ -1069,8 +1071,6 @@ class LinearEvaluatorEplevel(nn.Module):
                     # print("Loss: {} \t acc: {}".format(loss, metrics['acc']))
 
             print("-- Train epoch Mean acc: ", np.mean(accs))
-            
-            
             # TODO: for now save intermediate, in the end only final round.
             if epoch % 10 == 0 or epoch == self.lin_max_epochs - 1:
                 self.acc_per_epoch.append(np.mean(accs))
@@ -1102,7 +1102,6 @@ class LinearEvaluatorEplevel(nn.Module):
                     output = self.projectionhead(mean_t_embeds)
                 else:
                     output = self.projectionhead(mean_a_embeds)
-
                 
                 metrics = self.get_metrics(output.detach().cpu(), cats.detach().cpu())
                 accs.append(metrics['acc'])
@@ -1199,28 +1198,36 @@ def main(args):
     full_model.eval()
 
     # Create representations on epiode level
-    eplevel = epLevelCreator(full_model, fullcfg, data_loader)
-    eplevel.create()
+    print("[del] Creating for train set. ")
+    eplevel_train = epLevelCreator(full_model, fullcfg, data_loader, 'train')
+    eplevel_train.create()
 
-    ep_dataset = epDataset(fullcfg, eplevel)
-    ep_loader = DataLoader(ep_dataset, batch_size=args.lin_batch_size, shuffle=False, drop_last=True)
-    print("Len: ", len(ep_loader), len(ep_dataset))
+    print("[del] Creating for validation set. ")
+    eplevel_val = epLevelCreator(full_model, fullcfg, data_loader, 'val')
+    eplevel_val.create()
+
+    ep_dataset_train = epDataset(fullcfg, eplevel_train)
+    ep_loader_train = DataLoader(ep_dataset_train, batch_size=args.lin_batch_size, shuffle=False, drop_last=True)
+
+    ep_dataset_val = epDataset(fullcfg, eplevel_val)
+    ep_loader_val = DataLoader(ep_dataset_val, batch_size=args.lin_batch_size, shuffle=False, drop_last=True)
+
+    print("Len: ", len(ep_loader_train), len(ep_loader_val))
+    exit(1)
     del data_loader
-    print("Len: ", len(ep_loader), len(ep_dataset))
 
-
-    for lr in [0.001, 0.0001, 0.0001]:
+    for lr in [0.001, 0.0001]:
         print("Results for lr: ", lr)
         # Calculate results for text
-        classes = list(ep_dataset.ep2cat_map.keys())
-        evaluator = LinearEvaluatorEplevel(fullcfg, ep_loader, classes, modality="text", lin_lr=lr)
+        classes = list(ep_dataset_train.ep2cat_map.keys())
+        evaluator = LinearEvaluatorEplevel(fullcfg, ep_loader_train, ep_loader_val, classes, modality="text", lin_lr=lr)
         evaluator.fit()
         del evaluator
         gc.collect()
 
         # Calculate results for audio
-        classes = list(ep_dataset.ep2cat_map.keys())
-        evaluator = LinearEvaluatorEplevel(fullcfg, ep_loader, classes, modality="audio", lin_lr=lr)
+        classes = list(ep_dataset_train.ep2cat_map.keys())
+        evaluator = LinearEvaluatorEplevel(fullcfg, ep_loader_train, ep_loader_val, classes, modality="audio", lin_lr=lr)
         evaluator.fit()
         del evaluator
         gc.collect()
