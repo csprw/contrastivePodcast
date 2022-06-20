@@ -505,11 +505,11 @@ class spDatasetEpLevel(datautil.Dataset):
                     self.file_startstop.append((start_idx, sample_idx))
                     print("[del] Max exceeded {}".format(sample_idx))
                     break
-                elif sample_idx > 50000 and traintest == 'test':
-                    f.close()
-                    self.file_startstop.append((start_idx, sample_idx))
-                    print("[del] Max exceeded {}".format(sample_idx))
-                    break
+                # elif sample_idx > 50000 and traintest == 'test':
+                #     f.close()
+                #     self.file_startstop.append((start_idx, sample_idx))
+                #     print("[del] Max exceeded {}".format(sample_idx))
+                #     break
                 elif traintest == "val":
                     print("Break for val set")
                     break
