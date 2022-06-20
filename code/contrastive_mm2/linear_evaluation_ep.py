@@ -500,13 +500,13 @@ class spDatasetEpLevel(datautil.Dataset):
                 # elif sample_idx > 5000000:
                 # elif sample_idx > 10000000:     # Raised cpu memory problem
                 # elif sample_idx > 8000000:    
-                elif sample_idx > 50000:
+                elif sample_idx > 10000:
                     f.close()
                     self.file_startstop.append((start_idx, sample_idx))
                     print("[del] Max exceeded {}".format(sample_idx))
                     break
-                elif traintest == "test":
-                    print("Break for test set")
+                elif traintest == "val":
+                    print("Break for val set")
                     break
             else:
                 f.close()
@@ -872,7 +872,7 @@ class epLevelCreator(nn.Module):
         if split == 'train':
             self.data_split_loader = data_loader.train_loader
         elif split == 'val':
-            self.data_split_loader = data_loader.val_loader
+            self.data_split_loader = data_loader.test_loader
 
         self.output_path = CFG.log_name
 
