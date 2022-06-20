@@ -1115,8 +1115,8 @@ class LinearEvaluatorEplevel(nn.Module):
                 # y_pred = torch.argmax(output, axis=1)
                 #print("eval step: ", step, (y_pred[:10]), (cats[:10]))
                 
-                if step > 1000: #TODO 
-                    break
+                # if step > 1000: #TODO 
+                #     break
 
         p, r, f1, _ = precision_recall_fscore_support(full_preds, full_targets, average='macro')
         self.p_per_epoch.append(p)
