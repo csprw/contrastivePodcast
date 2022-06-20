@@ -498,8 +498,8 @@ class spDatasetEpLevel(datautil.Dataset):
                     self.file_startstop.append((start_idx, sample_idx))
                     break
                 # elif sample_idx > 5000000:
-                elif sample_idx > 10000000:     # Raised cpu memory problem
-                # elif sample_idx > 500:
+                # elif sample_idx > 10000000:     # Raised cpu memory problem
+                elif sample_idx > 500:
                     f.close()
                     self.file_startstop.append((start_idx, sample_idx))
                     print("[del] Max exceeded {}".format(sample_idx))
@@ -944,6 +944,7 @@ class epDataset(datautil.Dataset):
         self.device = CFG.device
 
         self.read_ep2cat()
+        # print("del4 ep dataset mean cats: ", self.mean_cats)
 
     def read_ep2cat(self):
         ep2cat_path = os.path.join(conf.dataset_path, 'ep2cat.json')
@@ -962,20 +963,6 @@ class epDataset(datautil.Dataset):
         t_embeds = self.mean_t_embeds[idx]
         targets =  self.mean_cats[idx]
         return (a_embeds, t_embeds, targets)
-
-    
-    # def batching_collate(self, batch):
-    #     """ Return a batch containing samples of the SP dataset"""
-    #     print("[del4] in batching collate!")
-    #     # print("This is batch: ", batch)
-    #     print(len(batch))
-    #     print(type(batch[0]))
-    #     print(type(batch[1]))
-    #     print(type(batch[2]))
-    #     a_embeds, t_embeds, targets = batch
-
-    #     return  a_embeds.to(self.device), t_embeds.to(self.device), torch.tensor(targets).to(self.device)
-
 
 
 
@@ -1064,12 +1051,9 @@ class LinearEvaluatorEplevel(nn.Module):
                 loss = self.criterion(output, cats)
 
                 loss.backward()
-
                 self.optimizer.step()
 
                 y_pred = torch.argmax(output, axis=1)
-
-                
                 metrics = self.get_metrics(output.detach().cpu(), cats.detach().cpu())
                 accs.append(metrics['acc'])
                 if torch.equal(y_pred.detach().cpu(), cats.detach().cpu()):
@@ -1205,7 +1189,6 @@ def main(args):
     ### DELETE [del4]
     # fullcfg.max_train_samples = 128 * 20
     print("[Load model] config loaded: ", fullcfg)
-
     # Create dataloader
     data_loader = MMloader(fullcfg, lin_sep=True)
 
@@ -1219,9 +1202,12 @@ def main(args):
     eplevel = epLevelCreator(full_model, fullcfg, data_loader)
     eplevel.create()
 
-    ep_dataset= epDataset(fullcfg, eplevel)
+    ep_dataset = epDataset(fullcfg, eplevel)
     ep_loader = DataLoader(ep_dataset, batch_size=args.lin_batch_size, shuffle=False, drop_last=True)
+    print("Len: ", len(ep_loader), len(ep_dataset))
     del data_loader
+    print("Len: ", len(ep_loader), len(ep_dataset))
+
 
     for lr in [0.001, 0.0001, 0.0001]:
         print("Results for lr: ", lr)
@@ -1229,7 +1215,6 @@ def main(args):
         classes = list(ep_dataset.ep2cat_map.keys())
         evaluator = LinearEvaluatorEplevel(fullcfg, ep_loader, classes, modality="text", lin_lr=lr)
         evaluator.fit()
-
         del evaluator
         gc.collect()
 
