@@ -500,11 +500,16 @@ class spDatasetEpLevel(datautil.Dataset):
                 # elif sample_idx > 5000000:
                 # elif sample_idx > 10000000:     # Raised cpu memory problem
                 # elif sample_idx > 8000000:    
-                elif sample_idx > 10000:
+                elif sample_idx > 5000 and traintest == 'train':
                     f.close()
                     self.file_startstop.append((start_idx, sample_idx))
                     print("[del] Max exceeded {}".format(sample_idx))
                     break
+                # elif sample_idx > 50000 and traintest == 'train':
+                #     f.close()
+                #     self.file_startstop.append((start_idx, sample_idx))
+                #     print("[del] Max exceeded {}".format(sample_idx))
+                #     break
                 elif traintest == "val":
                     print("Break for val set")
                     break
@@ -894,6 +899,7 @@ class epLevelCreator(nn.Module):
         print("-------- Creating embeddings")
         with torch.no_grad():
             for step, batch in enumerate(iter(self.data_split_loader)):
+                print("[del4] creating step: ", step)
                 sent_features, audio_features, seq_len, cats, targets = batch
 
                 # Encode features
@@ -916,6 +922,7 @@ class epLevelCreator(nn.Module):
                     for idx, targ in enumerate(targets):
 
                         if self.cur_ep != targ:
+                            # print("[del4] cat: ", cats[idx])
                             if targ in self.processed_eps:
                                 print("DEBUG: already exists? should not be possible")
                                 raise
@@ -1212,7 +1219,7 @@ def main(args):
     ep_dataset_val = epDataset(fullcfg, eplevel_val)
     ep_loader_val = DataLoader(ep_dataset_val, batch_size=args.lin_batch_size, shuffle=False, drop_last=True)
 
-    print("Len: ", len(ep_loader_train), len(ep_loader_val))
+    print("Len: ", len(ep_loader_train), len(ep_loader_val), len(ep_dataset_val))
     exit(1)
     del data_loader
 
