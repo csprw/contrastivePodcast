@@ -498,8 +498,9 @@ class spDatasetEpLevel(datautil.Dataset):
                     self.file_startstop.append((start_idx, sample_idx))
                     break
                 # elif sample_idx > 5000000:
-                elif sample_idx > 10000000:     # Raised cpu memory problem
-                # elif sample_idx > 500:
+                # elif sample_idx > 10000000:     # Raised cpu memory problem
+                # elif sample_idx > 8000000:     # Raised cpu memory problem
+                elif sample_idx > 500:
                     f.close()
                     self.file_startstop.append((start_idx, sample_idx))
                     print("[del] Max exceeded {}".format(sample_idx))
@@ -594,9 +595,7 @@ class spDatasetEpLevel(datautil.Dataset):
                 text_embeds, padding=True, truncation=True, max_length=self.text_max_length, return_tensors='pt'
             ).to(self.device)
 
-
             return text_embeds, audio_embeds, lengths, cats, targs
-
 
         else:
             text_embeds = []
@@ -1065,15 +1064,16 @@ class LinearEvaluatorEplevel(nn.Module):
 
                 if step % 100 == 0:
                     print("___________________________________________________")
-                    print("output:" , epoch, step, loss.item(), (y_pred[:10]), (cats[:10]))
+                    print("output:" , epoch, step, loss.item(), (y_pred[:10].detach().cpu()), (cats[:10].detach().cpu()))
                     print(Counter(cats.detach().cpu().tolist()), Counter(y_pred.detach().cpu().tolist()))
                     # print("Loss: {} \t acc: {}".format(loss, metrics['acc']))
 
             print("-- Train epoch Mean acc: ", np.mean(accs))
-            self.acc_per_epoch.append(np.mean(accs))
+            
             
             # TODO: for now save intermediate, in the end only final round.
             if epoch % 10 == 0 or epoch == self.lin_max_epochs - 1:
+                self.acc_per_epoch.append(np.mean(accs))
                 self.evaluate()
                 self.save_results(epoch)
         
