@@ -320,10 +320,10 @@ class spDatasetWeakShuffleLinSep(datautil.Dataset):
         self.f =  h5py.File(h5py_file, 'r')
 
     def read_ep2cat(self):
-        ep2cat_path = os.path.join(conf.dataset_path, 'ep2cat.json')
+        ep2cat_path = os.path.join(conf.dataset_path, 'ep2cat_5cats.json')
         with open(ep2cat_path) as json_file: 
             self.ep2cat = json.load(json_file)
-        ep2cat_map_path = os.path.join(conf.dataset_path, 'ep2cat_mapping.json')
+        ep2cat_map_path = os.path.join(conf.dataset_path, 'ep2cat_mapping_5cats.json')
         with open(ep2cat_map_path) as json_file: 
             self.ep2cat_map = json.load(json_file)
         self.num_cats = len(self.ep2cat_map.keys())
@@ -543,10 +543,10 @@ class spDatasetEpLevel(datautil.Dataset):
         self.f =  h5py.File(h5py_file, 'r')
 
     def read_ep2cat(self):
-        ep2cat_path = os.path.join(conf.dataset_path, 'ep2cat.json')
+        ep2cat_path = os.path.join(conf.dataset_path, 'ep2cat_5cats.json')
         with open(ep2cat_path) as json_file: 
             self.ep2cat = json.load(json_file)
-        ep2cat_map_path = os.path.join(conf.dataset_path, 'ep2cat_mapping.json')
+        ep2cat_map_path = os.path.join(conf.dataset_path, 'ep2cat_mapping_5cats.json')
         with open(ep2cat_map_path) as json_file: 
             self.ep2cat_map = json.load(json_file)
         self.num_cats = len(self.ep2cat_map.keys())
@@ -770,10 +770,10 @@ class epDataset(datautil.Dataset):
         self.read_ep2cat()
 
     def read_ep2cat(self):
-        ep2cat_path = os.path.join(conf.dataset_path, 'ep2cat.json')
+        ep2cat_path = os.path.join(conf.dataset_path, 'ep2cat_5cats.json')
         with open(ep2cat_path) as json_file: 
             self.ep2cat = json.load(json_file)
-        ep2cat_map_path = os.path.join(conf.dataset_path, 'ep2cat_mapping.json')
+        ep2cat_map_path = os.path.join(conf.dataset_path, 'ep2cat_mapping_5cats.json')
         with open(ep2cat_map_path) as json_file: 
             self.ep2cat_map = json.load(json_file)
         self.num_cats = len(self.ep2cat_map.keys())
