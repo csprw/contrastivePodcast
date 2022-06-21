@@ -509,7 +509,7 @@ class spDatasetEpLevel(datautil.Dataset):
                 # elif sample_idx > 5000000:
                 # elif sample_idx > 10000000:     # Raised cpu memory problem
                 # elif sample_idx > 8000000:    
-                elif sample_idx > 5000 and traintest == 'train':
+                elif sample_idx > 10000000 and traintest == 'train':
                     f.close()
                     self.file_startstop.append((start_idx, sample_idx))
                     print("[del] Max exceeded {}".format(sample_idx))
@@ -803,7 +803,7 @@ class LinearEvaluatorEplevel(nn.Module):
         self.val_ep_loader = val_ep_loader
 
         self.lin_lr = lin_lr
-        self.output_path = os.path.join(CFG.log_name, "lin_eval", str(lin_lr))
+        self.output_path = os.path.join(CFG.log_name, "lin_eval_start", str(lin_lr))
         Path(self.output_path).mkdir(parents=True, exist_ok=True)
 
         # to config file
@@ -1034,7 +1034,7 @@ def main(args):
     print("Len: ", len(ep_loader_train), len(ep_loader_val), len(ep_dataset_val))
     del data_loader
 
-    for lr in [0.001, 0.0001]:
+    for lr in [0.01, 0.001, 0.0001]:
         print("-- Results for lr: ", lr)
         # Calculate results for text
         classes = list(ep_dataset_train.ep2cat_map.keys())
