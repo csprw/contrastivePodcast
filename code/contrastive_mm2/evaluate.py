@@ -107,7 +107,6 @@ class Evaluator(object):
         # self.topic_output =  os.path.join(conf.yamnet_embed_path, "topic_embeddings")   # TODO: change to CFG
         self.topic_output =  os.path.join(conf.topic_embed_path, "topic_embeddings", os.path.split(model_path)[-1]) 
         Path(self.topic_output).mkdir(parents=True, exist_ok=True)
-
         
     def get_max_data(self):
         "returns max number of sentences to encode"
@@ -351,10 +350,15 @@ def save_eval_results(full_results, evaluator):
             mean_results[name][metric_name] = np.mean(vals)
 
     mean_results['test_acc'] = evaluator.acc
-    out = os.path.join(evaluator.model_path, "topictask_results.json")
+
+    out_path = os.path.join(evaluator.model_path, "topic_evaluation")
+    name = os.path.split(args.model_weights_path)[-1].split(".")[0]
+    Path(out_path).mkdir(parents=True, exist_ok=True)
+
+    out = os.path.join(out_path, "topictask_{}.json".format(name))
     with open(out, "w") as f:
         json.dump(mean_results, f, indent=4)
-    out = os.path.join(evaluator.model_path, "topictask_results.csv")
+    out = os.path.join(evaluator.model_path, "topictask_{}.csv".format(name))
     df = pd.DataFrame(mean_results)
     df.T.to_csv(out, sep=';')
     print(df.T.to_string())
