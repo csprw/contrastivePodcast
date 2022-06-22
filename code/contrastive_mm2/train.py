@@ -413,7 +413,7 @@ class spDatasetWeakShuffle(datautil.Dataset):
 
                     h5py_file = self.h5py_idx2file[h5py_idx]
                     self.f = h5py.File(h5py_file, 'r')
-                    print("[del3] loaded new h5py file: ", h5py_idx, h5py_file)
+                    # print("[del3] loaded new h5py file: ", h5py_idx, h5py_file)
                 
                 # sent = f['sentences'][sent_idx]
                 sent = self.f['sentences'][sent_idx].decode("utf-8")
