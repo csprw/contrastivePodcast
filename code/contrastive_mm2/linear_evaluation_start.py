@@ -969,7 +969,7 @@ class LinearEvaluatorEplevel(nn.Module):
             'ep_{}_linear_evaluation_results.csv'.format(self.modality))
         df = pd.DataFrame(lin_eval_res)
         df.T.to_csv(out, sep=';')
-        print(df.T.to_string())
+        # print(df.T.to_string())
 
         # Save results as confusion matrix
         classes = self.classes
@@ -1034,7 +1034,7 @@ def main(args):
     print("Len: ", len(ep_loader_train), len(ep_loader_val), len(ep_dataset_val))
     del data_loader
 
-    for lr in [0.01, 0.001, 0.0001]:
+    for lr in [0.001, 0.0001]:
         print("-- Results for lr: ", lr)
         # Calculate results for text
         classes = list(ep_dataset_train.ep2cat_map.keys())
