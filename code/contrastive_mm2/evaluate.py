@@ -110,12 +110,6 @@ class Evaluator(object):
         
     def get_max_data(self):
         "returns max number of sentences to encode"
-        # h5py_files = list(Path(self.test_dir).glob('*.h5'))
-        # max_samples = 0
-        # for h5idx, h5py_file in enumerate(h5py_files):    
-        #     f = h5py.File(h5py_file, 'r')
-        #     max_samples += len(f['sentences'])
-        # print("same? ", max_samples)
         max_samples =  len(self.test_loader) * self.bs
         return max_samples
 
