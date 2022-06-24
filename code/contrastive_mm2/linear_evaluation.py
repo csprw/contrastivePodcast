@@ -60,7 +60,7 @@ class MMloader(object):
 
         self.batch_size = CFG.batch_size
         self.device = CFG.device
-        self.load_full = True if CFG.audio_proj_head in ['gru', 'rnn'] else False
+        self.load_full = True if CFG.audio_proj_head in ['gru', 'rnn', 'lstm'] else False
         self.lin_sep = lin_sep
 
         # Get the datasets
@@ -150,10 +150,10 @@ class spDatasetNoMemory(datautil.Dataset):
             self.collate_fn = self.mean_batching_collate
 
     def read_ep2cat(self):
-        ep2cat_path = os.path.join(conf.dataset_path, 'ep2cat.json')
+        ep2cat_path = os.path.join(conf.dataset_path, 'ep2cat_5cats.json')
         with open(ep2cat_path) as json_file: 
             self.ep2cat = json.load(json_file)
-        ep2cat_map_path = os.path.join(conf.dataset_path, 'ep2cat_mapping.json')
+        ep2cat_map_path = os.path.join(conf.dataset_path, 'ep2cat_mapping_5cats.json')
         with open(ep2cat_map_path) as json_file: 
             self.ep2cat_map = json.load(json_file)
         self.num_cats = len(self.ep2cat_map.keys())
@@ -330,10 +330,10 @@ class spDatasetWeakShuffleLinSep(datautil.Dataset):
         self.f =  h5py.File(h5py_file, 'r')
 
     def read_ep2cat(self):
-        ep2cat_path = os.path.join(conf.dataset_path, 'ep2cat.json')
+        ep2cat_path = os.path.join(conf.dataset_path, 'ep2cat_5cats.json')
         with open(ep2cat_path) as json_file: 
             self.ep2cat = json.load(json_file)
-        ep2cat_map_path = os.path.join(conf.dataset_path, 'ep2cat_mapping.json')
+        ep2cat_map_path = os.path.join(conf.dataset_path, 'ep2cat_mapping_5cats.json')
         with open(ep2cat_map_path) as json_file: 
             self.ep2cat_map = json.load(json_file)
         self.num_cats = len(self.ep2cat_map.keys())
@@ -514,10 +514,10 @@ class spDatasetEpLevel(datautil.Dataset):
         self.f =  h5py.File(h5py_file, 'r')
 
     def read_ep2cat(self):
-        ep2cat_path = os.path.join(conf.dataset_path, 'ep2cat.json')
+        ep2cat_path = os.path.join(conf.dataset_path, 'ep2cat_5cats.json')
         with open(ep2cat_path) as json_file: 
             self.ep2cat = json.load(json_file)
-        ep2cat_map_path = os.path.join(conf.dataset_path, 'ep2cat_mapping.json')
+        ep2cat_map_path = os.path.join(conf.dataset_path, 'ep2cat_mapping_5cats.json')
         with open(ep2cat_map_path) as json_file: 
             self.ep2cat_map = json.load(json_file)
         self.num_cats = len(self.ep2cat_map.keys())
@@ -667,7 +667,7 @@ class LinearEvalator(nn.Module):
     """
         This loss expects as input a batch consisting of ... etc
     """
-    def __init__(self, lin_eval_model, CFG, data_loader, modality='text'):
+    def __init__(self, lin_eval_model, CFG, data_loader, modality='text', lin_lr=0.001):
         """
         test
         """
@@ -681,7 +681,7 @@ class LinearEvalator(nn.Module):
         # to config file
         self.lin_max_epochs = args.num_epochs
         self.in_batch_size = 256
-        lin_lr = 0.001
+        lin_lr = lin_lr
         lin_weight_decay = 1.0e-6
         
         self.optimizer = torch.optim.Adam(
@@ -814,7 +814,7 @@ def main(args):
 
     # Perform evaluation
     lin_eval_model = LinearEvaluationModel(full_model, fullcfg, data_loader)
-    evaluator = LinearEvalator(lin_eval_model, fullcfg, data_loader, modality=modality)
+    evaluator = LinearEvalator(lin_eval_model, fullcfg, data_loader, modality=modality, lin_lr = 0.001)
     evaluator.fit()
     # evaluator.evaluate()
     # evaluator.save_results(args.num_epochs)
