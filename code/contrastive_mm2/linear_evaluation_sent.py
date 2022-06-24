@@ -327,7 +327,7 @@ class spDatasetWeakShuffleLinSep(datautil.Dataset):
                 # elif sample_idx > 5000000:
                 # elif sample_idx > 10000000:     # Raised cpu memory problem
                 # elif sample_idx > 8000000:    
-                elif sample_idx > 500 and traintest == 'train':
+                elif sample_idx > 10000000 and traintest == 'train':
                     f.close()
                     self.file_startstop.append((start_idx, sample_idx))
                     print("[del] Max exceeded {}".format(sample_idx))
@@ -386,7 +386,7 @@ class spDatasetWeakShuffleLinSep(datautil.Dataset):
                     gc.collect()
                     h5py_file = self.h5py_idx2file[h5py_idx]
                     self.f = h5py.File(h5py_file, 'r')
-                    print("[del2] loaded new h5py file: ", h5py_idx, h5py_file)
+                    # print("[del2] loaded new h5py file: ", h5py_idx, h5py_file)
                     if not self.load_full:
                         self.mean_embeds = torch.Tensor(np.array(self.f['mean_embeddings']))
                 
@@ -1032,6 +1032,7 @@ def main(args):
 
     # Perform evaluation
     for lr in [ 0.001, 0.0001, 0.00001]:
+        print("-------- Results for lr: ", lr)
         evaluator = LinearEvalator(full_model, fullcfg, data_loader, modality="text", lin_lr =lr)
         evaluator.fit()
 

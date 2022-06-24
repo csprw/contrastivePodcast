@@ -1165,6 +1165,9 @@ class multimodal_loss(nn.Module):
         self.device = torch.device(CFG.device)
         self.batch_size = full_model.batch_size
 
+        self.loss_audio = nn.CrossEntropyLoss()
+        self.loss_text = nn.CrossEntropyLoss()
+
     def init_parameters_logtiscale(self):
         nn.init.constant_(self.logit_scale, np.log(1 / 0.07))
 
@@ -1189,11 +1192,40 @@ class multimodal_loss(nn.Module):
 
             ground_truth = torch.arange(self.batch_size, dtype=torch.long, device=self.device)
             total_loss = F.cross_entropy(audio_logits,ground_truth, weight=None) + F.cross_entropy(text_logits.transpose(-1, -2), ground_truth, weight=None)
+            
             metrics = get_metrics(audio_logits.detach(), text_logits.detach(), ground_truth)
    
             return total_loss, metrics
 
-        if self.loss_type == 'clip_loss':
+        elif self.loss_type == 'norm_loss':
+              # Normalise features
+            # reps_audio = reps_audio / reps_audio.norm(dim=1, keepdim=True)
+            # reps_text = reps_text / reps_text.norm(dim=1, keepdim=True)
+
+            reps_audio = torch.nn.functional.normalize(reps_audio) 
+            reps_text = torch.nn.functional.normalize(reps_text) 
+                    
+
+            # Loss function from CLIP paper
+            if self.scale_type == 'fixed':
+                audio_logits =  (reps_audio @ reps_text.t()) * self.fixed_scale
+            elif self.scale_type == 'learned':
+                cur_logit_scale = torch.clamp(self.logit_scale.exp(), min=1.0, max=100.0)
+                audio_logits =  (reps_audio @ reps_text.t()) * cur_logit_scale.exp()
+
+            text_logits = audio_logits.t()
+
+            # Calculate metrics
+            ground_truth = torch.arange(self.batch_size, dtype=torch.long, device=self.device)
+
+            total_loss =  (self.loss_text(text_logits, ground_truth) + self.loss_audio(audio_logits,ground_truth))/2
+            # total_loss = (F.cross_entropy(audio_logits, ground_truth, weight=None) + F.cross_entropy(text_logits.transpose(-1, -2), ground_truth, weight=None)) / 2
+            metrics = get_metrics(audio_logits.detach(), text_logits.detach(), ground_truth)
+   
+   
+            return total_loss, metrics
+
+        elif self.loss_type == 'clip_loss':
             # Normalise features
             reps_audio = reps_audio / reps_audio.norm(dim=1, keepdim=True)
             reps_text = reps_text / reps_text.norm(dim=1, keepdim=True)
@@ -1456,7 +1488,7 @@ if __name__ == "__main__":
                     nargs='?', choices=[256, 768],
                     help='Final output dimensions of the embeddings')
     parser.add_argument('--loss_type', default='clip_loss', const='clip_loss',
-                    nargs='?', choices=['simcse_loss', 'clip_loss', 'clip_loss_simple'],
+                    nargs='?', choices=['simcse_loss', 'clip_loss', 'norm_loss'],
                     help='Name of scale_type (default: %(default)s)')
     parser.add_argument('--audio_proj_head', default='gru', const='gru',
                     nargs='?', choices=['sph', 'rnn', 'gru', 'lstm'],
