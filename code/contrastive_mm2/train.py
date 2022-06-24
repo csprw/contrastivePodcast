@@ -989,7 +989,7 @@ class mmModule(nn.Module):
                 # continue
                 
                 if step < fstep:
-                    print("[DEBUG] loading checkpoint, continue")
+                    print("[DEBUG] loading checkpoint skip step ", step, fstep)
                     continue
 
                 if  step % self.eval_every == 0 or step == steps_per_epoch - 1: 
