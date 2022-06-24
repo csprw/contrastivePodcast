@@ -64,7 +64,7 @@ def get_log_name(args, dc):
     """
     Returns name of the current run.
     """
-    log_name = "continue-{}_{}_{}_{}_{}_{}".format(args.text_proj_head, 
+    log_name = "continue-{}_{}_{}_{}_{}".format(args.text_proj_head, 
             args.audio_proj_head, args.final_projection_dim, dc.pad_pack,
             datetime.now().strftime("%Y-%m-%d_%H-%M-%S"))
     log_name = os.path.join(args.log_dir, log_name)
