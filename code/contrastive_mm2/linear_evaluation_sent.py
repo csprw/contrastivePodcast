@@ -888,9 +888,9 @@ class LinearEvalator(nn.Module):
             self.acc_per_epoch.append(np.mean(accs))
 
             # TODO: for now save intermediate, in the end only final round.
-            if epoch % 10 == 0:
-                self.evaluate()
-                self.save_results(epoch)
+            # if epoch % 10 == 0:
+            self.evaluate()
+            self.save_results(epoch)
 
         print("Train done, accs per epoch: ", self.acc_per_epoch)
         
@@ -934,6 +934,9 @@ class LinearEvalator(nn.Module):
                 accs.append(metrics['acc'])
                 full_preds.extend(metrics['preds'])
                 full_targets.extend(metrics['targets'])
+
+                if step > 5000:
+                    break
 
                 # y_pred = torch.argmax(output, axis=1)
                 # metrics = self.get_metrics(output.detach().cpu(), cats.detach().cpu())
