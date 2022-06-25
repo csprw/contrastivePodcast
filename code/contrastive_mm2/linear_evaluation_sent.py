@@ -309,7 +309,7 @@ class spDatasetWeakShuffleLinSep(datautil.Dataset):
                         sent = f['sentences'][sent_idx].decode("utf-8")
                         num = len(sent.split(' '))
 
-                        if num <= 2:
+                        if num <= 4:
                             #print("Too small sent")
                             continue
 
