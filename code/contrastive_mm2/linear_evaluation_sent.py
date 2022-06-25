@@ -1000,7 +1000,7 @@ class LinearEvalator(nn.Module):
         df_cm = pd.DataFrame(cf_matrix, index = [i for i in classes],
             columns = [i for i in classes])
         plt.figure(figsize = (12,7))
-        sn.heatmap(df_cm, annot=True, cmap='Blues')
+        sn.heatmap(df_cm, annot=True, cmap='Blues',  fmt='g')
         
         out = os.path.join(self.output_path, 
             'sent_{}_{}_linear_evaluation_cm.png'.format( self.modality, epoch))
