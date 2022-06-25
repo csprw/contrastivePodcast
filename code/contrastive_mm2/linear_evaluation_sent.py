@@ -935,8 +935,8 @@ class LinearEvalator(nn.Module):
                 full_preds.extend(metrics['preds'])
                 full_targets.extend(metrics['targets'])
 
-                if step > 5000:
-                    break
+                # if step > 5000:
+                #     break
 
                 # y_pred = torch.argmax(output, axis=1)
                 # metrics = self.get_metrics(output.detach().cpu(), cats.detach().cpu())
