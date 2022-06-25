@@ -974,6 +974,7 @@ class mmModule(nn.Module):
 
             # Full training
             # TODO: if training from checkpoint, stop batch in time
+
             for step, batch in enumerate(iter(train_loader)):
                 
                 # ### Leave for debugging, check speedup weak shuffling.
@@ -988,8 +989,8 @@ class mmModule(nn.Module):
                 #     test1 = time()
                 # continue
                 
-                if step < fstep:
-                    print("[DEBUG] loading checkpoint skip step ", step, fstep)
+                if step < fstep and epoch == start_epoch:
+                    print("[DEBUG] loading checkpoint skip step ", step, fstep, epoch)
                     continue
 
                 if  step % self.eval_every == 0 or step == steps_per_epoch - 1: 
