@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 from omegaconf import OmegaConf 
 import pandas as pd
+from nltk import tokenize
 
 config_path = "../config.yaml"
 conf = OmegaConf.load(config_path)
@@ -37,7 +38,6 @@ def create_audiofiles(topics_df_path, output_path):
                     text = query
                 else:
                     text = description
-
                 current_dir = os.path.join(query_audio_dir, query_option, slow_name)
                 Path(current_dir).mkdir(parents=True, exist_ok=True)
                 filename = os.path.join(current_dir, str(query_num) + '.mp3')

@@ -327,16 +327,16 @@ class spDatasetWeakShuffleLinSep(datautil.Dataset):
                 # elif sample_idx > 5000000:
                 # elif sample_idx > 10000000:     # Raised cpu memory problem
                 # elif sample_idx > 8000000:    
-                elif sample_idx > 10000000 and traintest == 'train':
+                elif sample_idx > 1000 and traintest == 'train':
                     f.close()
                     self.file_startstop.append((start_idx, sample_idx))
                     print("[del] Max exceeded {}".format(sample_idx))
                     break
-                # elif sample_idx > 50 and traintest == 'test':
-                #     f.close()
-                #     self.file_startstop.append((start_idx, sample_idx))
-                #     print("[del] Max exceeded {}".format(sample_idx))
-                #     break
+                elif sample_idx > 1000 and traintest == 'test':
+                    f.close()
+                    self.file_startstop.append((start_idx, sample_idx))
+                    print("[del] Max exceeded {}".format(sample_idx))
+                    break
                 elif traintest == "val":
                     print("Break for val set")
                     break
@@ -602,31 +602,31 @@ class LinearEvalator(nn.Module):
     """
         This loss expects as input a batch consisting of ... etc
     """
-    def __init__(self, full_model, CFG, data_loader, modality='text', lin_lr=0.001):
+    def __init__(self, CFG, classes, train_loader, test_loader, modality='text', lin_lr=0.001):
         """
         test
         """
         super(LinearEvalator, self).__init__()
         self.modality = modality
-        self.text_model = full_model.text_model
-        self.audio_model = full_model.audio_model
-        freeze_network(self.text_model)
-        freeze_network(self.audio_model)
+        # self.text_model = full_model.text_model
+        # self.audio_model = full_model.audio_model
+        # freeze_network(self.text_model)
+        # freeze_network(self.audio_model)
 
-        self.classes = list(data_loader.train_dataset.ep2cat_map.keys())
+        self.classes = classes
         self.device = CFG.device
-        print("Clasees: ", self.classes)
+        print("Classes: ", self.classes)
         
-        self.train_loader = data_loader.train_loader
-        self.test_loader = data_loader.test_loader
+        self.train_loader = train_loader
+        self.test_loader = test_loader
         # self.output_path = CFG.log_name
 
-        self.output_path = os.path.join(CFG.log_name, "lin_eval_sent", str(lin_lr))
+        self.output_path = os.path.join(CFG.log_name, "lin_eval_sent2", str(lin_lr))
         Path(self.output_path).mkdir(parents=True, exist_ok=True)
 
         # to config file
         self.lin_max_epochs = args.num_epochs
-        self.in_batch_size = 256
+        self.lin_batch_size = 256
         self.lin_lr = lin_lr
         lin_weight_decay = 1.0e-6
 
@@ -660,11 +660,10 @@ class LinearEvalator(nn.Module):
         )
 
         self.acc_per_epoch = []
+        self.eval_mean_acc = []
         self.p_per_epoch = []
         self.r_per_epoch = []
         self.f1_per_epoch = []
-        
-
         
     def fit(self):
         #self.lin_eval_model.projectionhead.train()
@@ -678,31 +677,32 @@ class LinearEvalator(nn.Module):
                 # print("OMG got a batch: ")
                 # print(batch)
 
-                text_embeds, audio_embeds, lengths, cats, targs = batch
+                # text_embeds, audio_embeds, lengths, cats, targs = batch
+                (a_embeds, t_embeds, cats) = batch
 
                 # sent_features, audio_features, seq_len, cats = batch
                 # mean_a_embeds, mean_t_embeds, cats = batch
-                audio_embeds = audio_embeds.to(self.device)
-                text_embeds = text_embeds.to(self.device)
+                a_embeds = a_embeds.to(self.device)
+                t_embeds = t_embeds.to(self.device)
                 cats = cats.to(self.device)
 
 
-                with torch.no_grad():
-                    # Encode features
-                    reps_text = self.text_model(text_embeds)['sentence_embedding']
-                    reps_audio = self.audio_model((audio_embeds, lengths))
+                # with torch.no_grad():
+                #     # Encode features
+                #     reps_text = self.text_model(text_embeds)['sentence_embedding']
+                #     reps_audio = self.audio_model((audio_embeds, lengths))
 
-                    # Normalise features
-                    reps_audio = reps_audio / reps_audio.norm(dim=1, keepdim=True)
-                    reps_text = reps_text / reps_text.norm(dim=1, keepdim=True)
+                #     # Normalise features
+                #     reps_audio = reps_audio / reps_audio.norm(dim=1, keepdim=True)
+                #     reps_text = reps_text / reps_text.norm(dim=1, keepdim=True)
 
                 if self.embed_norm1:
-                    reps_audio = reps_audio / (torch.sum(reps_audio, -1))
-                    reps_text = reps_text / (torch.sum(reps_text, -1))
+                    reps_audio = a_embeds / (torch.sum(a_embeds, -1))
+                    reps_text = a_embeds / (torch.sum(a_embeds, -1))
 
                 elif self.embed_norm2:
-                    reps_audio = torch.nn.functional.normalize(reps_audio) 
-                    reps_text = torch.nn.functional.normalize(reps_text) 
+                    reps_audio = torch.nn.functional.normalize(t_embeds) 
+                    reps_text = torch.nn.functional.normalize(t_embeds) 
                     
 
                 if self.modality == 'text':
@@ -755,26 +755,27 @@ class LinearEvalator(nn.Module):
         with torch.no_grad():
             for step, batch in enumerate(iter(self.test_loader)):
                 # sent_features, audio_features, seq_len, targs, _, cats = batch
-                text_embeds, audio_embeds, lengths, cats, targs = batch
+                # text_embeds, audio_embeds, lengths, cats, targs = batch
+                (a_embeds, t_embeds, cats) = batch
                 #self.optimizer.zero_grad()
 
                 with torch.no_grad():
                     # Encode features
-                    reps_text = self.text_model(text_embeds)['sentence_embedding']
-                    reps_audio = self.audio_model((audio_embeds, lengths))
+                    # reps_text = self.text_model(text_embeds)['sentence_embedding']
+                    # reps_audio = self.audio_model((audio_embeds, lengths))
 
-                    # Normalise features
-                    reps_audio = reps_audio / reps_audio.norm(dim=1, keepdim=True)
-                    reps_text = reps_text / reps_text.norm(dim=1, keepdim=True)
+                    # # Normalise features
+                    # reps_audio = reps_audio / reps_audio.norm(dim=1, keepdim=True)
+                    # reps_text = reps_text / reps_text.norm(dim=1, keepdim=True)
 
 
                     if self.embed_norm1:
-                        reps_audio = reps_audio / (torch.sum(reps_audio, -1))
-                        reps_text = reps_text / (torch.sum(reps_text, -1))
+                        reps_audio = a_embeds / (torch.sum(a_embeds, -1))
+                        reps_text = t_embeds / (torch.sum(t_embeds, -1))
 
                     elif self.embed_norm2:
-                        reps_audio = torch.nn.functional.normalize(reps_audio) 
-                        reps_text = torch.nn.functional.normalize(reps_text) 
+                        reps_audio = torch.nn.functional.normalize(a_embeds) 
+                        reps_text = torch.nn.functional.normalize(t_embeds) 
 
                     if self.modality == 'text':
                         output = self.projectionhead(reps_text)
@@ -807,7 +808,7 @@ class LinearEvalator(nn.Module):
         self.p_per_epoch.append(p)
         self.r_per_epoch.append(r)
         self.f1_per_epoch.append(f1)
-        self.eval_mean_acc = np.mean(accs)
+        self.eval_mean_acc.append( np.mean(accs))
         self.preds = full_preds
         self.targets = full_targets
         print("Evaluaction accuracy: {} \t f1 {} ".format(self.eval_mean_acc, self.f1_per_epoch[-1]))
@@ -860,7 +861,7 @@ class LinearEvalator(nn.Module):
         # plt.show()
 
 #################### NEW STUFF
-class epLevelCreator(nn.Module):
+class embeddingCreator(nn.Module):
     """
         This loss expects as input a batch consisting of ... etc
     """
@@ -868,7 +869,7 @@ class epLevelCreator(nn.Module):
         """
         test
         """
-        super(epLevelCreator, self).__init__()
+        super(embeddingCreator, self).__init__()
         self.text_model = full_model.text_model
         self.audio_model = full_model.audio_model
 
@@ -881,23 +882,23 @@ class epLevelCreator(nn.Module):
 
         if split == 'train':
             self.data_split_loader = data_loader.train_loader
-        elif split == 'val':
+        elif split == 'test':
             self.data_split_loader = data_loader.test_loader
 
         self.output_path = CFG.log_name
 
-        self.save_intermediate = os.path.join(conf.data_path, os.path.split(CFG.log_name)[-1], "len_eval.h5")
+        # self.save_intermediate = os.path.join(conf.data_path, os.path.split(CFG.log_name)[-1], "len_eval.h5")
         # self.f = h5py.File(self.save_intermediate, "w")  
         self.means = defaultdict(dict)
         
-        self.cur_ep = None
-        self.mean_cats = []
-        self.mean_a_embeds = []
-        self.mean_t_embeds = []
+        # self.cur_ep = None
+        # self.mean_cats = []
+        # self.mean_a_embeds = []
+        # self.mean_t_embeds = []
         self.processed_eps = []
-
-        self.cur_a_embeds = []
-        self.cur_t_embeds = []
+        self.cats = []
+        self.a_embeds = []
+        self.t_embeds = []
 
     def create(self):
 
@@ -914,40 +915,48 @@ class epLevelCreator(nn.Module):
                 reps_audio = reps_audio / reps_audio.norm(dim=1, keepdim=True)
                 reps_text = reps_text / reps_text.norm(dim=1, keepdim=True)
 
-                num_targs = len(list(set(targets)))
-                if self.cur_ep == None:
-                    self.cur_ep = targets[0]
+                # num_targs = len(list(set(targets)))
 
-                if num_targs > 1 or self.cur_ep != targets[0]:
-                    # if num_targs > 1:
-                    #     print("OPT 0: Num targs > 1: ",num_targs )
-                    # else:
-                    #     print("OPT 1: entrie batch different")
-                    for idx, targ in enumerate(targets):
+                # print("[del4] OKay done. This is cats: ", cats)
 
-                        if self.cur_ep != targ:
-                            if targ in self.processed_eps:
-                                print("DEBUG: already exists? should not be possible")
-                                raise
-                            self.mean_cats.append(cats[idx].item())
+                self.cats.extend(cats.tolist())
+                self.a_embeds.extend(reps_audio)
+                self.t_embeds.extend(reps_text)
+                self.processed_eps.extend(targets)
+                # print("Targets: , ", targets)
+                # print(self.a_embeds)
+                # print("Lengths: ", len(self.a_embeds),  len(self.t_embeds), len(self.cats))
 
-                            self.mean_a_embeds.append(torch.mean(torch.stack(self.cur_a_embeds, dim=0), dim=0).detach().cpu())
-                            self.mean_t_embeds.append(torch.mean(torch.stack(self.cur_t_embeds, dim=0), dim=0).detach().cpu())
-                            self.processed_eps.append(targ)
-                            self.cur_ep = targ
+                if step > 1:
+                    break
 
-                            # Dit toegevoegd... dat moet toch..?
-                            self.cur_a_embeds = []
-                            self.cur_t_embeds = []
+class epDataset(datautil.Dataset):
+    def __init__(self, CFG, creator):
+        self.cats = creator.cats
+        self.a_embeds = creator.a_embeds
+        self.t_embeds = creator.t_embeds
 
-                        self.cur_a_embeds.append(reps_audio[idx])
-                        self.cur_t_embeds.append(reps_text[idx])
+        self.device = CFG.device
 
-                else:
-                    # print("OPT 2: append")
-                    self.cur_a_embeds.append(torch.mean(reps_audio, dim=0))
-                    self.cur_t_embeds.append(torch.mean(reps_text, dim=0))
+        self.read_ep2cat()
 
+    def read_ep2cat(self):
+        ep2cat_path = os.path.join(conf.dataset_path, 'ep2cat.json')
+        with open(ep2cat_path) as json_file: 
+            self.ep2cat = json.load(json_file)
+        ep2cat_map_path = os.path.join(conf.dataset_path, 'ep2cat_mapping.json')
+        with open(ep2cat_map_path) as json_file: 
+            self.ep2cat_map = json.load(json_file)
+        self.num_cats = len(self.ep2cat_map.keys())
+
+    def __len__(self):
+        return len(self.cats)
+
+    def __getitem__(self, idx):
+        a_embeds = self.a_embeds[idx]
+        t_embeds = self.t_embeds[idx]
+        targets =  self.cats[idx]
+        return (a_embeds, t_embeds, targets)
 
 def main(args):
     model_path = args.model_path
@@ -973,13 +982,33 @@ def main(args):
     full_model = full_model.to(fullcfg.device)     
     full_model.eval()
 
+     # Create representations on epiode level
+    print("[del] Creating for train set. ")
+    creator_train = embeddingCreator(full_model, fullcfg, data_loader, 'train')
+    creator_train.create()
+
+    print("[del] Creating for test set. ")
+    # creator_test = embeddingCreator(full_model, fullcfg, data_loader, 'test')
+    # creator_test.create()
+    del data_loader
+    print("skipped for now...")
+
+    ep_dataset_train = epDataset(fullcfg, creator_train)
+    ep_loader_train = DataLoader(ep_dataset_train, batch_size=256, shuffle=False, drop_last=True)
+
+    ep_dataset_test = epDataset(fullcfg, creator_train)
+    ep_loader_test = DataLoader(ep_dataset_test, batch_size=256, shuffle=False, drop_last=True)
+
+    classes = list(ep_dataset_train.ep2cat_map.keys())
+    
+
     # Perform evaluation
     for lr in [0.001, 0.0001, 0.00001]:
         print("-------- Results for lr: ", lr)
-        evaluator = LinearEvalator(full_model, fullcfg, data_loader, modality="text", lin_lr =lr)
+        evaluator = LinearEvalator(fullcfg, classes, ep_loader_train, ep_loader_test, modality="text", lin_lr =lr)
         evaluator.fit()
 
-        evaluator = LinearEvalator(full_model, fullcfg, data_loader, modality="audio", lin_lr =lr)
+        evaluator = LinearEvalator(fullcfg, classes, ep_loader_train, ep_loader_test, modality="audio", lin_lr =lr)
         evaluator.fit()
     # evaluator.evaluate()
     # evaluator.save_results(args.num_epochs)
@@ -997,7 +1026,7 @@ if __name__ == "__main__":
     
     # parser.add_argument('--save_intermediate', action='store_true', default=False,
     #                 help='Whether to save intermediate embeddings.')
-    parser.add_argument('--num_epochs', type=int, default=1,
+    parser.add_argument('--num_epochs', type=int, default=10,
                         help='Number of epochs to train')
     # parser.add_argument('--mlp', action='store_true', default=False,
     #                 help='Whether to use multiple layers.')
