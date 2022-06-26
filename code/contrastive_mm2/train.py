@@ -40,7 +40,6 @@ from transformers import get_constant_schedule, get_constant_schedule_with_warmu
 import psutil, gc
 
 # Load static configuration variables. 
-conf = OmegaConf.load("./config.yaml")
 print("[cudacheck] Is cuda available? ", torch.cuda.is_available())
 
 ################################################################################
@@ -124,9 +123,9 @@ class MMloader(object):
 
         # Get the datasets
         if train_dataset_name == "sp_sample":
-            self.train_dataset = self.get_sp_dataset(CFG, directory=conf.sp_sample_path, traintest="train", load_full=self.load_full, device=self.device)
+            self.train_dataset = self.get_sp_dataset(CFG, directory=CFG.sp_sample_path, traintest="train", load_full=self.load_full, device=self.device)
         elif train_dataset_name == "sp":
-            self.train_dataset = self.get_sp_dataset(CFG, directory=conf.sp_path,  traintest="train", load_full=self.load_full, device=self.device)
+            self.train_dataset = self.get_sp_dataset(CFG, directory=CFG.sp_path,  traintest="train", load_full=self.load_full, device=self.device)
         else:
             raise Exception('Unknown dataset')
         if CFG.weak_shuffle:
@@ -140,9 +139,9 @@ class MMloader(object):
         print("[MMloader] train dataset loaded, length: ", len(self.train_dataset))
 
         if val_dataset_name == "sp_sample":
-            self.val_dataset = self.get_sp_dataset(CFG, directory=conf.sp_sample_path,  traintest="val", load_full=self.load_full, device=self.device)
+            self.val_dataset = self.get_sp_dataset(CFG, directory=CFG.sp_sample_path,  traintest="val", load_full=self.load_full, device=self.device)
         elif val_dataset_name == "sp":
-            self.val_dataset  = self.get_sp_dataset(CFG, directory=conf.sp_path,  traintest="val",  load_full=self.load_full, device=self.device)
+            self.val_dataset  = self.get_sp_dataset(CFG, directory=CFG.sp_path,  traintest="val",  load_full=self.load_full, device=self.device)
         else:
             raise Exception('Unknown dataset')
         if CFG.weak_shuffle:
@@ -157,10 +156,10 @@ class MMloader(object):
         print("[MMloader] val dataset loaded, length: ", len(self.val_dataset))
 
         if test_dataset_name == "sp_sample":
-            test_dataset = self.get_sp_dataset(CFG, directory=conf.sp_sample_path,  traintest="test", load_full=self.load_full, device=self.device)
+            test_dataset = self.get_sp_dataset(CFG, directory=CFG.sp_sample_path,  traintest="test", load_full=self.load_full, device=self.device)
             self.test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, drop_last=True, **kwargs) 
         elif test_dataset_name == "sp":
-            test_dataset = self.get_sp_dataset(CFG, directory=conf.sp_path,  traintest="test",  load_full=self.load_full, device=self.device)
+            test_dataset = self.get_sp_dataset(CFG, directory=CFG.sp_path,  traintest="test",  load_full=self.load_full, device=self.device)
             self.test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, drop_last=True, **kwargs)
         else:
             raise Exception('Unknown dataset')
@@ -170,7 +169,7 @@ class MMloader(object):
         
         print("[MMloader] test dataset loaded, length: ", len(test_dataset))
 
-    def get_sp_dataset(self, CFG, directory=conf.sp_sample_path, traintest="train", load_full=False, device=None):
+    def get_sp_dataset(self, CFG, directory, traintest="train", load_full=False, device=None):
         if CFG.weak_shuffle and not traintest=="test":
             dataset = spDatasetWeakShuffle(CFG, directory=directory, traintest=traintest,  load_full=load_full, device=device)
         else:
@@ -182,7 +181,7 @@ class spDatasetNoMemory(datautil.Dataset):
     """
     Spotify Podcast dataset dataloader. 
     """
-    def __init__(self, CFG, directory=conf.sp_sample_path, traintest="train", load_full=False, device=None):
+    def __init__(self, CFG, directory, traintest="train", load_full=False, device=None):
         print("[spDataset] init from directory ", directory, traintest)
         directory = os.path.join(directory, traintest)
         h5py_files = list(Path(directory).glob('*.h5'))
@@ -341,7 +340,7 @@ class spDatasetWeakShuffle(datautil.Dataset):
     Spotify Podcast dataset dataloader. 
     Weak shuffling to enable shuffle while clustering sentences of similar length.
     """
-    def __init__(self, CFG, directory=conf.sp_sample_path, traintest="train", load_full=False, device=None):
+    def __init__(self, CFG, directory, traintest="train", load_full=False, device=None):
         print("[spDataset] init from directory [WEAKSHUFFLE] ", directory, traintest)
         directory = os.path.join(directory, traintest)
         h5py_files = list(Path(directory).glob('*.h5'))
@@ -1462,7 +1461,10 @@ def best_results(eval_csv_filename, dur, out_dir):
 
 
 if __name__ == "__main__":
-    # Parse flags in command line arguments
+    # Load static configurations.
+    conf = OmegaConf.load("./config.yaml")
+
+    # Parse flags in command line arguments.
     parser = ArgumentParser()
 
     parser.add_argument('--train_dataset', default='sp_sample', const='sp_sample',

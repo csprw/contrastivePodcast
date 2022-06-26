@@ -332,11 +332,11 @@ class spDatasetWeakShuffleLinSep(datautil.Dataset):
                     self.file_startstop.append((start_idx, sample_idx))
                     print("[del] Max exceeded {}".format(sample_idx))
                     break
-                elif sample_idx >= 500 and traintest == 'test':
-                    f.close()
-                    self.file_startstop.append((start_idx, sample_idx))
-                    print("[del] Max exceeded {}".format(sample_idx))
-                    break
+                # elif sample_idx >= 500 and traintest == 'test':
+                #     f.close()
+                #     self.file_startstop.append((start_idx, sample_idx))
+                #     print("[del] Max exceeded {}".format(sample_idx))
+                #     break
                 elif traintest == "val":
                     print("Break for val set")
                     break
@@ -927,8 +927,8 @@ class embeddingCreator(nn.Module):
                 # print(self.a_embeds)
                 # print("Lengths: ", len(self.a_embeds),  len(self.t_embeds), len(self.cats))
 
-                if step > 1:
-                    break
+                # if step > 1:
+                #     break
 
 class epDataset(datautil.Dataset):
     def __init__(self, CFG, creator):
@@ -988,15 +988,15 @@ def main(args):
     creator_train.create()
 
     print("[del] Creating for test set. ")
-    # creator_test = embeddingCreator(full_model, fullcfg, data_loader, 'test')
-    # creator_test.create()
+    creator_test = embeddingCreator(full_model, fullcfg, data_loader, 'test')
+    creator_test.create()
     del data_loader
     print("skipped for now...")
 
     ep_dataset_train = epDataset(fullcfg, creator_train)
     ep_loader_train = DataLoader(ep_dataset_train, batch_size=256, shuffle=True, drop_last=True)
 
-    ep_dataset_test = epDataset(fullcfg, creator_train)
+    ep_dataset_test = epDataset(fullcfg, creator_test)
     ep_loader_test = DataLoader(ep_dataset_test, batch_size=256, shuffle=True, drop_last=True)
 
     classes = list(ep_dataset_train.ep2cat_map.keys())
