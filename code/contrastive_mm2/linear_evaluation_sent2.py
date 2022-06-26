@@ -327,12 +327,12 @@ class spDatasetWeakShuffleLinSep(datautil.Dataset):
                 # elif sample_idx > 5000000:
                 # elif sample_idx > 10000000:     # Raised cpu memory problem
                 # elif sample_idx > 8000000:    
-                elif sample_idx > 8000000 and traintest == 'train':
+                elif sample_idx >= 10000000 and traintest == 'train':
                     f.close()
                     self.file_startstop.append((start_idx, sample_idx))
                     print("[del] Max exceeded {}".format(sample_idx))
                     break
-                elif sample_idx > 1000 and traintest == 'test':
+                elif sample_idx >= 500 and traintest == 'test':
                     f.close()
                     self.file_startstop.append((start_idx, sample_idx))
                     print("[del] Max exceeded {}".format(sample_idx))
@@ -739,10 +739,10 @@ class LinearEvalator(nn.Module):
             self.acc_per_epoch.append(np.mean(accs))
 
             # TODO: for now save intermediate, in the end only final round.
+            self.evaluate()
             if epoch % 10 == 0:
-                self.evaluate()
                 self.save_results(epoch)
-
+        self.save_results(epoch)
         print("Train done, accs per epoch: ", self.acc_per_epoch)
         
     def evaluate(self):
@@ -832,7 +832,7 @@ class LinearEvalator(nn.Module):
         
     def save_results(self, epoch=0):
         # Save results to csv
-        lin_eval_res = {'eval_acc': self.eval_mean_acc,
+        lin_eval_res = {'eval_acc': list(self.eval_mean_acc),
                        'acc_per_epoch': list(self.acc_per_epoch)}
         out = os.path.join(self.output_path, 
             'sent_{}_linear_evaluation_results.csv'.format(self.modality))
