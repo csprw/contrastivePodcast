@@ -327,7 +327,7 @@ class spDatasetWeakShuffleLinSep(datautil.Dataset):
                 # elif sample_idx > 5000000:
                 # elif sample_idx > 10000000:     # Raised cpu memory problem
                 # elif sample_idx > 8000000:    
-                elif sample_idx > 1000 and traintest == 'train':
+                elif sample_idx > 8000000 and traintest == 'train':
                     f.close()
                     self.file_startstop.append((start_idx, sample_idx))
                     print("[del] Max exceeded {}".format(sample_idx))
@@ -787,8 +787,8 @@ class LinearEvalator(nn.Module):
                 full_preds.extend(metrics['preds'])
                 full_targets.extend(metrics['targets'])
 
-                # if step > 5000:
-                #     break
+                if step > 5000:
+                    break
 
                 # y_pred = torch.argmax(output, axis=1)
                 # metrics = self.get_metrics(output.detach().cpu(), cats.detach().cpu())
@@ -941,10 +941,10 @@ class epDataset(datautil.Dataset):
         self.read_ep2cat()
 
     def read_ep2cat(self):
-        ep2cat_path = os.path.join(conf.dataset_path, 'ep2cat.json')
+        ep2cat_path = os.path.join(conf.dataset_path, 'ep2cat_5cats.json')
         with open(ep2cat_path) as json_file: 
             self.ep2cat = json.load(json_file)
-        ep2cat_map_path = os.path.join(conf.dataset_path, 'ep2cat_mapping.json')
+        ep2cat_map_path = os.path.join(conf.dataset_path, 'ep2cat_mapping_5cats.json')
         with open(ep2cat_map_path) as json_file: 
             self.ep2cat_map = json.load(json_file)
         self.num_cats = len(self.ep2cat_map.keys())
@@ -994,10 +994,10 @@ def main(args):
     print("skipped for now...")
 
     ep_dataset_train = epDataset(fullcfg, creator_train)
-    ep_loader_train = DataLoader(ep_dataset_train, batch_size=256, shuffle=False, drop_last=True)
+    ep_loader_train = DataLoader(ep_dataset_train, batch_size=256, shuffle=True, drop_last=True)
 
     ep_dataset_test = epDataset(fullcfg, creator_train)
-    ep_loader_test = DataLoader(ep_dataset_test, batch_size=256, shuffle=False, drop_last=True)
+    ep_loader_test = DataLoader(ep_dataset_test, batch_size=256, shuffle=True, drop_last=True)
 
     classes = list(ep_dataset_train.ep2cat_map.keys())
     
