@@ -739,9 +739,9 @@ class LinearEvalator(nn.Module):
             self.acc_per_epoch.append(np.mean(accs))
 
             # TODO: for now save intermediate, in the end only final round.
-            # if epoch % 10 == 0:
-            self.evaluate()
-            self.save_results(epoch)
+            if epoch % 10 == 0:
+                self.evaluate()
+                self.save_results(epoch)
 
         print("Train done, accs per epoch: ", self.acc_per_epoch)
         
@@ -846,8 +846,8 @@ class LinearEvalator(nn.Module):
 
     def make_cm(self, y_pred, y_true, classes, epoch=0):
         # Build confusion matrix
-        print("[del4] this is make_cm: ", y_pred)
-        print("And classes: ", classes)
+        # print("[del4] this is make_cm: ", y_pred)
+        # print("And classes: ", classes)
         cf_matrix = confusion_matrix(y_true, y_pred, labels=np.arange(len(classes)))
         df_cm = pd.DataFrame(cf_matrix, index = [i for i in classes],
             columns = [i for i in classes])
