@@ -327,16 +327,16 @@ class spDatasetWeakShuffleLinSep(datautil.Dataset):
                 # elif sample_idx > 5000000:
                 # elif sample_idx > 10000000:     # Raised cpu memory problem
                 # elif sample_idx > 8000000:    
-                elif sample_idx >= 10000000 and traintest == 'train':
+                elif sample_idx >= 500 and traintest == 'train':
                     f.close()
                     self.file_startstop.append((start_idx, sample_idx))
                     print("[del] Max exceeded {}".format(sample_idx))
                     break
-                # elif sample_idx >= 500 and traintest == 'test':
-                #     f.close()
-                #     self.file_startstop.append((start_idx, sample_idx))
-                #     print("[del] Max exceeded {}".format(sample_idx))
-                #     break
+                elif sample_idx >= 500 and traintest == 'test':
+                    f.close()
+                    self.file_startstop.append((start_idx, sample_idx))
+                    print("[del] Max exceeded {}".format(sample_idx))
+                    break
                 elif traintest == "val":
                     print("Break for val set")
                     break
@@ -660,7 +660,7 @@ class LinearEvalator(nn.Module):
         )
 
         self.acc_per_epoch = []
-        self.eval_mean_acc = []
+        self.eval_per_epoch = []
         self.p_per_epoch = []
         self.r_per_epoch = []
         self.f1_per_epoch = []
@@ -808,10 +808,10 @@ class LinearEvalator(nn.Module):
         self.p_per_epoch.append(p)
         self.r_per_epoch.append(r)
         self.f1_per_epoch.append(f1)
-        self.eval_mean_acc.append( np.mean(accs))
+        self.eval_per_epoch.append( np.mean(accs))
         self.preds = full_preds
         self.targets = full_targets
-        print("Evaluaction accuracy: {} \t f1 {} ".format(self.eval_mean_acc, self.f1_per_epoch[-1]))
+        print("Evaluaction accuracy: {} \t f1 {} ".format(np.mean(accs), self.f1_per_epoch[-1]))
 
         del full_preds
         del full_targets
@@ -832,8 +832,12 @@ class LinearEvalator(nn.Module):
         
     def save_results(self, epoch=0):
         # Save results to csv
-        lin_eval_res = {'eval_acc': list(self.eval_mean_acc),
-                       'acc_per_epoch': list(self.acc_per_epoch)}
+        lin_eval_res = {'eval_acc_per_epoch': list(self.eval_per_epoch),
+                       'acc_per_epoch': list(self.acc_per_epoch),
+                       'f1_per_epoch': list(self.f1_per_epoch),
+                       'p_per_epoch': list(self.p_per_epoch),
+                       'r_per_epoch': list(self.r_per_epoch),
+                       }
         out = os.path.join(self.output_path, 
             'sent_{}_linear_evaluation_results.csv'.format(self.modality))
         df = pd.DataFrame(lin_eval_res)
@@ -988,15 +992,15 @@ def main(args):
     creator_train.create()
 
     print("[del] Creating for test set. ")
-    creator_test = embeddingCreator(full_model, fullcfg, data_loader, 'test')
-    creator_test.create()
+    # creator_test = embeddingCreator(full_model, fullcfg, data_loader, 'test')
+    # creator_test.create()
     del data_loader
     print("skipped for now...")
 
     ep_dataset_train = epDataset(fullcfg, creator_train)
     ep_loader_train = DataLoader(ep_dataset_train, batch_size=256, shuffle=True, drop_last=True)
 
-    ep_dataset_test = epDataset(fullcfg, creator_test)
+    ep_dataset_test = epDataset(fullcfg, creator_train)
     ep_loader_test = DataLoader(ep_dataset_test, batch_size=256, shuffle=True, drop_last=True)
 
     classes = list(ep_dataset_train.ep2cat_map.keys())
