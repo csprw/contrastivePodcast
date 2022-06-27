@@ -63,8 +63,9 @@ def get_log_name(args, dc):
     """
     Returns name of the current run.
     """
-    log_name = "continue-{}_{}_{}_{}_{}".format(args.text_proj_head, 
-            args.audio_proj_head, args.final_projection_dim, dc.pad_pack,
+    log_name = "{}m-{}_{}_{}_{}".format(args.max_train_samples, 
+            args.text_proj_head, args.audio_proj_head, 
+            args.final_projection_dim,
             datetime.now().strftime("%Y-%m-%d_%H-%M-%S"))
     log_name = os.path.join(args.log_dir, log_name)
     return log_name
@@ -104,7 +105,7 @@ class MMloader(object):
     """
     Module that load datasets. 
     """
-    def __init__(self, CFG, kwargs={}):
+    def __init__(self, CFG):
 
         train_dataset_name = CFG.train_dataset
         val_dataset_name = CFG.val_dataset
@@ -134,7 +135,7 @@ class MMloader(object):
                 sampler=BatchSampler(RandomBatchSampler(self.train_dataset, batch_size), batch_size=batch_size, drop_last=True)
             )
         else:
-            self.train_loader = DataLoader(self.train_dataset, batch_size=batch_size, shuffle=True, drop_last=True, **kwargs)
+            self.train_loader = DataLoader(self.train_dataset, batch_size=batch_size, shuffle=True, drop_last=True)
             self.train_loader.collate_fn = self.train_dataset.collate_fn
         print("[MMloader] train dataset loaded, length: ", len(self.train_dataset))
 
@@ -150,17 +151,17 @@ class MMloader(object):
                 sampler=BatchSampler(RandomBatchSampler(self.val_dataset , batch_size), batch_size=batch_size, drop_last=True)
             )
         else:
-            self.val_loader = DataLoader(self.val_dataset, batch_size=batch_size, shuffle=True, drop_last=True, **kwargs)
+            self.val_loader = DataLoader(self.val_dataset, batch_size=batch_size, shuffle=True, drop_last=True)
             self.val_dataset = self.val_dataset
             self.val_loader.collate_fn = self.val_dataset.collate_fn
         print("[MMloader] val dataset loaded, length: ", len(self.val_dataset))
 
         if test_dataset_name == "sp_sample":
             test_dataset = self.get_sp_dataset(CFG, directory=CFG.sp_sample_path,  traintest="test", load_full=self.load_full, device=self.device)
-            self.test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, drop_last=True, **kwargs) 
+            self.test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, drop_last=True) 
         elif test_dataset_name == "sp":
             test_dataset = self.get_sp_dataset(CFG, directory=CFG.sp_path,  traintest="test",  load_full=self.load_full, device=self.device)
-            self.test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, drop_last=True, **kwargs)
+            self.test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, drop_last=True)
         else:
             raise Exception('Unknown dataset')
         self.test_dataset = test_dataset
@@ -1316,7 +1317,6 @@ class Cfg:
     num_epochs: int = 1
     loss_type: str = 'simcse_loss'
     lr: float = 5e-5
-    # device: torch.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     device: str = "cuda" if torch.cuda.is_available() else "cpu"
 
     # For the audio module
@@ -1366,12 +1366,13 @@ class Cfg:
     weak_shuffle: bool = False
 
 
-def main(args):
+def main(args, conf):
     # Setup configuration.
     t_start = time()
     set_logconfig()
     device = "cuda" if torch.cuda.is_available() else "cpu"
     FullCfg = setup_config(args, Cfg, device)
+    FullCfg.sp_path = conf.sp_path
 
     # Setup dataloaders.
     data_loader = MMloader(FullCfg)
@@ -1542,4 +1543,4 @@ if __name__ == "__main__":
                         help="test: use old or new opt.")
     args, unparsed = parser.parse_known_args()
 
-    main(args)
+    main(args, conf)
