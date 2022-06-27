@@ -92,7 +92,8 @@ def get_sent_indexes(sentences):
         indexes.append((lb, ub-1))
         lb += extra_indexes
     return indexes
-#Note: speaker tags are in the final "results"
+
+
 def extract_transcript(transcript_json, yamnet_embedding):
     '''
     Extracts sentences and corresponding timestamps from a transcript.
@@ -181,6 +182,7 @@ def get_dirnames(transcripts_dir):
     return sorted(outer_dirnames), sorted(inner_dirnames)
 
 def get_embed_transcript_paths(transcripts_paths):
+    # NOTE: moved this to utils already
     outer_folders = []
     e_filenames = []
     t_filenames = []

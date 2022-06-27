@@ -623,7 +623,7 @@ class LinearEvalator(nn.Module):
 
         # to config file
         self.lin_max_epochs = args.num_epochs
-        self.lin_batch_size = 256
+        self.lin_batch_size = 128
         self.lin_lr = lin_lr
         lin_weight_decay = 1.0e-6
 
@@ -995,10 +995,10 @@ def main(args):
     print("skipped for now...")
 
     ep_dataset_train = epDataset(fullcfg, creator_train)
-    ep_loader_train = DataLoader(ep_dataset_train, batch_size=256, shuffle=True, drop_last=True)
+    ep_loader_train = DataLoader(ep_dataset_train, batch_size=128, shuffle=True, drop_last=True)
 
     ep_dataset_test = epDataset(fullcfg, creator_train)
-    ep_loader_test = DataLoader(ep_dataset_test, batch_size=256, shuffle=True, drop_last=True)
+    ep_loader_test = DataLoader(ep_dataset_test, batch_size=128, shuffle=True, drop_last=True)
 
     classes = list(ep_dataset_train.ep2cat_map.keys())
     
