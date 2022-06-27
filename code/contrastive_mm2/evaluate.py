@@ -54,30 +54,18 @@ def rec_at_k(scores, k):
         return 1
     else:
         return 0
-        
 
-# def text_to_embed(tokenizer, text, full_model):
-#     tokenized_text = tokenizer(
-#         text, padding=True, truncation=True, max_length=32, return_tensors='pt', return_token_type_ids=True,
-#     )
-    
-#     with torch.no_grad():
-#         reps_sentences = full_model.text_model(tokenized_text)['sentence_embedding']
-#         embed = reps_sentences / reps_sentences.norm(dim=1, keepdim=True)
+def randomize_model(model):
+    for module_ in model.named_modules(): 
+        if isinstance(module_[1],(torch.nn.Linear, torch.nn.Embedding)):
+            module_[1].weight.data.normal_(mean=0.0, std=1.0)
+        elif isinstance(module_[1], torch.nn.LayerNorm):
+            module_[1].bias.data.zero_()
+            module_[1].weight.data.fill_(1.0)
+        if isinstance(module_[1], torch.nn.Linear) and module_[1].bias is not None:
+            module_[1].bias.data.zero_()
+    return model
 
-#     return embed
-
-
-# def audio_to_embed(CFG, yamnets, query_lengths, full_model):
-#     if CFG.audio_proj_head == 'gru':
-#         padded_yamnets = pad_sequence(yamnets, batch_first=True)
-
-#         with torch.no_grad():
-#             reps_audio = full_model.audio_model((padded_yamnets, query_lengths))
-#             embed = reps_audio / reps_audio.norm(dim=1, keepdim=True)
-#     else:
-#         raise NotImplementedError
-#     return embed
 
 
 class Evaluator(object):
@@ -403,7 +391,10 @@ def main(args):
 
     # Load the model
     full_model = mmModule(CFG)
-    full_model.load_state_dict(torch.load(model_weights_path,  map_location=CFG.device))              
+    print("[del5] uncomment this! now random results")
+    full_model = randomize_model(full_model) # REMOVE THIS!!
+    #full_model.load_state_dict(torch.load(model_weights_path,  map_location=CFG.device))   
+              
     full_model = full_model.to(CFG.device)     
     full_model.eval()
 
