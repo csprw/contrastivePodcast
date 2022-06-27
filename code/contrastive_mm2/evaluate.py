@@ -395,6 +395,7 @@ def main(args):
     print("using config: , ", model_config)
     CFG = from_dict(data_class=Cfg, data=model_config)
     CFG.device = "cuda" if torch.cuda.is_available() else "cpu"
+    CFG.sp_path = conf.sp_path
     print("[Load model] config loaded: ", CFG)
 
     # Create dataloader of test set
