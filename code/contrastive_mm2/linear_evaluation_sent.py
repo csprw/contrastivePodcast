@@ -90,174 +90,174 @@ class MMloader(object):
             dataset = spDatasetNoMemory(CFG, directory=directory, traintest=traintest,  load_full=load_full, lin_sep=lin_sep, device=self.device)
         return dataset
 
-class spDatasetNoMemory(datautil.Dataset):
-    """
-    Spotify Podcast dataset dataloader. 
-    """
-    def __init__(self, CFG, directory=conf.sp_sample_path, traintest="train", load_full=False, lin_sep=False, device=None):
+# class spDatasetNoMemory(datautil.Dataset):
+#     """
+#     Spotify Podcast dataset dataloader. 
+#     """
+#     def __init__(self, CFG, directory=conf.sp_sample_path, traintest="train", load_full=False, lin_sep=False, device=None):
         
-        directory = os.path.join(directory, traintest)
-        h5py_files = list(Path(directory).glob('*.h5'))
-        print("[spDataset] init from directory ", directory)
-        print("[spDataset] found {} h5py files".format(len(h5py_files)))
+#         directory = os.path.join(directory, traintest)
+#         h5py_files = list(Path(directory).glob('*.h5'))
+#         print("[spDataset] init from directory ", directory)
+#         print("[spDataset] found {} h5py files".format(len(h5py_files)))
 
-        self.device = device
-        self.lin_sep = lin_sep
-        self.load_full = load_full
-        self.traintest = traintest
-        self.h5py_idx2file = h5py_files
+#         self.device = device
+#         self.lin_sep = lin_sep
+#         self.load_full = load_full
+#         self.traintest = traintest
+#         self.h5py_idx2file = h5py_files
 
-        self.tokenizer = AutoTokenizer.from_pretrained(CFG.text_model_name)
-        self.text_max_length = CFG.text_max_length
+#         self.tokenizer = AutoTokenizer.from_pretrained(CFG.text_model_name)
+#         self.text_max_length = CFG.text_max_length
         
-        sample_idx = 0
-        idx2file = {}
-        self.read_ep2cat()
+#         sample_idx = 0
+#         idx2file = {}
+#         self.read_ep2cat()
         
-        for h5idx, h5py_file in enumerate(h5py_files):    
-            f = h5py.File(h5py_file, 'r')
-            for sent_idx in range(len(f['sentences'])):
+#         for h5idx, h5py_file in enumerate(h5py_files):    
+#             f = h5py.File(h5py_file, 'r')
+#             for sent_idx in range(len(f['sentences'])):
                 
-                # Only load data for wich we have a category label
-                if lin_sep:
-                    episode = f['seg_ts'][sent_idx].decode("utf-8").split('_')[0]
-                    if episode not in self.ep2cat.keys():
-                        continue
+#                 # Only load data for wich we have a category label
+#                 if lin_sep:
+#                     episode = f['seg_ts'][sent_idx].decode("utf-8").split('_')[0]
+#                     if episode not in self.ep2cat.keys():
+#                         continue
                         
-                idx2file[sample_idx] = (h5idx, sent_idx)
-                sample_idx += 1
+#                 idx2file[sample_idx] = (h5idx, sent_idx)
+#                 sample_idx += 1
             
-                # if sample_idx > 500:
-                #     print(" [del4] del del del!!")
-                #     break
+#                 # if sample_idx > 500:
+#                 #     print(" [del4] del del del!!")
+#                 #     break
 
-                if traintest == 'train' and CFG.max_train_samples > 0 and sample_idx >= CFG.max_train_samples:
-                    print("[spdataset] Max exceeded: ", sample_idx)
-                    f.close()
-                    break
-            else:
-                f.close()
-                continue
-            break
+#                 if traintest == 'train' and CFG.max_train_samples > 0 and sample_idx >= CFG.max_train_samples:
+#                     print("[spdataset] Max exceeded: ", sample_idx)
+#                     f.close()
+#                     break
+#             else:
+#                 f.close()
+#                 continue
+#             break
 
-        self.idx2file = idx2file
-        if self.load_full:
-            self.collate_fn = self.full_batching_collate
-        else:
-            self.collate_fn = self.mean_batching_collate
+#         self.idx2file = idx2file
+#         if self.load_full:
+#             self.collate_fn = self.full_batching_collate
+#         else:
+#             self.collate_fn = self.mean_batching_collate
 
-    def read_ep2cat(self):
-        ep2cat_path = os.path.join(conf.dataset_path, 'ep2cat_5cats.json')
-        with open(ep2cat_path) as json_file: 
-            self.ep2cat = json.load(json_file)
-        ep2cat_map_path = os.path.join(conf.dataset_path, 'ep2cat_mapping_5cats.json')
-        with open(ep2cat_map_path) as json_file: 
-            self.ep2cat_map = json.load(json_file)
-        self.num_cats = len(self.ep2cat_map.keys())
-        print("Number of cats: ", self.num_cats)
+#     def read_ep2cat(self):
+#         ep2cat_path = os.path.join(conf.dataset_path, 'ep2cat_5cats.json')
+#         with open(ep2cat_path) as json_file: 
+#             self.ep2cat = json.load(json_file)
+#         ep2cat_map_path = os.path.join(conf.dataset_path, 'ep2cat_mapping_5cats.json')
+#         with open(ep2cat_map_path) as json_file: 
+#             self.ep2cat_map = json.load(json_file)
+#         self.num_cats = len(self.ep2cat_map.keys())
+#         print("Number of cats: ", self.num_cats)
 
-    def __len__(self):
-        """ Denotes the total number of utterances """
-        return len(self.idx2file.keys())
+#     def __len__(self):
+#         """ Denotes the total number of utterances """
+#         return len(self.idx2file.keys())
 
-    def __getitem__(self, index):
-        """ Return one item from the df """
-        if self.traintest == 'test':
-            h5py_idx, sent_idx = self.idx2file[index]
-            h5py_file = self.h5py_idx2file[h5py_idx]
+#     def __getitem__(self, index):
+#         """ Return one item from the df """
+#         if self.traintest == 'test':
+#             h5py_idx, sent_idx = self.idx2file[index]
+#             h5py_file = self.h5py_idx2file[h5py_idx]
 
-            f = h5py.File(h5py_file, 'r')
-            sent = f['sentences'][sent_idx].decode("utf-8") 
+#             f = h5py.File(h5py_file, 'r')
+#             sent = f['sentences'][sent_idx].decode("utf-8") 
 
-            if self.load_full:
-                audio_embeds = torch.Tensor(np.array(f[str(sent_idx)]))
-            else:
-                audio_embeds = torch.Tensor(f['mean_embeddings'][sent_idx])
-            target = f['seg_ts'][sent_idx].decode("utf-8") 
+#             if self.load_full:
+#                 audio_embeds = torch.Tensor(np.array(f[str(sent_idx)]))
+#             else:
+#                 audio_embeds = torch.Tensor(f['mean_embeddings'][sent_idx])
+#             target = f['seg_ts'][sent_idx].decode("utf-8") 
 
-            if self.lin_sep:
-                episode = target.split('_')[0]
-                cat = self.ep2cat[episode]
-            sample = (sent, audio_embeds, target, cat)
+#             if self.lin_sep:
+#                 episode = target.split('_')[0]
+#                 cat = self.ep2cat[episode]
+#             sample = (sent, audio_embeds, target, cat)
 
-        else:
-            h5py_idx, sent_idx = self.idx2file[index]
-            h5py_file = self.h5py_idx2file[h5py_idx]
+#         else:
+#             h5py_idx, sent_idx = self.idx2file[index]
+#             h5py_file = self.h5py_idx2file[h5py_idx]
 
-            f = h5py.File(h5py_file, 'r')
-            sent = f['sentences'][sent_idx].decode("utf-8")
+#             f = h5py.File(h5py_file, 'r')
+#             sent = f['sentences'][sent_idx].decode("utf-8")
 
-            if self.load_full:
-                audio_embeds = torch.Tensor(np.array(f[str(sent_idx)]))
-            else:
-                audio_embeds = torch.Tensor(f['mean_embeddings'][sent_idx])
-            sample = (sent, audio_embeds)
+#             if self.load_full:
+#                 audio_embeds = torch.Tensor(np.array(f[str(sent_idx)]))
+#             else:
+#                 audio_embeds = torch.Tensor(f['mean_embeddings'][sent_idx])
+#             sample = (sent, audio_embeds)
         
-        f.close()
-        return sample
+#         f.close()
+#         return sample
 
-    def full_batching_collate(self, batch):
-        """ Return a batch containing samples of the SP dataset"""
-        text_embeds = []
-        audio_embeds = []
-        full_text = []
-        lengths  = []
-        cats = []
+#     def full_batching_collate(self, batch):
+#         """ Return a batch containing samples of the SP dataset"""
+#         text_embeds = []
+#         audio_embeds = []
+#         full_text = []
+#         lengths  = []
+#         cats = []
         
-        for example in batch:
-            full_text.append(example[0])
-            text_embeds.append(example[0])
-            audio_embeds.append(example[1])
-            lengths.append(len(example[1]))
-            cats.append(example[3])
+#         for example in batch:
+#             full_text.append(example[0])
+#             text_embeds.append(example[0])
+#             audio_embeds.append(example[1])
+#             lengths.append(len(example[1]))
+#             cats.append(example[3])
         
-        # Pad the audio embeddings
-        padded_audio_embeds = pad_sequence(audio_embeds, batch_first=True).to(self.device)
+#         # Pad the audio embeddings
+#         padded_audio_embeds = pad_sequence(audio_embeds, batch_first=True).to(self.device)
         
-        # Tokenize text
-        text_embeds = self.tokenizer(
-            text_embeds, padding=True, truncation=True, max_length=self.text_max_length, return_tensors='pt'
-        ).to(self.device)
+#         # Tokenize text
+#         text_embeds = self.tokenizer(
+#             text_embeds, padding=True, truncation=True, max_length=self.text_max_length, return_tensors='pt'
+#         ).to(self.device)
 
-        if self.traintest == 'test':
-            targs = [example[2] for example in batch]
-            cats = torch.tensor(cats).to(self.device)
-            return text_embeds, padded_audio_embeds, lengths, targs, full_text, cats
-        else:
-            return text_embeds, padded_audio_embeds, lengths
+#         if self.traintest == 'test':
+#             targs = [example[2] for example in batch]
+#             cats = torch.tensor(cats).to(self.device)
+#             return text_embeds, padded_audio_embeds, lengths, targs, full_text, cats
+#         else:
+#             return text_embeds, padded_audio_embeds, lengths
 
-    def mean_batching_collate(self, batch):
-        """ 
-        Returns a batch containing samples of the SP dataset. Audio embeddings
-        are averaged to fit into a non-sequential module. 
-        """
-        text_embeds = []
-        audio_embeds = []
-        lengths  = []
-        full_text = []
-        cats =[]
+#     def mean_batching_collate(self, batch):
+#         """ 
+#         Returns a batch containing samples of the SP dataset. Audio embeddings
+#         are averaged to fit into a non-sequential module. 
+#         """
+#         text_embeds = []
+#         audio_embeds = []
+#         lengths  = []
+#         full_text = []
+#         cats =[]
         
-        for example in batch:
-            full_text.append(example[0])
-            text_embeds.append(example[0])
-            audio_embeds.append(example[1])
-            cats.append(example[3])
+#         for example in batch:
+#             full_text.append(example[0])
+#             text_embeds.append(example[0])
+#             audio_embeds.append(example[1])
+#             cats.append(example[3])
 
-        audio_embeds = torch.stack(audio_embeds).to(self.device)
+#         audio_embeds = torch.stack(audio_embeds).to(self.device)
 
-        # Tokenize text
-        max_length = 32 # TODO: is dit nodig?
-        text_embeds = self.tokenizer(
-            text_embeds, padding=True, truncation=True, max_length=max_length, return_tensors='pt'
-        ).to(self.device)
+#         # Tokenize text
+#         max_length = 32 # TODO: is dit nodig?
+#         text_embeds = self.tokenizer(
+#             text_embeds, padding=True, truncation=True, max_length=max_length, return_tensors='pt'
+#         ).to(self.device)
         
-        # return text_embeds, audio_embeds, lengths
-        if self.traintest == 'test':
-            targs = [example[2] for example in batch]
-            cats = torch.tensor(cats).to(self.device)
-            return text_embeds, audio_embeds, lengths, targs, full_text, cats
-        else:
-            return text_embeds, audio_embeds, lengths
+#         # return text_embeds, audio_embeds, lengths
+#         if self.traintest == 'test':
+#             targs = [example[2] for example in batch]
+#             cats = torch.tensor(cats).to(self.device)
+#             return text_embeds, audio_embeds, lengths, targs, full_text, cats
+#         else:
+#             return text_embeds, audio_embeds, lengths
 
 class spDatasetWeakShuffleLinSep(datautil.Dataset):
     """
@@ -327,16 +327,16 @@ class spDatasetWeakShuffleLinSep(datautil.Dataset):
                 # elif sample_idx > 5000000:
                 # elif sample_idx > 10000000:     # Raised cpu memory problem
                 # elif sample_idx > 8000000:    
-                elif sample_idx > 10000000 and traintest == 'train':
+                elif sample_idx > 500 and traintest == 'train':
                     f.close()
                     self.file_startstop.append((start_idx, sample_idx))
                     print("[del] Max exceeded {}".format(sample_idx))
                     break
-                # elif sample_idx > 50 and traintest == 'test':
-                #     f.close()
-                #     self.file_startstop.append((start_idx, sample_idx))
-                #     print("[del] Max exceeded {}".format(sample_idx))
-                #     break
+                elif sample_idx > 500 and traintest == 'test':
+                    f.close()
+                    self.file_startstop.append((start_idx, sample_idx))
+                    print("[del] Max exceeded {}".format(sample_idx))
+                    break
                 elif traintest == "val":
                     print("Break for val set")
                     break
@@ -732,8 +732,6 @@ class LinearEvalator(nn.Module):
                     print("output:" , epoch, step, loss.item(), (y_pred[:10].detach().cpu()), (cats[:10].detach().cpu()))
                     print(Counter(cats.detach().cpu().tolist()), Counter(y_pred.detach().cpu().tolist()))
                     # print("Loss: {} \t acc: {}".format(loss, metrics['acc']))
-
-
 
             print("-- Train epoch Mean acc: ", np.mean(accs))
             self.acc_per_epoch.append(np.mean(accs))

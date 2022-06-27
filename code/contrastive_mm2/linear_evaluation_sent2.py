@@ -277,9 +277,6 @@ class spDatasetWeakShuffleLinSep(datautil.Dataset):
 
         self.return_targets = True
         
-        ### DELETE [del4]
-        # CFG.max_train_samples = 128 * 100
-        
         idx2file = {}
         sample_idx = 0
         self.h5py_idx2file = h5py_files
@@ -332,7 +329,7 @@ class spDatasetWeakShuffleLinSep(datautil.Dataset):
                     self.file_startstop.append((start_idx, sample_idx))
                     print("[del] Max exceeded {}".format(sample_idx))
                     break
-                elif sample_idx >= 500 and traintest == 'test':
+                elif sample_idx >= 1500 and traintest == 'test':
                     f.close()
                     self.file_startstop.append((start_idx, sample_idx))
                     print("[del] Max exceeded {}".format(sample_idx))
