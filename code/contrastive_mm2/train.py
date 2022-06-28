@@ -63,7 +63,7 @@ def get_log_name(args, dc):
     """
     Returns name of the current run.
     """
-    log_name = "{}m-{}_{}_{}_{}".format(args.max_train_samples, 
+    log_name = "{}m-{}_{}_{}_{}".format(int(args.max_train_samples / 1000000), 
             args.text_proj_head, args.audio_proj_head, 
             args.final_projection_dim,
             datetime.now().strftime("%Y-%m-%d_%H-%M-%S"))
@@ -115,7 +115,7 @@ class MMloader(object):
         self.batch_size = batch_size
         self.device = CFG.device
 
-        if CFG.audio_proj_head in ['gru', 'rnn', 'lstm']:
+        if CFG.audio_proj_head in ['gru', 'gru_v2', 'rnn', 'lstm']:
             self.load_full = True
         else:
             self.load_full = False
@@ -711,11 +711,20 @@ class SequentialAudioModel(nn.Module):
             self.seq_model = nn.RNN(CFG.audio_encoder_input, 
                     CFG.audio_hidden_dim, CFG.audio_layer_dim, 
                     batch_first=True, dropout=CFG.audio_dropout)
-        elif self.audio_model == 'gru':
+        elif self.audio_model in ['gru', 'gru_v2']:
             self.seq_model = nn.GRU(
                     input_size=CFG.audio_encoder_input, 
                     hidden_size=CFG.audio_hidden_dim, num_layers=CFG.audio_layer_dim, 
                     batch_first=True, dropout=CFG.audio_dropout)
+        elif self.audio_model == 'mlp':
+            bidirectional = False
+            self.seq_model = nn.GRU(
+                input_size=CFG.audio_encoder_input, 
+                hidden_size=CFG.audio_hidden_dim, num_layers=CFG.audio_layer_dim, 
+                batch_first=True, dropout=CFG.audio_dropout)
+            # self.layer_dim  = self.layer_dim + 2
+            self.direction = 2 if bidirectional else 1
+
         elif self.audio_model == 'lstm':
             bidirectional = False
             # self.seq_model = nn.LSTM(
@@ -732,16 +741,21 @@ class SequentialAudioModel(nn.Module):
             self.direction = 2 if bidirectional else 1
 
         # TODO: kan softmax niet beter weg?
-        if self.audio_model in ['rnn', 'gru']:
+        if self.audio_model in ['rnn', 'gru', 'gru_v2']:
             # Fully connected layer
             self.fc = nn.Linear(CFG.audio_hidden_dim, CFG.mutual_embedding_dim)
             self.softmax = nn.Softmax(dim=1)
 
-        elif self.audio_model == 'lstm':
+        elif self.audio_model == 'lstm': #TODO: remove
             # Fully connected layer
             self.fc = nn.Linear(CFG.audio_hidden_dim * self.direction, CFG.mutual_embedding_dim)
             self.relu = nn.ReLU()
             self.fc = nn.Linear(CFG.mutual_embedding_dim, CFG.mutual_embedding_dim)
+
+        elif self.audio_model == 'mlp':
+            self.fc1 = nn.Linear(CFG.audio_hidden_dim * self.direction, CFG.mutual_embedding_dim)
+            self.gelu = nn.GELU()
+            self.fc2 = nn.Linear(CFG.mutual_embedding_dim, CFG.mutual_embedding_dim)
 
         # pad_pack = args.pad_pack
         self.pad_pack = CFG.pad_pack
@@ -751,43 +765,38 @@ class SequentialAudioModel(nn.Module):
 
         # Initializing hidden state for first input with zeros
         h0 = torch.zeros(self.layer_dim * self.direction, features.size(0), self.hidden_dim).requires_grad_().to(self.device)
-        
 
         if length != None:
             if self.pad_pack:
                 # Pack the features such that we do not compute zero products
                 features = pack_padded_sequence(features, length, batch_first=True, enforce_sorted=False)
 
-            if self.audio_model == 'lstm_old':
-                c0 = torch.zeros(self.layer_dim * self.direction, features.size(0), self.hidden_dim).requires_grad_().to(self.device)
-                out, (h0, c0) = self.seq_model(features, (h0, c0))
-                do_trick = False
-            else:
-                out, h0 = self.seq_model(features, h0)
-                do_trick = True # was originally true, changed to false
+
+            out, h0 = self.seq_model(features, h0)
             
             if self.pad_pack:
-                out, output_lengths = pad_packed_sequence(out, batch_first=True)
+                out, _ = pad_packed_sequence(out, batch_first=True)
+
+            out = h0[-1, :, :]
             
 
         else:
             # Forward propagation by passing in the input and hidden state into the model
             out, h0 = self.seq_model(features)     # shape [bs, sl, hidden]
-            do_trick=False
-
-        # Convert the final state to our desired output shape (batch_size, output_dim)
-        if do_trick:
-            out = h0[-1, :, :]
-        else:
-            # Reshaping the outputs
-            # so that it can fit into the fully connected layer
-            # print("shape out1: ", out.shape)
-            out = out[:, -1, :]     # shape [bs * hidden]
-            # print("shape out2: ", out.shape)
-
-        out = self.fc(out)
+            out = out[:, -1, :]  
+        
         if self.audio_model in ['rnn', 'gru']:
+            out = self.fc(out)
             out = self.softmax(out)
+        elif self.audio_model in ['gru_v2']:
+            out = self.fc(out)
+
+        # elif self.audio_model in ['lstm']: # dit dus niet gedaan.... 
+        elif self.audio_model in ['mlp']:
+            out = self.fc1(out)
+            out = self.gelu(out)
+            out = self.fc2(out)
+            
         return out  # shape [bs*output]
 
 class simple_ProjectionHead(nn.Module):
@@ -867,7 +876,7 @@ class mmModule(nn.Module):
             pooling_model = Pooling(text_encoder.get_word_embedding_dimension())
             text_modules = [text_encoder, pooling_model]
 
-        if CFG.audio_proj_head in ['rnn', 'gru', 'lstm']:
+        if CFG.audio_proj_head in ['rnn', 'gru', 'gru_v2', 'mlp', 'lstm']:
             audio_encoder = SequentialAudioModel(CFG)
             audio_modules = [audio_encoder]
         elif CFG.audio_proj_head in ['sph']:
@@ -1495,7 +1504,7 @@ if __name__ == "__main__":
                     nargs='?', choices=['simcse_loss', 'clip_loss', 'norm_loss'],
                     help='Name of scale_type (default: %(default)s)')
     parser.add_argument('--audio_proj_head', default='gru', const='gru',
-                    nargs='?', choices=['sph', 'rnn', 'gru', 'lstm'],
+                    nargs='?', choices=['sph', 'rnn', 'gru', 'lstm', 'mlp', 'gru_v2'],
                     help='Activation to use in simple proj head (default: %(default)s)')
     parser.add_argument('--text_proj_head', default='None', const='None',
                     nargs='?', choices=['sph', 'None'],
@@ -1540,6 +1549,8 @@ if __name__ == "__main__":
     parser.add_argument('--max_train_samples', type=int, default=0,
                         help='Fixed scale to use')
     parser.add_argument('--weak_shuffle', dest='weak_shuffle', action='store_true',
+                        help="test: use old or new opt.")
+    parser.add_argument('--no_softmax', dest='no_softmax', action='store_true',
                         help="test: use old or new opt.")
     args, unparsed = parser.parse_known_args()
 
