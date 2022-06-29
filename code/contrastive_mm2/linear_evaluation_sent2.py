@@ -917,10 +917,10 @@ class embeddingCreator(nn.Module):
 
                 print("[del4] devices: ", reps_audio.is_cuda)
                 print("[del4] devices: ", reps_text.is_cuda)
-                print("[del4] devices: ", targets.is_cuda)
+                # print("[del4] devices: ", targets.is_cuda)
                 print("[del4] devices: ", cats.is_cuda)
 
-                self.cats.extend(cats.tolist())
+                self.cats.extend(cats.detach().cpu().tolist())
                 self.a_embeds.extend(reps_audio.detach().cpu())
                 self.t_embeds.extend(reps_text.detach().cpu())
                 self.processed_eps.extend(targets.detach().cpu())
