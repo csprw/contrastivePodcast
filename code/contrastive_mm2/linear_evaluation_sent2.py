@@ -324,7 +324,7 @@ class spDatasetWeakShuffleLinSep(datautil.Dataset):
                 # elif sample_idx > 5000000:
                 # elif sample_idx > 10000000:     # Raised cpu memory problem
                 # elif sample_idx > 8000000:    
-                elif sample_idx >= 10000000 and traintest == 'train':
+                elif sample_idx >= 5000 and traintest == 'train':
                     f.close()
                     self.file_startstop.append((start_idx, sample_idx))
                     print("[del] Max exceeded {}".format(sample_idx))
@@ -730,8 +730,6 @@ class LinearEvalator(nn.Module):
                     print(Counter(cats.detach().cpu().tolist()), Counter(y_pred.detach().cpu().tolist()))
                     # print("Loss: {} \t acc: {}".format(loss, metrics['acc']))
 
-
-
             print("-- Train epoch Mean acc: ", np.mean(accs))
             self.acc_per_epoch.append(np.mean(accs))
 
@@ -916,10 +914,6 @@ class embeddingCreator(nn.Module):
                 reps_audio = reps_audio / reps_audio.norm(dim=1, keepdim=True)
                 reps_text = reps_text / reps_text.norm(dim=1, keepdim=True)
 
-                # num_targs = len(list(set(targets)))
-
-                # print("[del4] OKay done. This is cats: ", cats)
-
                 self.cats.extend(cats.tolist())
                 self.a_embeds.extend(reps_audio)
                 self.t_embeds.extend(reps_text)
@@ -974,31 +968,39 @@ def main(args):
     # fullcfg.weak_shuffle = False            # For evaluation turn shuffling
     print("[Load model] config loaded: ", fullcfg)
 
+    deltmp = open("deltmp.txt", "w")
+    deltmp.write("Before mmloader \n") 
     # Create dataloader
     data_loader = MMloader(fullcfg, lin_sep=True)
+    deltmp.write("after mmloader \n") 
 
     # Load the model
     full_model = mmModule(fullcfg)
     full_model.load_state_dict(torch.load(model_weights_path,  map_location=fullcfg.device))              
     full_model = full_model.to(fullcfg.device)     
     full_model.eval()
+    deltmp.write("model loaded \n") 
 
      # Create representations on epiode level
     print("[del] Creating for train set. ")
     creator_train = embeddingCreator(full_model, fullcfg, data_loader, 'train')
     creator_train.create()
+    deltmp.write("After creator_train.create() \n") 
 
     print("[del] Creating for test set. ")
     # creator_test = embeddingCreator(full_model, fullcfg, data_loader, 'test')
     # creator_test.create()
     del data_loader
+    gc.collect()
     print("skipped for now...")
 
+    deltmp.write("Before ep_dataset_train \n") 
     ep_dataset_train = epDataset(fullcfg, creator_train)
     ep_loader_train = DataLoader(ep_dataset_train, batch_size=128, shuffle=True, drop_last=True)
 
-    ep_dataset_test = epDataset(fullcfg, creator_train)
-    ep_loader_test = DataLoader(ep_dataset_test, batch_size=128, shuffle=True, drop_last=True)
+    deltmp.write("Before ep_dataset_test \n") 
+    # ep_dataset_test = epDataset(fullcfg, creator_test)
+    # ep_loader_test = DataLoader(ep_dataset_test, batch_size=128, shuffle=True, drop_last=True)
 
     classes = list(ep_dataset_train.ep2cat_map.keys())
     
@@ -1006,13 +1008,17 @@ def main(args):
     # Perform evaluation
     for lr in [0.001, 0.0001, 0.00001]:
         print("-------- Results for lr: ", lr)
-        evaluator = LinearEvalator(fullcfg, classes, ep_loader_train, ep_loader_test, modality="text", lin_lr =lr)
+        deltmp.write("Text new lr \n") 
+        # evaluator = LinearEvalator(fullcfg, classes, ep_loader_train, ep_loader_test, modality="text", lin_lr =lr)
+        evaluator = LinearEvalator(fullcfg, classes, ep_loader_train, ep_loader_train, modality="text", lin_lr =lr)
         evaluator.fit()
-
-        evaluator = LinearEvalator(fullcfg, classes, ep_loader_train, ep_loader_test, modality="audio", lin_lr =lr)
+        deltmp.write("audio new lr \n") 
+        # evaluator = LinearEvalator(fullcfg, classes, ep_loader_train, ep_loader_test, modality="audio", lin_lr =lr)
+        evaluator = LinearEvalator(fullcfg, classes, ep_loader_train, ep_loader_train, modality="audio", lin_lr =lr)
         evaluator.fit()
     # evaluator.evaluate()
     # evaluator.save_results(args.num_epochs)
+    deltmp.close()  
 
 
 if __name__ == "__main__":
