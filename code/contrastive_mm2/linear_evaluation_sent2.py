@@ -752,30 +752,31 @@ class LinearEvalator(nn.Module):
                 # sent_features, audio_features, seq_len, targs, _, cats = batch
                 # text_embeds, audio_embeds, lengths, cats, targs = batch
                 (a_embeds, t_embeds, cats) = batch
+                a_embeds = a_embeds.to(self.device)
+                t_embeds = t_embeds.to(self.device)
+                cats = cats.to(self.device)
                 #self.optimizer.zero_grad()
+                # Encode features
+                # reps_text = self.text_model(text_embeds)['sentence_embedding']
+                # reps_audio = self.audio_model((audio_embeds, lengths))
 
-                with torch.no_grad():
-                    # Encode features
-                    # reps_text = self.text_model(text_embeds)['sentence_embedding']
-                    # reps_audio = self.audio_model((audio_embeds, lengths))
-
-                    # # Normalise features
-                    # reps_audio = reps_audio / reps_audio.norm(dim=1, keepdim=True)
-                    # reps_text = reps_text / reps_text.norm(dim=1, keepdim=True)
+                # # Normalise features
+                # reps_audio = reps_audio / reps_audio.norm(dim=1, keepdim=True)
+                # reps_text = reps_text / reps_text.norm(dim=1, keepdim=True)
 
 
-                    if self.embed_norm1:
-                        reps_audio = a_embeds / (torch.sum(a_embeds, -1))
-                        reps_text = t_embeds / (torch.sum(t_embeds, -1))
+                if self.embed_norm1:
+                    reps_audio = a_embeds / (torch.sum(a_embeds, -1))
+                    reps_text = t_embeds / (torch.sum(t_embeds, -1))
 
-                    elif self.embed_norm2:
-                        reps_audio = torch.nn.functional.normalize(a_embeds) 
-                        reps_text = torch.nn.functional.normalize(t_embeds) 
+                elif self.embed_norm2:
+                    reps_audio = torch.nn.functional.normalize(a_embeds) 
+                    reps_text = torch.nn.functional.normalize(t_embeds) 
 
-                    if self.modality == 'text':
-                        output = self.projectionhead(reps_text)
-                    else:
-                        output = self.projectionhead(reps_audio)
+                if self.modality == 'text':
+                    output = self.projectionhead(reps_text)
+                else:
+                    output = self.projectionhead(reps_audio)
 
                 metrics = self.get_metrics(output.detach().cpu(), cats.detach().cpu())
                 accs.append(metrics['acc'])
