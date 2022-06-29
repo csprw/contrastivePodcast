@@ -744,7 +744,7 @@ class SequentialAudioModel(nn.Module):
         if self.audio_model in ['rnn', 'gru', 'gru_v2']:
             # Fully connected layer
             self.fc = nn.Linear(CFG.audio_hidden_dim, CFG.mutual_embedding_dim)
-            self.softmax = nn.Softmax(dim=1)
+            # self.softmax = nn.Softmax(dim=1)
 
         elif self.audio_model == 'lstm': #TODO: remove
             # Fully connected layer
@@ -787,7 +787,7 @@ class SequentialAudioModel(nn.Module):
         
         if self.audio_model in ['rnn', 'gru']:
             out = self.fc(out)
-            out = self.softmax(out)
+            # out = self.softmax(out)
         elif self.audio_model in ['gru_v2']:
             out = self.fc(out)
 
