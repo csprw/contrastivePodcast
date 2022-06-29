@@ -324,7 +324,7 @@ class spDatasetWeakShuffleLinSep(datautil.Dataset):
                 # elif sample_idx > 5000000:
                 # elif sample_idx > 10000000:     # Raised cpu memory problem
                 # elif sample_idx > 8000000:    
-                elif sample_idx >= 8000000 and traintest == 'train':
+                elif sample_idx >= 500 and traintest == 'train':
                     f.close()
                     self.file_startstop.append((start_idx, sample_idx))
                     print("[del] Max exceeded {}".format(sample_idx))
@@ -914,10 +914,16 @@ class embeddingCreator(nn.Module):
                 reps_audio = reps_audio / reps_audio.norm(dim=1, keepdim=True)
                 reps_text = reps_text / reps_text.norm(dim=1, keepdim=True)
 
+
+                print("[del4] devices: ", reps_audio.is_cuda)
+                print("[del4] devices: ", reps_text.is_cuda)
+                print("[del4] devices: ", targets.is_cuda)
+                print("[del4] devices: ", cats.is_cuda)
+
                 self.cats.extend(cats.tolist())
-                self.a_embeds.extend(reps_audio)
-                self.t_embeds.extend(reps_text)
-                self.processed_eps.extend(targets)
+                self.a_embeds.extend(reps_audio.detach().cpu())
+                self.t_embeds.extend(reps_text.detach().cpu())
+                self.processed_eps.extend(targets.detach().cpu())
                 # print("Targets: , ", targets)
                 # print(self.a_embeds)
                 # print("Lengths: ", len(self.a_embeds),  len(self.t_embeds), len(self.cats))
