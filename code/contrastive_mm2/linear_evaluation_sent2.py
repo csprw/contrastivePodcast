@@ -915,15 +915,15 @@ class embeddingCreator(nn.Module):
                 reps_text = reps_text / reps_text.norm(dim=1, keepdim=True)
 
 
-                print("[del4] devices: ", reps_audio.is_cuda)
-                print("[del4] devices: ", reps_text.is_cuda)
-                # print("[del4] devices: ", targets.is_cuda)
-                print("[del4] devices: ", cats.is_cuda)
+                # print("[del4] devices: ", reps_audio.is_cuda)
+                # print("[del4] devices: ", reps_text.is_cuda)
+                # # print("[del4] devices: ", targets.is_cuda)
+                # print("[del4] devices: ", cats.is_cuda)
 
                 self.cats.extend(cats.detach().cpu().tolist())
                 self.a_embeds.extend(reps_audio.detach().cpu())
                 self.t_embeds.extend(reps_text.detach().cpu())
-                self.processed_eps.extend(targets.detach().cpu())
+                self.processed_eps.extend(targets)
                 # print("Targets: , ", targets)
                 # print(self.a_embeds)
                 # print("Lengths: ", len(self.a_embeds),  len(self.t_embeds), len(self.cats))
