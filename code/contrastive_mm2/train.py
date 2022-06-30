@@ -1020,9 +1020,7 @@ class mmModule(nn.Module):
                         self.best_loss = mean_loss 
                         if args.save_model:
                             self.save_model()
-                        if args.save_checkpoint:
-                            self.save_checkpoint(epoch, step, optimizer, scheduler)
-
+                
                     # If csv files are properly set up, save plots.
                     if os.path.isfile(self.train_csv_filename):
                         self.output_all_plots()
@@ -1047,6 +1045,9 @@ class mmModule(nn.Module):
             print("[fit] epoch duration {} seconds".format(int(t2-t1)))
             if args.save_model:
                 self.save_model("_epoch_"+str(epoch))
+            if args.save_checkpoint:
+                self.save_checkpoint(epoch, step, optimizer, scheduler)
+
 
         print("[fit] Done training")
 
