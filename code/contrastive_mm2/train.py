@@ -727,11 +727,6 @@ class SequentialAudioModel(nn.Module):
 
         elif self.audio_model == 'lstm':
             bidirectional = False
-            # self.seq_model = nn.LSTM(
-            #         input_size=CFG.audio_encoder_input, 
-            #         hidden_size=CFG.audio_hidden_dim, num_layers=CFG.audio_layer_dim, 
-            #         batch_first=True, dropout=CFG.audio_dropout,
-            #         bidirectional=True)
             self.seq_model = nn.GRU(
                 input_size=CFG.audio_encoder_input, 
                 hidden_size=CFG.audio_hidden_dim, num_layers=CFG.audio_layer_dim, 
@@ -741,9 +736,19 @@ class SequentialAudioModel(nn.Module):
             self.direction = 2 if bidirectional else 1
 
         # TODO: kan softmax niet beter weg?
-        if self.audio_model in ['rnn', 'gru', 'gru_v2']:
+        if self.audio_model in ['rnn', 'gru']:
             # Fully connected layer
             self.fc = nn.Linear(CFG.audio_hidden_dim, CFG.mutual_embedding_dim)
+            # self.softmax = nn.Softmax(dim=1)
+
+        elif self.audio_model in ['rnn', 'gru_v2']:
+            # Fully connected layer
+            self.fc = nn.Linear(CFG.audio_hidden_dim, CFG.mutual_embedding_dim)
+            self.non_seq_layers = nn.Sequential(
+                nn.Linear(self.audio_hidden_dim, self.mutual_embedding_dim),
+                nn.Dropout(),
+                nn.LayerNorm(self.mutual_embedding_dim),
+            )
             # self.softmax = nn.Softmax(dim=1)
 
         elif self.audio_model == 'lstm': #TODO: remove
@@ -753,9 +758,17 @@ class SequentialAudioModel(nn.Module):
             self.fc = nn.Linear(CFG.mutual_embedding_dim, CFG.mutual_embedding_dim)
 
         elif self.audio_model == 'mlp':
-            self.fc1 = nn.Linear(CFG.audio_hidden_dim * self.direction, CFG.mutual_embedding_dim)
-            self.gelu = nn.GELU()
-            self.fc2 = nn.Linear(CFG.mutual_embedding_dim, CFG.mutual_embedding_dim)
+            # self.fc1 = nn.Linear(CFG.audio_hidden_dim * self.direction, CFG.mutual_embedding_dim)
+            # self.gelu = nn.GELU()
+            # self.fc2 = nn.Linear(CFG.mutual_embedding_dim, CFG.mutual_embedding_dim)
+
+            self.non_seq_layers = nn.Sequential(
+                nn.Linear(self.audio_hidden_dim, self.audio_hidden_dim),
+                nn.GELU(),
+                nn.Linear(self.audio_hidden_dim, self.audio_hidden_dim),
+                nn.Dropout(),
+                nn.LayerNorm(self.mutual_embedding_dim),
+            )
 
         # pad_pack = args.pad_pack
         self.pad_pack = CFG.pad_pack
@@ -767,15 +780,10 @@ class SequentialAudioModel(nn.Module):
         h0 = torch.zeros(self.layer_dim * self.direction, features.size(0), self.hidden_dim).requires_grad_().to(self.device)
 
         if length != None:
-            if self.pad_pack:
-                # Pack the features such that we do not compute zero products
-                features = pack_padded_sequence(features, length, batch_first=True, enforce_sorted=False)
-
-
+            # Pack the features such that we do not compute zero products
+            features = pack_padded_sequence(features, length, batch_first=True, enforce_sorted=False)
             out, h0 = self.seq_model(features, h0)
-            
-            if self.pad_pack:
-                out, _ = pad_packed_sequence(out, batch_first=True)
+            out, _ = pad_packed_sequence(out, batch_first=True)
 
             out = h0[-1, :, :]
             
@@ -789,13 +797,11 @@ class SequentialAudioModel(nn.Module):
             out = self.fc(out)
             # out = self.softmax(out)
         elif self.audio_model in ['gru_v2']:
-            out = self.fc(out)
+            # out = self.fc(out)
+            out = self.non_seq_layers(out)
 
-        # elif self.audio_model in ['lstm']: # dit dus niet gedaan.... 
         elif self.audio_model in ['mlp']:
-            out = self.fc1(out)
-            out = self.gelu(out)
-            out = self.fc2(out)
+            out = self.non_seq_layers(out)
             
         return out  # shape [bs*output]
 
