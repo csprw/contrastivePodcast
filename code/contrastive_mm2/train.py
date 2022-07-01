@@ -63,7 +63,7 @@ def get_log_name(args, dc):
     """
     Returns name of the current run.
     """
-    log_name = "{}m-{}_{}_{}".format(int(args.max_train_samples / 1000000), 
+    log_name = "{}m-{}_{}".format(int(args.max_train_samples / 1000000), 
             args.audio_proj_head, 
             datetime.now().strftime("%Y-%m-%d_%H-%M-%S"))
     log_name = os.path.join(args.log_dir, log_name)
