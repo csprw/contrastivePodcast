@@ -63,9 +63,8 @@ def get_log_name(args, dc):
     """
     Returns name of the current run.
     """
-    log_name = "{}m-{}_{}_{}_{}".format(int(args.max_train_samples / 1000000), 
-            args.text_proj_head, args.audio_proj_head, 
-            args.final_projection_dim,
+    log_name = "{}m-{}_{}_{}".format(int(args.max_train_samples / 1000000), 
+            args.audio_proj_head, 
             datetime.now().strftime("%Y-%m-%d_%H-%M-%S"))
     log_name = os.path.join(args.log_dir, log_name)
     return log_name
@@ -745,9 +744,9 @@ class SequentialAudioModel(nn.Module):
             # Fully connected layer
             self.fc = nn.Linear(CFG.audio_hidden_dim, CFG.mutual_embedding_dim)
             self.non_seq_layers = nn.Sequential(
-                nn.Linear(self.audio_hidden_dim, self.mutual_embedding_dim),
+                nn.Linear(CFG.audio_hidden_dim, CFG.mutual_embedding_dim),
                 nn.Dropout(),
-                nn.LayerNorm(self.mutual_embedding_dim),
+                nn.LayerNorm(CFG.mutual_embedding_dim),
             )
             # self.softmax = nn.Softmax(dim=1)
 
@@ -763,11 +762,11 @@ class SequentialAudioModel(nn.Module):
             # self.fc2 = nn.Linear(CFG.mutual_embedding_dim, CFG.mutual_embedding_dim)
 
             self.non_seq_layers = nn.Sequential(
-                nn.Linear(self.audio_hidden_dim, self.audio_hidden_dim),
+                nn.Linear(CFG.audio_hidden_dim, CFG.audio_hidden_dim),
                 nn.GELU(),
-                nn.Linear(self.audio_hidden_dim, self.audio_hidden_dim),
+                nn.Linear(CFG.audio_hidden_dim, CFG.audio_hidden_dim),
                 nn.Dropout(),
-                nn.LayerNorm(self.mutual_embedding_dim),
+                nn.LayerNorm(CFG.mutual_embedding_dim),
             )
 
         # pad_pack = args.pad_pack
