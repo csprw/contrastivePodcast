@@ -114,7 +114,7 @@ class MMloader(object):
         self.batch_size = batch_size
         self.device = CFG.device
 
-        if CFG.audio_proj_head in ['gru', 'gru_v2', 'rnn', 'lstm']:
+        if CFG.audio_proj_head in ['gru', 'gru_v2', 'rnn', 'lstm', 'mlp']:
             self.load_full = True
         else:
             self.load_full = False
@@ -1423,7 +1423,7 @@ def main(args, conf):
         #####
 
         checkpoint = torch.load(args.load_checkpoint_path, map_location=torch.device(device))
-        epoch = checkpoint['epoch']
+        epoch = checkpoint['epoch'] + 1
         fstep = checkpoint['step']
         full_model.load_state_dict(checkpoint['full_model'])
         loaded_optimizer_state = checkpoint['optimizer']
