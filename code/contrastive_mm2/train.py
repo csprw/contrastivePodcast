@@ -742,7 +742,7 @@ class SequentialAudioModel(nn.Module):
 
         elif self.audio_model in ['rnn', 'gru_v2']:
             # Fully connected layer
-            self.fc = nn.Linear(CFG.audio_hidden_dim, CFG.mutual_embedding_dim)
+            # self.fc = nn.Linear(CFG.audio_hidden_dim, CFG.mutual_embedding_dim)
             self.non_seq_layers = nn.Sequential(
                 nn.Linear(CFG.audio_hidden_dim, CFG.mutual_embedding_dim),
                 nn.Dropout(),
@@ -1424,7 +1424,8 @@ def main(args, conf):
 
         checkpoint = torch.load(args.load_checkpoint_path, map_location=torch.device(device))
         epoch = checkpoint['epoch'] + 1
-        fstep = checkpoint['step']
+        # fstep = checkpoint['step']
+        fstep = 0 # depricated, remove during cleaning
         full_model.load_state_dict(checkpoint['full_model'])
         loaded_optimizer_state = checkpoint['optimizer']
         loaded_sched_state = checkpoint['lr_sched']
