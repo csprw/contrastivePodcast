@@ -42,8 +42,11 @@ output_dir: ./output
 # features_num_workers: 8
 
 
-######## QUERY audio
+######## Test set audio generation
 query_audio_dir: ../query_audio
+summary_audio_dir: ../../data/podcasts-no-audio-13GB/TREC/summary_audio
+query_embed_dir: ../../data/yamnet/query_embedding
+summary_embed_dir: ../../data/yamnet/summary_embedding
 
 ##################################
 #### Search Configuration ####

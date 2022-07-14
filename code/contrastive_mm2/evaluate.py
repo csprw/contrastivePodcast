@@ -107,7 +107,8 @@ class Evaluator(object):
 
             with torch.no_grad():
                 reps_audio = self.model.audio_model((padded_yamnets, query_lengths))
-                embed = reps_audio / reps_audio.norm(dim=1, keepdim=True)
+                # embed = reps_audio / reps_audio.norm(dim=1, keepdim=True)
+                embed = torch.nn.functional.normalize(reps_audio) 
         else:
             with torch.no_grad():
 
@@ -115,7 +116,8 @@ class Evaluator(object):
 
                 audio_features = torch.stack(yamnets_mean).to(self.device)
                 reps_audio = self.model.audio_model((audio_features, query_lengths))
-                embed = reps_audio / reps_audio.norm(dim=1, keepdim=True)
+                # embed = reps_audio / reps_audio.norm(dim=1, keepdim=True)
+                embed = audio_batch = torch.nn.functional.normalize(reps_audio) 
         return embed.cpu()
 
     def text_to_embed(self, text):
@@ -123,11 +125,11 @@ class Evaluator(object):
             text, padding=True, truncation=True, max_length=32, return_tensors='pt', return_token_type_ids=True,
         )
         
-        
         with torch.no_grad():
             tokenized_text = tokenized_text.to(self.device)
             reps_sentences = self.model.text_model(tokenized_text)['sentence_embedding']
-            embed = reps_sentences / reps_sentences.norm(dim=1, keepdim=True)
+            # embed = reps_sentences / reps_sentences.norm(dim=1, keepdim=True)
+            embed = torch.nn.functional.normalize(reps_sentences) 
 
         return embed.cpu()
 
@@ -157,11 +159,12 @@ class Evaluator(object):
                 tok_sentences = tok_sentences.to(self.device)
                 audio_features = audio_features.to(self.device)  
 
-                reps_sentences = self.model.text_model(tok_sentences)['sentence_embedding']
+                reps_text = self.model.text_model(tok_sentences)['sentence_embedding']
                 reps_audio = self.model.audio_model((audio_features, seq_len))
 
-                audio_batch = reps_audio / reps_audio.norm(dim=1, keepdim=True)
-                text_batch = reps_sentences / reps_sentences.norm(dim=1, keepdim=True)
+                audio_batch = torch.nn.functional.normalize(reps_audio) 
+                text_batch = torch.nn.functional.normalize(reps_text) 
+
 
                 if self.save_intermediate:
                     f1 = h5py.File(my_tmp_file, "w")
@@ -265,9 +268,6 @@ def evaluate_topk(evaluator, query_encodings, pod_encodings):
             print("------- Results for: ", name)
             query_encoding = query_tup[0]
             pod_encoding = tup[0]
-
-            print("[del] query: ", query_encoding.is_cuda)
-            # print("[del] pod_encoding: ", pod_encoding.is_cuda)
 
             full_results[name] = defaultdict(list)
             similarity = (100.0 * query_encoding @ pod_encoding.T).softmax(dim=-1)
