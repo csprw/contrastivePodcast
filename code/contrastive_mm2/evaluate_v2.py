@@ -492,8 +492,8 @@ def main(args):
             args.save_intermediate, args.calc_acc)
     max_samples = evaluator.get_max_data()
 
-    max_samples = 128 * 4
-    print("deleteeeee")
+    # max_samples = 128 * 4
+    # print("deleteeeee")
 
     evaluator.encode_testset_new(max_samples)
     evaluator.encode_queries(topics_df, query_field='query')
