@@ -326,7 +326,7 @@ class Evaluator(object):
 
 def evaluate_topk(evaluator, query_encodings, pod_encodings):
     full_results = defaultdict(list)
-    k = 50000
+    # k = 50000
     pred =[[1]* 50 + [0] * 50]
     
     targets = evaluator.all_targs
@@ -339,6 +339,7 @@ def evaluate_topk(evaluator, query_encodings, pod_encodings):
             print("------- Results for: ", name)
             query_encoding = query_tup[0]
             pod_encoding = tup[0]
+            k = len(pod_encoding)
 
             full_results[name] = defaultdict(list)
             similarity = (100.0 * query_encoding @ pod_encoding.T).softmax(dim=-1)
