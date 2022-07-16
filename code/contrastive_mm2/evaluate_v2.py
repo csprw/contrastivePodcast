@@ -191,6 +191,7 @@ class Evaluator(object):
             audio_encoding[cur_idx:next_idx] = audio_batch.cpu().numpy()
             
             all_sents[cur_idx:next_idx] = sents
+            targets = [t.split(".")[0] for t in targets]
             all_targs[cur_idx:next_idx] = targets
 
             if next_idx >= max_samples: 
