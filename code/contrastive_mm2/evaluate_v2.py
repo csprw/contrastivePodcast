@@ -336,10 +336,11 @@ def evaluate_topk(evaluator, query_encodings, pod_encodings):
     for query_tup in query_encodings:
         for tup in pod_encodings:
             name = query_tup[1] + "2" + tup[1]
-            print("------- Results for: ", name)
+            
             query_encoding = query_tup[0]
             pod_encoding = tup[0]
             k = len(pod_encoding)
+            print("------- Results for: ", name, k)
 
             full_results[name] = defaultdict(list)
             similarity = (100.0 * query_encoding @ pod_encoding.T).softmax(dim=-1)
