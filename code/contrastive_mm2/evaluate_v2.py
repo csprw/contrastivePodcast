@@ -429,14 +429,14 @@ def save_eval_results(full_results, evaluator):
 
     mean_results['test_acc'] = evaluator.acc
 
-    out_path = os.path.join(evaluator.model_path, "topic_evaluation")
+    # out_path = os.path.join(evaluator.model_path, "topic_evaluation")
     name = os.path.split(args.model_weights_path)[-1].split(".")[0]
-    Path(out_path).mkdir(parents=True, exist_ok=True)
+    # Path(out_path).mkdir(parents=True, exist_ok=True)
 
-    out = os.path.join(out_path, "topictask_{}.json".format(name))
+    out = os.path.join(evaluator.model_path, "topic_results_{}.json".format(name))
     with open(out, "w") as f:
         json.dump(mean_results, f, indent=4)
-    out = os.path.join(evaluator.model_path, "topictask_{}.csv".format(name))
+    out = os.path.join(evaluator.model_path, "topic_results_{}.csv".format(name))
     df = pd.DataFrame(mean_results)
     df.T.to_csv(out, sep=';')
     print(df.T.to_string())
