@@ -415,9 +415,12 @@ class summaryEvaluator(object):
                 summary_targets.append(epi)
                 
                 summ_text = tokenize.sent_tokenize(summ_text)[0]  # for now only first sentence
+                print("[del]  summary: ", summ_text)
                 summary_text_encoding = self.text_to_embed(summ_text)[0]
 
                 summary_text_encodings.append(summary_text_encoding)
+                print("[del] encode summary: ", summary_text_encodings)
+                exit(1)
                 summary_texts.append(summ_text)
 
                 query_length = len(yamnet_embed)
@@ -605,8 +608,8 @@ def main(args):
     # Create evaluator en encode episodes and summaries
     evaluator = summaryEvaluator(fullcfg, model_path, full_model, data_loader)
     max_episodes = evaluator.get_max_episode_data()
-    # max_episodes = 128 * 2
-    # print("[del]", max_episodes)
+    max_episodes = 128 * 2
+    print("[del]", max_episodes)
     evaluator.encode_summary_episodes(max_episodes)
     evaluator.encode_summaries(summary_dict, summary_audio_dict)
     evaluator.encode_summaries_sentlevel(sent_summary_dict, sent_summary_audio_dict)
