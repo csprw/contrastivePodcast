@@ -458,10 +458,14 @@ class summaryEvaluator(object):
         self.sent_summ_texts = sent_summ_texts
         self.sent_summ_audio_encoding = torch.vstack(sent_summ_audio_encodings)
 
-def summary_evaluation(evaluator):
+def summary_evaluation(evaluator, target='sent'):
     ### Step 1B: Results on sent-summary level, merging all sentences of summary
-    summary_encodings = [(evaluator.sent_summ_text_encoding, 'sentsummtext'),
-                    (evaluator.sent_summ_audio_encoding, 'sentsummaudio')]
+    if target == 'sent':
+        summary_encodings = [(evaluator.sent_summ_text_encoding, 'sentsummtext'),
+                        (evaluator.sent_summ_audio_encoding, 'sentsummaudio')]
+    else:
+        summary_encodings = [(evaluator.summ_text_encoding, 'sentsummtext'),
+                        (evaluator.summ_audio_encoding, 'sentsummaudio')]
     epi_encodings = [(evaluator.text_encoding, 'text'),
                     (evaluator.audio_encoding, 'audio')]
 
@@ -530,7 +534,7 @@ def summary_evaluation(evaluator):
             results['mrrs_sd'].append(np.var(mrr))
     return results
 
-def to_plot(results):
+def to_plot(results, target='sent'):
     fig, ax = plt.subplots()
     fig.set_size_inches(12, 6)
     offset = 0.0
@@ -557,8 +561,12 @@ def to_plot(results):
     # Save the figure and show
     plt.legend(loc='best',  bbox_to_anchor=(1.0,1.0))
     plt.tight_layout()
-    plt.savefig(os.path.join(output_path, 'summary.png'))
-    plt.savefig(os.path.join(output_path, 'summary.pdf'))
+    if target != 'sent':
+        plt.savefig(os.path.join(output_path, 'summary_full.png'))
+        plt.savefig(os.path.join(output_path, 'summary_full.pdf'))
+    else:
+        plt.savefig(os.path.join(output_path, 'summary_sent.png'))
+        plt.savefig(os.path.join(output_path, 'summary_sent.pdf'))
 
 
 def main(args):
@@ -603,15 +611,22 @@ def main(args):
     evaluator.encode_summaries(summary_dict, summary_audio_dict)
     evaluator.encode_summaries_sentlevel(sent_summary_dict, sent_summary_audio_dict)
 
-    # Perform evaluation
-    results = summary_evaluation(evaluator)
-
-    # Plot the results
-    to_plot(results)
+    # Perform evaluation on sentence level
+    results = summary_evaluation(evaluator, target='sent') 
 
     # Save the results
-    out = str(Path(args.model_weights_path).parents[1])
-    with open(os.path.join(out, 'summary_results.json'), 'w') as fp:
+    to_plot(results, target='sent')
+    json_out = str(Path(args.model_weights_path).parents[1])
+    with open(os.path.join(json_out, 'summary_results_sent.json'), 'w') as fp:
+        json.dump(results, fp, indent=4)
+
+    # Perform evaluation on sentence level
+    results = summary_evaluation(evaluator, target='full') 
+
+    # Save the results
+    to_plot(results, target='full')
+    json_out = str(Path(args.model_weights_path).parents[1])
+    with open(os.path.join(json_out, 'summary_results_full.json'), 'w') as fp:
         json.dump(results, fp, indent=4)
 
 
