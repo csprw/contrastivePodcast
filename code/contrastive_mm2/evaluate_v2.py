@@ -102,7 +102,7 @@ class Evaluator(object):
         return max_samples
 
     def audio_to_embed(self, yamnets, query_lengths):
-        if self.audio_proj_head in ['gru', 'gru_v2', 'rnn', 'lstm']:
+        if self.audio_proj_head in ['gru', 'gru_v2', 'rnn', 'lstm', 'mlp']:
             padded_yamnets = pad_sequence(yamnets, batch_first=True).to(self.device)
 
             with torch.no_grad():
