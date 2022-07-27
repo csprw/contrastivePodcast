@@ -464,8 +464,8 @@ def summary_evaluation(evaluator, target='sent'):
         summary_encodings = [(evaluator.sent_summ_text_encoding, 'sentsummtext'),
                         (evaluator.sent_summ_audio_encoding, 'sentsummaudio')]
     else:
-        summary_encodings = [(evaluator.summ_text_encoding, 'sentsummtext'),
-                        (evaluator.summ_audio_encoding, 'sentsummaudio')]
+        summary_encodings = [(evaluator.summary_text_encoding, 'fullsummtext'),
+                        (evaluator.summary_audio_encoding, 'fullsummaudio')]
     epi_encodings = [(evaluator.text_encoding, 'text'),
                     (evaluator.audio_encoding, 'audio')]
 
