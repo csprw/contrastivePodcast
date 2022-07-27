@@ -463,9 +463,13 @@ def summary_evaluation(evaluator, target='sent'):
     if target == 'sent':
         summary_encodings = [(evaluator.sent_summ_text_encoding, 'sentsummtext'),
                         (evaluator.sent_summ_audio_encoding, 'sentsummaudio')]
+        targets = evaluator.sent_summ_targets
+        texts = evaluator.sent_summ_texts
     else:
         summary_encodings = [(evaluator.summary_text_encoding, 'fullsummtext'),
                         (evaluator.summary_audio_encoding, 'fullsummaudio')]
+        targets = evaluator.summary_targets
+        texts = evaluator.summary_texts
     epi_encodings = [(evaluator.text_encoding, 'text'),
                     (evaluator.audio_encoding, 'audio')]
 
@@ -485,17 +489,17 @@ def summary_evaluation(evaluator, target='sent'):
             confidence = []
             total_indices = []
             idxs= []
-            for idx in range(len(evaluator.sent_summ_targets)):
+            for idx in range(len(targets)):
             
                 values, indices = similarity[idx].topk(k)
-                target = evaluator.sent_summ_targets[idx].split("_")[0]
+                target = targets[idx].split("_")[0]
                 
                 confidence.extend(values)
                 total_indices.extend(indices)
                 idxs.append(idx)
                     
-                if idx != (len(evaluator.sent_summ_targets) - 1):
-                    next_target = evaluator.sent_summ_targets[idx+1].split("_")[0]
+                if idx != (len(targets) - 1):
+                    next_target = targets[idx+1].split("_")[0]
                     if next_target == target:
                         continue
                     
@@ -517,7 +521,7 @@ def summary_evaluation(evaluator, target='sent'):
                     print("++ Estimated position: ", estimated_position, confidence[sorted_inds[0]])
                     if estimated_position < 1:
                         for i in idxs:
-                            print("         summary: ", evaluator.sent_summ_texts[i])
+                            print("         summary: ", texts[i])
                         print("          pred: ", evaluator.all_sents[total_indices[0].tolist()])
 
                 else:
