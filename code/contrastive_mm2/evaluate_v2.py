@@ -205,7 +205,9 @@ class Evaluator(object):
 
         if self.calc_acc:
             print("Final accuracy: ", np.mean(accs))
-            self.acc = np.mean(accs)
+            self.mean_acc = np.mean(accs)
+            self.std_acc = np.std(accs)
+            self.var_acc = np.var(accs)
 
     def encode_queries(self, topics_df, query_field='query'):
         
@@ -427,7 +429,9 @@ def save_eval_results(full_results, evaluator):
         for metric_name, vals in metric.items():
             mean_results[name][metric_name] = np.mean(vals)
 
-    mean_results['test_acc'] = evaluator.acc
+    mean_results['test_mean_acc'] = evaluator.mean_acc
+    mean_results['test_std_acc'] = evaluator.std_acc
+    mean_results['test_var_acc'] = evaluator.var_acc
 
     # out_path = os.path.join(evaluator.model_path, "topic_evaluation")
     name = os.path.split(args.model_weights_path)[-1].split(".")[0]
