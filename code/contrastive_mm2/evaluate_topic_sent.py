@@ -213,8 +213,8 @@ class Evaluator(object):
           
         self.all_sents = all_sents
         self.all_targs = all_targs
-        self.text_encoding = text_encoding
-        self.audio_encoding = audio_encoding
+        self.text_encoding = torch.Tensor(text_encoding)
+        self.audio_encoding = torch.Tensor(audio_encoding)
 
         if self.calc_acc:
             print("Final accuracy: ", np.mean(accs))
@@ -382,7 +382,12 @@ def topic_evaluation(evaluator):
             topic_encoding = topic_tup[0]
             epi_encoding = tup[0]
             
+            # print("[del] before previous error: ", type(topic_encoding), type(epi_encoding))
+            # print("[del2]:  ", topic_encoding.dtype, epi_encoding.dtype)
+            
             similarity = (100.0 * topic_encoding @ epi_encoding.T).softmax(dim=-1)
+            # print(type(similarity))
+            # exit(1)
             rank = []        
             mrr = []
             
