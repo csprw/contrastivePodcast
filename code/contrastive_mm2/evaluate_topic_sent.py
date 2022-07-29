@@ -12,6 +12,7 @@ import pandas as pd
 import numpy as np
 import sys
 from collections import defaultdict
+import gc
 
 from argparse import ArgumentParser
 from dacite import from_dict
@@ -371,7 +372,11 @@ def topic_evaluation(evaluator):
     k = evaluator.text_encoding.shape[0]
     results = defaultdict(list)
     for topic_tup in topic_encodings:
+        
+
         for tup in epi_encodings:
+            gc.collect()
+            print("[del] collected memory")
             name = topic_tup[1] + "2" + tup[1]
             print("------- Results for: ", name)
             topic_encoding = topic_tup[0]
@@ -441,6 +446,8 @@ def topic_evaluation(evaluator):
             results['mrrs'].append(np.mean(mrr))
             results['mrrs_var'].append(np.std(mrr))
             results['mrrs_std'].append(np.var(mrr))
+
+            del similarity
     return results
 
 def main(args):
