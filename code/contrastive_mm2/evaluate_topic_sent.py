@@ -385,7 +385,7 @@ def topic_evaluation(evaluator):
             total_indices = []
             idxs= []
             for idx in range(len(targets)):
-            
+                print("k={}, Idx: {}/{}".format(k, idx, len(targets)))
                 values, indices = similarity[idx].topk(k)
                 target = targets[idx].split("_")[0]
                 
@@ -432,7 +432,7 @@ def topic_evaluation(evaluator):
                 confidence = []
                 total_indices = []
                 idxs= []
-
+            print("[del] done")
             print("Mean position: {} (std: {}) \t mrr: {} ".format(np.mean(rank), np.std(rank), np.mean(mrr)))
             results['names'].append(name)
             results['ranks'].append(np.mean(rank))
