@@ -468,7 +468,7 @@ def read_metadata_subset(conf, traintest='test'):
     metadata = src.data.load_metadata(conf.dataset_path)
     print("[main] metadata loaded ", len(metadata))
 
-    target_dir = os.path.join(conf.dataset_path, 'topic_task')
+    target_dir = os.path.join(conf.dataset_path, 'TREC_topic')
     colnames = ['num', 'unk', 'episode_uri_time', 'score']
 
     if traintest == 'test':
@@ -488,7 +488,7 @@ def read_metadata_subset(conf, traintest='test'):
 
     if traintest == 'train':
         # Read target data
-        topics_df_path = os.path.join(target_dir, 'podcasts_2020_topics_test.xml')
+        topics_df_path = os.path.join(target_dir, 'podcasts_2020_topics_train.xml')
         
         ## Read dataframe with 8 query topics
         topics_df = pd.read_xml(topics_df_path)

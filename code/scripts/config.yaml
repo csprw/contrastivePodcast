@@ -42,12 +42,16 @@ features_num_workers: 8
 
 #########
 ### Text to speech
-query_audio_dir: ../../data/podcasts-no-audio-13GB/topic_task/query_audio
+query_audio_dir: ../../data/podcasts-no-audio-13GB/TREC_topic/query_audio
+sent_topic_audio_dir: ../../data/podcasts-no-audio-13GB/TREC_topic/sent_topic_descr_audio
+
 summary_audio_dir: ../../data/podcasts-no-audio-13GB/TREC/summary_audio
 sent_summary_audio_dir: ../../data/podcasts-no-audio-13GB/TREC/sent_summaries_audio
 # query_audio_dir: ../data/sp/yamnet/query_embedding
 # query_embed_dir: ../data/sp/podcasts-no-audio-13GB/topic_task/query_embedding
 query_embed_dir: ../../data/yamnet/query_embedding
+sent_topic_embed_dir: ../../data/yamnet/sent_topic_embedding
+
 summary_embed_dir: ../../data/yamnet/summary_embedding
 sent_summary_embed_dir: ../../data/yamnet/sent_summaries_embedding
 # features_output_path

@@ -437,8 +437,6 @@ class summaryEvaluator(object):
         sent_summ_texts = []
         sent_summ_audio_encodings = []
         
-        delcount =0
-        
         for epi, summ_text in sent_summary_dict.items():
             audio_embeds = sent_summary_audio_dict[epi]
 
