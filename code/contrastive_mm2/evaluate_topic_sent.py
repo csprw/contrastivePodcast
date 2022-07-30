@@ -149,6 +149,8 @@ class Evaluator(object):
     @torch.no_grad()  
     def encode_testset_new(self, max_samples):
         accs = []
+        audio_accs = []
+        text_accs = []
         text_encoding = np.zeros((max_samples, self.embed_dim)) 
         audio_encoding = np.zeros((max_samples, self.embed_dim)) 
         
@@ -197,6 +199,8 @@ class Evaluator(object):
                 audio_acc = torch.eq(torch.tensor(audio_probs.argmax(axis=0)), ground_truth).sum() / ground_truth.shape[0]
                 text_acc = torch.eq(torch.tensor(text_probs.argmax(axis=0)), ground_truth).sum() / ground_truth.shape[0]
                 accs.append((audio_acc.item() + text_acc.item()) / 2)
+                audio_accs.append(audio_acc.item())
+                text_accs.append(text_acc.item())
 
             cur_idx = step * self.bs
             next_idx = cur_idx + len(targets)
@@ -221,6 +225,14 @@ class Evaluator(object):
             self.mean_acc = np.mean(accs)
             self.std_acc = np.std(accs)
             self.var_acc = np.var(accs)
+
+            self.audio_acc = np.mean(audio_accs)
+            self.std_audio_acc = np.std(audio_accs)
+            self.var_audio_acc = np.var(audio_accs)
+
+            self.text_acc = np.mean(text_accs)
+            self.std_text_acc = np.std(text_accs)
+            self.var_text_acc = np.var(text_accs)
 
     def encode_queries(self, topics_df, query_field='query'):
         
@@ -527,7 +539,7 @@ def main(args):
 
     # Calculate embeddings for test set
     evaluator = Evaluator(CFG, model_path, full_model, data_loader, 
-            save_intermediate=False, calc_acc = False)
+            save_intermediate=False, calc_acc = True)
     max_samples = evaluator.get_max_data()
 
     max_samples = 128 * 5
@@ -544,6 +556,20 @@ def main(args):
     results = topic_evaluation(evaluator)
 
     # save the results
+    results['mean_acc'] = evaluator.mean_acc
+    results['std_acc'] = evaluator.std_acc
+    results['var_acc'] = evaluator.var_acc
+
+    results['audio_acc'] = evaluator.audio_acc
+    results['std_audio_acc'] = evaluator.std_audio_acc
+    results['var_acc'] = evaluator.var_audio_acc
+
+    results['text_acc'] = evaluator.text_acc
+    results['std_text_acc'] = evaluator.std_text_acc
+    results['var_text_acc'] = evaluator.var_text_acc
+
+
+
     json_out = str(Path(args.model_weights_path).parents[1])
     with open(os.path.join(json_out, 'topic_sent_results.json'), 'w') as fp:
         json.dump(results, fp, indent=4)

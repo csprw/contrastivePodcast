@@ -24,15 +24,15 @@ echo "STARTING 1"
 
 
 echo "STARTING 2"
-python evaluate_summary.py --model_weights_path logs/5m-mlp_2022-07-21_07-57-47/output/full_model_weights.pt
+# python evaluate_summary.py --model_weights_path logs/5m-mlp_2022-07-21_07-57-47/output/full_model_weights.pt
 
 
 echo "STARTING 3"
-python evaluate_summary.py  --model_weights_path logs/5m-sph_2022-07-20_07-33-19/output/full_model_weights.pt
+# python evaluate_summary.py  --model_weights_path logs/5m-sph_2022-07-20_07-33-19/output/full_model_weights.pt
 
 
 echo "STARTING 11"
-python evaluate_summary.py  --model_weights_path logs/15m-gru_v2_2022-07-16_17-00-32/output/full_model_weights.pt
+# python evaluate_summary.py  --model_weights_path logs/15m-gru_v2_2022-07-16_17-00-32/output/full_model_weights.pt
 
 
 echo "STARTING 12"
