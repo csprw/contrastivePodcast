@@ -213,8 +213,8 @@ class Evaluator(object):
           
         self.all_sents = all_sents
         self.all_targs = all_targs
-        self.text_encoding = torch.Tensor(text_encoding)
-        self.audio_encoding = torch.Tensor(audio_encoding)
+        self.text_encoding = torch.tensor(text_encoding #hiero
+        self.audio_encoding = audio_encoding
 
         if self.calc_acc:
             print("Final accuracy: ", np.mean(accs))
@@ -373,17 +373,17 @@ def topic_evaluation(evaluator):
     results = defaultdict(list)
     for topic_tup in topic_encodings:
         
-
         for tup in epi_encodings:
-            gc.collect()
-            print("[del] collected memory")
+            # gc.collect()
+            # print("[del] collected memory")
             name = topic_tup[1] + "2" + tup[1]
             print("------- Results for: ", name)
             topic_encoding = topic_tup[0]
             epi_encoding = tup[0]
             
-            # print("[del] before previous error: ", type(topic_encoding), type(epi_encoding))
-            # print("[del2]:  ", topic_encoding.dtype, epi_encoding.dtype)
+            print("[del] before previous error: ", type(topic_encoding), type(epi_encoding))
+            print("[del2]:  ", topic_encoding.dtype, epi_encoding.dtype)
+            exit(1)
             
             similarity = (100.0 * topic_encoding @ epi_encoding.T).softmax(dim=-1)
             # print(type(similarity))
@@ -442,6 +442,7 @@ def topic_evaluation(evaluator):
                 confidence = []
                 total_indices = []
                 idxs= []
+
             print("[del] done")
             print("Mean position: {} (std: {}) \t mrr: {} ".format(np.mean(rank), np.std(rank), np.mean(mrr)))
             results['names'].append(name)
@@ -522,8 +523,8 @@ def main(args):
             save_intermediate=False, calc_acc = False)
     max_samples = evaluator.get_max_data()
 
-    # max_samples = 128 * 5
-    # print("deleteeeee")
+    max_samples = 128 * 5
+    print("deleteeeee")
 
     evaluator.encode_testset_new(max_samples) 
     # evaluator.encode_queries(topics_df, query_field='query')
