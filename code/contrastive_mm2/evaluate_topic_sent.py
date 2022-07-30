@@ -217,8 +217,10 @@ class Evaluator(object):
           
         self.all_sents = all_sents
         self.all_targs = all_targs
-        self.text_encoding = torch.tensor(text_encoding, dtype=torch.float16)
-        self.audio_encoding = torch.tensor(audio_encoding, dtype=torch.float16)
+        # self.text_encoding = torch.tensor(text_encoding, dtype=torch.float16)
+        # self.audio_encoding = torch.tensor(audio_encoding, dtype=torch.float16)
+        self.text_encoding = torch.tensor(text_encoding, dtype=torch.float32)
+        self.audio_encoding = torch.tensor(audio_encoding, dtype=torch.float32)
 
         if self.calc_acc:
             print("Final accuracy: ", np.mean(accs))
@@ -303,9 +305,12 @@ class Evaluator(object):
 
         elif field == 'description':
             self.sent_topic_descr_targets = targets
-            self.sent_topic_descr_text_encoding = torch.stack(text_encodings).type(torch.float16)
+            # self.sent_topic_descr_text_encoding = torch.stack(text_encodings).type(torch.float16)
+            self.sent_topic_descr_text_encoding = torch.stack(text_encodings).type(torch.float32)
             self.sent_topic_descr_texts = texts
-            self.sent_topic_descr_audio_encoding = torch.vstack(audio_encodings).type(torch.float16)
+            # self.sent_topic_descr_audio_encoding = torch.vstack(audio_encodings).type(torch.float16)
+            self.sent_topic_descr_audio_encoding = torch.vstack(audio_encodings).type(torch.float32)
+
         print("Done eoncoding dexr, field: ", field)
         
     def add_query_labels(self, topics_df, val_df):
@@ -380,7 +385,8 @@ def topic_evaluation(evaluator):
     epi_encodings = [(evaluator.text_encoding, 'text'),
                     (evaluator.audio_encoding, 'audio')]
 
-    k = evaluator.text_encoding.shape[0]
+    # k = evaluator.text_encoding.shape[0]
+    k = 5000
     results = defaultdict(list)
 
     for topic_tup in topic_encodings:
@@ -397,23 +403,35 @@ def topic_evaluation(evaluator):
             # print("[del2]:  ", topic_encoding.dtype, epi_encoding.dtype)
             print(epi_encoding.shape)
 
-            bound = int(epi_encoding.shape[0] / 2)
-            print("Will do sim 1: bound=", bound)
-            sim1 = (100.0 * topic_encoding @ epi_encoding[:bound].T)
-            print("Will do sim 2: bound=", bound)
-            sim2 = (100.0 * topic_encoding @ epi_encoding[bound:].T)
-            print("both done: ", sim1.shape, sim2.shape)
+            bound = int(epi_encoding.shape[0] / 8)
+            start_bound = 0
+            cur_bound = bound
+            sims = []
+            for i in range(7):
+                print("sim i: ", i, cur_bound)
+                sim = (100.0 * topic_encoding @ epi_encoding[start_bound:cur_bound].T)
+                start_bound = cur_bound
+                cur_bound += bound
+                sims.append(sim)
 
-            # similarity = (100.0 * topic_encoding @ epi_encoding.T)
+            sim = (100.0 * topic_encoding @ epi_encoding[start_bound:cur_bound].T)
+            sims.append(sim)
+
+            # print("Will do sim 1: bound=", bound)
+            # sim1 = (100.0 * topic_encoding @ epi_encoding[:bound].T)
+            # print("Will do sim 2: bound=", bound)
+            # sim2 = (100.0 * topic_encoding @ epi_encoding[bound:].T)
+            # print("both done: ", sim1.shape, sim2.shape)
+
+            similarity = (100.0 * topic_encoding @ epi_encoding.T)
             # print(sim1.shape, sim2.shape)
             # print(similarity.shape)
 
-            similarity_merged = torch.hstack((sim1, sim2))
-            print("merged: ", similarity_merged.shape)
-
+            similarity = torch.hstack(sims)
+            del sims
             
             print("[del] similairty created!")
-            similarity = similarity_merged.float()
+            # similarity = similarity_merged
             print("[del] similairty dtype changed! ", similarity.dtype)
             similarity = similarity.softmax(dim=-1)
             print("[del] similairty softmax taken!!")
@@ -459,7 +477,6 @@ def topic_evaluation(evaluator):
                 if len(ranks) > 0:
                     best_estimation = np.min(ranks)
                     rank.append(best_estimation)
-                
                     mrr.append(1 / (best_estimation + 1))
                     
                     print("++ Estimated position: ", best_estimation, confidence[sorted_inds[0]])
@@ -485,8 +502,7 @@ def topic_evaluation(evaluator):
             results['mrrs_std'].append(np.var(mrr))
 
             del similarity
-            del sim1
-            del sim2
+
     return results
 
 def main(args):
@@ -555,9 +571,11 @@ def main(args):
     evaluator = Evaluator(CFG, model_path, full_model, data_loader, 
             save_intermediate=False, calc_acc = True)
     max_samples = evaluator.get_max_data()
-
+    
     # max_samples = 128 * 10
     # print("deleteeeee")
+    max_samples = 1030752  # max is 1530752
+    print("delete 2!")
 
     evaluator.encode_testset_new(max_samples) 
     # evaluator.encode_queries(topics_df, query_field='query')
