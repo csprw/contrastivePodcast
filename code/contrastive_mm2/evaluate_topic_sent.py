@@ -213,8 +213,8 @@ class Evaluator(object):
           
         self.all_sents = all_sents
         self.all_targs = all_targs
-        self.text_encoding = torch.tensor(text_encoding #hiero
-        self.audio_encoding = audio_encoding
+        self.text_encoding = torch.tensor(text_encoding, dtype=torch.float16)
+        self.audio_encoding = torch.tensor(audio_encoding, dtype=torch.float16)
 
         if self.calc_acc:
             print("Final accuracy: ", np.mean(accs))
@@ -292,9 +292,9 @@ class Evaluator(object):
 
         elif field == 'description':
             self.sent_topic_descr_targets = targets
-            self.sent_topic_descr_text_encoding = torch.stack(text_encodings)
+            self.sent_topic_descr_text_encoding = torch.stack(text_encodings).type(torch.float16)
             self.sent_topic_descr_texts = texts
-            self.sent_topic_descr_audio_encoding = torch.vstack(audio_encodings)
+            self.sent_topic_descr_audio_encoding = torch.vstack(audio_encodings).type(torch.float16)
         print("Done eoncoding dexr, field: ", field)
         
     def add_query_labels(self, topics_df, val_df):
@@ -381,11 +381,18 @@ def topic_evaluation(evaluator):
             topic_encoding = topic_tup[0]
             epi_encoding = tup[0]
             
-            print("[del] before previous error: ", type(topic_encoding), type(epi_encoding))
-            print("[del2]:  ", topic_encoding.dtype, epi_encoding.dtype)
-            exit(1)
+            # print("[del] before previous error: ", type(topic_encoding), type(epi_encoding))
+            # print("[del2]:  ", topic_encoding.dtype, epi_encoding.dtype)
+            # print(epi_encoding[0][0])
+            # exit(1)
             
-            similarity = (100.0 * topic_encoding @ epi_encoding.T).softmax(dim=-1)
+            similarity = (100.0 * topic_encoding @ epi_encoding.T)
+            
+            print("[del] similairty created!")
+            similarity = similarity.float()
+            print("[del] similairty dtype changed! ", similarity.dtype)
+            similarity = similarity.softmax(dim=-1)
+            print("[del] similairty softmax taken!!")
             # print(type(similarity))
             # exit(1)
             rank = []        
