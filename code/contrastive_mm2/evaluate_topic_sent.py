@@ -301,7 +301,6 @@ class Evaluator(object):
             self.sent_topic_query_texts = texts
             self.sent_topic_query_audio_encoding = torch.vstack(audio_encodings)
 
-
         elif field == 'description':
             self.sent_topic_descr_targets = targets
             self.sent_topic_descr_text_encoding = torch.stack(text_encodings).type(torch.float16)
@@ -383,6 +382,7 @@ def topic_evaluation(evaluator):
 
     k = evaluator.text_encoding.shape[0]
     results = defaultdict(list)
+
     for topic_tup in topic_encodings:
         
         for tup in epi_encodings:
@@ -395,13 +395,25 @@ def topic_evaluation(evaluator):
             
             # print("[del] before previous error: ", type(topic_encoding), type(epi_encoding))
             # print("[del2]:  ", topic_encoding.dtype, epi_encoding.dtype)
-            # print(epi_encoding[0][0])
-            # exit(1)
-            
-            similarity = (100.0 * topic_encoding @ epi_encoding.T)
+            print(epi_encoding.shape)
+
+            bound = int(epi_encoding.shape[0] / 2)
+            print("Will do sim 1: bound=", bound)
+            sim1 = (100.0 * topic_encoding @ epi_encoding[:bound].T)
+            print("Will do sim 2: bound=", bound)
+            sim2 = (100.0 * topic_encoding @ epi_encoding[bound:].T)
+            print("both done: ", sim1.shape, sim2.shape)
+
+            # similarity = (100.0 * topic_encoding @ epi_encoding.T)
+            # print(sim1.shape, sim2.shape)
+            # print(similarity.shape)
+
+            similarity_merged = torch.hstack((sim1, sim2))
+            print("merged: ", similarity_merged.shape)
+
             
             print("[del] similairty created!")
-            similarity = similarity.float()
+            similarity = similarity_merged.float()
             print("[del] similairty dtype changed! ", similarity.dtype)
             similarity = similarity.softmax(dim=-1)
             print("[del] similairty softmax taken!!")
@@ -473,6 +485,8 @@ def topic_evaluation(evaluator):
             results['mrrs_std'].append(np.var(mrr))
 
             del similarity
+            del sim1
+            del sim2
     return results
 
 def main(args):
@@ -542,8 +556,8 @@ def main(args):
             save_intermediate=False, calc_acc = True)
     max_samples = evaluator.get_max_data()
 
-    # max_samples = 128 * 5
-    # print("deleteeeee")
+    max_samples = 128 * 10
+    print("deleteeeee")
 
     evaluator.encode_testset_new(max_samples) 
     # evaluator.encode_queries(topics_df, query_field='query')
