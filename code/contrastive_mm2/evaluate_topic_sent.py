@@ -575,7 +575,8 @@ def main(args):
     # max_samples = 128 * 10
     # print("deleteeeee")
     max_samples = 1030752  # max is 1530752
-    max_samples = 128 * 10000
+    # max_samples = 128 * 10000
+    max_samples = 128 * 11000
     print("delete 2!")
 
     evaluator.encode_testset_new(max_samples) 
