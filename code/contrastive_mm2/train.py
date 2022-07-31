@@ -156,21 +156,39 @@ class MMloader(object):
         print("[MMloader] val dataset loaded, length: ", len(self.val_dataset))
 
         if test_dataset_name == "sp_sample":
-            test_dataset = self.get_sp_dataset(CFG, directory=CFG.sp_sample_path,  traintest="test", load_full=self.load_full, device=self.device)
-            self.test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, drop_last=True) 
+            self.test_dataset = self.get_sp_dataset(CFG, directory=CFG.sp_sample_path,  traintest="test", load_full=self.load_full, device=self.device)
+            # self.test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, drop_last=True) 
         elif test_dataset_name == "sp":
-            test_dataset = self.get_sp_dataset(CFG, directory=CFG.sp_path,  traintest="test",  load_full=self.load_full, device=self.device)
-            self.test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, drop_last=True)
+            self.test_dataset = self.get_sp_dataset(CFG, directory=CFG.sp_path,  traintest="test",  load_full=self.load_full, device=self.device)
+            # self.test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, drop_last=True)
         else:
             raise Exception('Unknown dataset')
-        self.test_dataset = test_dataset
-        self.test_loader.collate_fn = self.test_dataset.collate_fn
-        self.test_loader.collate_fn = self.test_dataset.collate_fn
+
+        if CFG.weak_shuffle:
+            self.test_loader = DataLoader(
+                self.test_dataset, batch_size=None,  # must be disabled when using samplers
+                sampler=BatchSampler(RandomBatchSampler(self.test_dataset, batch_size, shuffle=False), batch_size=batch_size, drop_last=True)
+            )
+        else:
+            self.test_loader = DataLoader(self.test_dataset, batch_size=batch_size, shuffle=False, drop_last=True)
+            self.test_dataset = self.test_dataset
+            self.test_loader.collate_fn = self.test_dataset.collate_fn
+        print("[MMloader] test dataset loaded, length: ", len(self.test_dataset))
+        # self.test_dataset = test_dataset
+        # self.test_loader.collate_fn = self.test_dataset.collate_fn
         
-        print("[MMloader] test dataset loaded, length: ", len(test_dataset))
+        # print("[MMloader] test dataset loaded, length: ", len(self.test_dataset))
 
     def get_sp_dataset(self, CFG, directory, traintest="train", load_full=False, device=None):
-        if CFG.weak_shuffle and not traintest=="test":
+        # if CFG.weak_shuffle and not traintest=="test":
+        #     dataset = spDatasetWeakShuffle(CFG, directory=directory, traintest=traintest,  load_full=load_full, device=device)
+        # else:
+        #     dataset = spDatasetNoMemory(CFG, directory=directory, traintest=traintest,  load_full=load_full, device=device)
+
+        if CFG.weak_shuffle:
+
+            if traintest=='test':
+                print("[del] ------------NEW TRYALL")
             dataset = spDatasetWeakShuffle(CFG, directory=directory, traintest=traintest,  load_full=load_full, device=device)
         else:
             dataset = spDatasetNoMemory(CFG, directory=directory, traintest=traintest,  load_full=load_full, device=device)
@@ -393,8 +411,74 @@ class spDatasetWeakShuffle(datautil.Dataset):
     def __getitem__(self, index):
         """ Return one item from the df """
         if self.traintest == 'test':
-            print("Weak shuffling not supported for test set")
-            raise NotImplementedError
+            # print("Weak shuffling not supported for test set")
+
+            if self.load_full:
+                raise NotImplementedError
+            else:
+                text_embeds = []
+                audio_embeds = []
+                full_text = []
+                lengths  = []
+                targets = []
+                last_idx = self.last_idx
+                # print("[del4] got index: ", index)
+                for enum, i in enumerate(index):
+                    h5py_idx, sent_idx = self.idx2file[i]
+
+                    if h5py_idx != last_idx:
+                        # Clear memory
+                        self.f.close()
+                        del self.mean_embeds
+                        gc.collect()
+
+                        h5py_file = self.h5py_idx2file[h5py_idx]
+                        self.f = h5py.File(h5py_file, 'r')
+
+                        print("[del4 --TEST--] loaded new h5py file: ", h5py_idx, h5py_file)
+                        self.mean_embeds = torch.Tensor(np.array(self.f['mean_embeddings']))
+
+                    sent = self.f['sentences'][sent_idx].decode("utf-8")
+                    target = self.f['seg_ts'][sent_idx].decode("utf-8") 
+                    mean_embeds = self.mean_embeds[sent_idx]
+
+                    full_text.append(sent)
+                    text_embeds.append(sent)
+                    audio_embeds.append(mean_embeds)
+                    targets.append(target)
+                    last_idx = h5py_idx
+
+                self.last_idx = last_idx
+
+                # Combine audio embeddings to a Tensor
+                audio_embeds = torch.stack(audio_embeds).to(self.device)
+
+                # Tokenize text
+                max_length = 32 # TODO: is dit nodig?
+                text_embeds = self.tokenizer(
+                    text_embeds, padding=True, truncation=True, max_length=max_length, return_tensors='pt'
+                ).to(self.device)
+
+                # target = torch.tensor(targets)
+                # sample = (text_embeds, audio_embeds, targets)
+
+                # text_embeds, audio_embeds, lengths, targs, full_text
+                sample = (text_embeds, audio_embeds, lengths, targets, full_text)
+                # return text_embeds, audio_embeds, lengths
+
+                    # h5py_idx, sent_idx = self.idx2file[index]
+                    # h5py_file = self.h5py_idx2file[h5py_idx]
+
+                    # f = h5py.File(h5py_file, 'r')
+                    # sent = f['sentences'][sent_idx].decode("utf-8") 
+                    # target = f['seg_ts'][sent_idx].decode("utf-8") 
+                    # mean_embeds = torch.Tensor(f['mean_embeddings'][sent_idx])
+                    # sample = (sent, mean_embeds, target)
+                    # f.close()
+                
+                return sample
+
+
 
         elif self.load_full:
             text_embeds = []
@@ -412,9 +496,7 @@ class spDatasetWeakShuffle(datautil.Dataset):
 
                     h5py_file = self.h5py_idx2file[h5py_idx]
                     self.f = h5py.File(h5py_file, 'r')
-                    # print("[del3] loaded new h5py file: ", h5py_idx, h5py_file)
-                
-                # sent = f['sentences'][sent_idx]
+
                 sent = self.f['sentences'][sent_idx].decode("utf-8")
                 full_embeds = torch.Tensor(np.array(self.f[str(sent_idx)]))
 
@@ -489,18 +571,18 @@ class RandomBatchSampler(Sampler):
     :type batch_size: int
     :returns: generator object of shuffled batch indices
     """
-    def __init__(self, dataset, batch_size):
+    def __init__(self, dataset, batch_size, shuffle=True):
         self.batch_size = batch_size
         self.dataset_length = len(dataset)
         self.n_batches = self.dataset_length / self.batch_size
         # self.batch_ids = torch.randperm(int(self.n_batches)) # sorted
 
-        # Not shuffled:
-        #self.batch_ids = torch.arange(int(self.n_batches))
-
-        # Shuffled:
-        self.batch_ids = self.shuffle_within_file(dataset)
-
+        if shuffle:
+            # Shuffled:
+            self.batch_ids = self.shuffle_within_file(dataset)
+        else:
+            # Not shuffled:
+            self.batch_ids = torch.arange(int(self.n_batches))
 
     def shuffle_within_file(self, dataset):
         batch_ids = np.arange(int(self.n_batches))

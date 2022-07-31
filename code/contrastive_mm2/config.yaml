@@ -50,6 +50,7 @@ summary_embed_dir: ../../data/yamnet/summary_embedding
 sent_summary_embed_dir: ../../data/yamnet/sent_summaries_embedding
 
 sent_topic_descr_embed_dir: ../../data/yamnet/sent_topic_descr_embedding
+sent_topic_query_embed_dir: ../../data/yamnet/sent_topic_query_embedding
 ##################################
 #### Search Configuration ####
 # Elasticsearch cluster UCL

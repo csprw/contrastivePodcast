@@ -96,6 +96,8 @@ class Evaluator(object):
         self.tokenizer =  data_loader.test_dataset.tokenizer
         self.test_loader = data_loader.test_loader
 
+        self.test_dataset = data_loader.test_dataset
+
         self.audio_proj_head = CFG.audio_proj_head
         self.fixed_scale = CFG.scale
         
@@ -111,7 +113,8 @@ class Evaluator(object):
         
     def get_max_data(self):
         "returns max number of sentences to encode"
-        max_samples =  len(self.test_loader) * self.bs
+        # max_samples =  len(self.test_dataset) 
+        max_samples = 128  * math.floor(len(self.test_dataset)/128)
         return max_samples
 
     def audio_to_embed(self, yamnets, query_lengths):
@@ -148,6 +151,7 @@ class Evaluator(object):
 
     @torch.no_grad()  
     def encode_testset_new(self, max_samples):
+        max_steps = int(max_samples/128)
         accs = []
         audio_accs = []
         text_accs = []
@@ -157,12 +161,13 @@ class Evaluator(object):
         all_sents = np.zeros(max_samples, dtype=object)
         all_targs = np.zeros(max_samples, dtype=object)
         
-        for step, (tok_sentences, audio_features, seq_len, targets, sents) in enumerate(self.test_loader):
+        for step, (tok_sentences, audio_features, seq_len, targets, sents) in enumerate(iter(self.test_loader)):
             
             #my_tmp_file = os.path.join("tmpv5", targets[0] +'_'+ str(step)+".hdf5") # for new datasets change this!
             my_tmp_file = os.path.join(self.topic_output, str(step)+".hdf5")
             
             if Path(my_tmp_file).is_file():
+                raise NotImplemented
                 print("load it from file: ", step, len(self.test_loader))
                 f1 = h5py.File(my_tmp_file, "r")
                 text_batch = torch.tensor(np.array(f1['text_batch']))
@@ -170,7 +175,7 @@ class Evaluator(object):
                 f1.close()
                 
             else:
-                print("Calculating: ", step, len(self.test_loader), my_tmp_file)
+                print("Calculating: ", step, max_steps, my_tmp_file)
                 tok_sentences = tok_sentences.to(self.device)
                 audio_features = audio_features.to(self.device)  
 
@@ -179,15 +184,6 @@ class Evaluator(object):
 
                 audio_batch = torch.nn.functional.normalize(reps_audio) 
                 text_batch = torch.nn.functional.normalize(reps_text) 
-
-
-                if self.save_intermediate:
-                    f1 = h5py.File(my_tmp_file, "w")
-                    f1.create_dataset('text_batch', data=text_batch.cpu())
-                    f1.create_dataset('audio_batch', data=audio_batch.cpu())
-                    f1.create_dataset('targets', data=np.array(targets, dtype=h5py.special_dtype(vlen=str)))
-                    f1.create_dataset('sents', data=np.array(sents, dtype=h5py.special_dtype(vlen=str)))
-                    f1.close()
 
             # calculate accuracy
             if self.calc_acc:
@@ -203,6 +199,7 @@ class Evaluator(object):
                 text_accs.append(text_acc.item())
 
             cur_idx = step * self.bs
+            # print(cur_idx)
             next_idx = cur_idx + len(targets)
             text_encoding[cur_idx:next_idx] = text_batch.cpu().numpy()
             audio_encoding[cur_idx:next_idx] = audio_batch.cpu().numpy()
@@ -386,7 +383,7 @@ def topic_evaluation(evaluator):
                     (evaluator.audio_encoding, 'audio')]
 
     # k = evaluator.text_encoding.shape[0]
-    k = 5000
+    k = min(5000, evaluator.text_encoding.shape[0])
     results = defaultdict(list)
 
     for topic_tup in topic_encodings:
@@ -572,7 +569,7 @@ def main(args):
             save_intermediate=False, calc_acc = True)
     max_samples = evaluator.get_max_data()
     
-    # max_samples = 128 * 10
+    # max_samples = 128 * 2
     # print("deleteeeee")
     # max_samples = 1030752  # max is 1530752
     # # max_samples = 128 * 10000
