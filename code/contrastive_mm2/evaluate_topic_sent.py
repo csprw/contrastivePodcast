@@ -398,7 +398,7 @@ def topic_evaluation(evaluator):
             
             # print("[del] before previous error: ", type(topic_encoding), type(epi_encoding))
             # print("[del2]:  ", topic_encoding.dtype, epi_encoding.dtype)
-            print(epi_encoding.shape)
+            # print(epi_encoding.shape)
 
             bound = int(epi_encoding.shape[0] / 8)
             start_bound = 0
@@ -513,12 +513,10 @@ def main(args):
         sent_query_dict = json.load(f)
     with open(sent_descr_output_path, 'r') as f:
         sent_descr_dict = json.load(f)
-    print(sent_descr_dict.keys())
     sent_descr_audio_dict = get_sent_audio(conf.sent_topic_descr_embed_dir)
 
     # Reading the metadata.
     metadata_testset, topics_df, topics_df_targets = read_metadata_subset(conf, traintest='test')
-    print(len(metadata_testset))
 
     # Remove duplicate rows
     metadata_testset = metadata_testset.drop_duplicates(subset=['episode_filename_prefix']).sort_values('episode_filename_prefix')
@@ -581,8 +579,8 @@ def main(args):
     # print("delete 2!")
 
     evaluator.encode_testset_new(max_samples) 
-    # evaluator.encode_queries(topics_df, query_field='query')
-    # evaluator.encode_queries(topics_df, query_field='description')
+    evaluator.encode_queries(topics_df, query_field='query')
+    evaluator.encode_queries(topics_df, query_field='description')
     evaluator.encode_sent_descr(topics_df, field='description', sent_dict=sent_descr_dict, audio_dict=sent_descr_audio_dict)
     # evaluator.encode_sent_descr(topics_df, field='query', sent_dict=sent_query_dict, audio_dict=sent_query_audio_dict)
 
@@ -602,8 +600,6 @@ def main(args):
     results['text_acc'] = evaluator.text_acc
     results['std_text_acc'] = evaluator.std_text_acc
     results['var_text_acc'] = evaluator.var_text_acc
-
-
 
     json_out = str(Path(args.model_weights_path).parents[1])
     with open(os.path.join(json_out, 'topic_sent_results.json'), 'w') as fp:
