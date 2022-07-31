@@ -29,7 +29,7 @@ echo "STARTING 14"
 python evaluate_topic_sent.py --calc_acc --model_weights_path logs/15m-sph_2022-07-19_18-10-51/output/full_model_weights.pt
 
 
-echo "STARTING 3"
+echo "STARTING 3 - 31 juli aangezet als eerste"
 python evaluate_topic_sent.py --calc_acc --model_weights_path logs/5m-sph_2022-07-20_07-33-19/output/full_model_weights.pt
 
 

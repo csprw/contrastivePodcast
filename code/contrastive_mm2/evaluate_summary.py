@@ -38,6 +38,20 @@ sys.path.append('../scripts/')
 from prepare_index_sentencelevel2 import read_metadata_subset
 from train import Cfg, mmModule
 
+
+# TODO: to utils
+def randomize_model(model):
+    for module_ in model.named_modules(): 
+        if isinstance(module_[1],(torch.nn.Linear, torch.nn.Embedding)):
+            module_[1].weight.data.normal_(mean=0.0, std=1.0)
+        elif isinstance(module_[1], torch.nn.LayerNorm):
+            module_[1].bias.data.zero_()
+            module_[1].weight.data.fill_(1.0)
+        if isinstance(module_[1], torch.nn.Linear) and module_[1].bias is not None:
+            module_[1].bias.data.zero_()
+    return model
+
+
 class MMloader_summary(object):
     """
     Module that load datasets. 
@@ -596,7 +610,9 @@ def main(args):
 
     # Load the model
     full_model = mmModule(fullcfg)
-    full_model.load_state_dict(torch.load(model_weights_path,  map_location=fullcfg.device))              
+    full_model.load_state_dict(torch.load(model_weights_path,  map_location=fullcfg.device))    
+    if args.create_random:
+        randomize_model(full_model)          
     full_model = full_model.to(fullcfg.device)     
     full_model.eval()
 
@@ -638,6 +654,9 @@ if __name__ == "__main__":
 
     parser.add_argument('--model_weights_path', type=str, default="./logs/30m-mlp_2022-07-05_10-54-42/output/full_model_weights.pt",
                         help='Folder where model weights are saved.')
+
+    parser.add_argument('--create_random', action='store_true', default=False,
+                    help='If set to true, the model is initialized using random weights.')
     args, unparsed = parser.parse_known_args()
 
     main(args)
