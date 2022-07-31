@@ -559,7 +559,8 @@ def main(args):
     full_model = mmModule(CFG)
     full_model.load_state_dict(torch.load(model_weights_path,  map_location=CFG.device))   
     # To create random results:
-    # full_model = randomize_model(full_model) # REMOVE THIS!!
+    if args.create_random:
+        full_model = randomize_model(full_model) # REMOVE THIS!!
 
     full_model = full_model.to(CFG.device)     
     full_model.eval()
@@ -620,7 +621,7 @@ if __name__ == "__main__":
     # Parse flags in command line arguments
     parser = ArgumentParser()
 
-    parser.add_argument('--model_weights_path', type=str, default="logs/30m-gru_v2_2022-07-06_07-25-51/output/full_model_weights.pt",
+    parser.add_argument('--model_weights_path', type=str, default="logs/random_model/output/full_model_weights.pt",
                         help='Folder where model weights are saved.')
     parser.add_argument('--batch_size', type=int, default=128,
                         help='Batch size to use.')
@@ -628,6 +629,8 @@ if __name__ == "__main__":
                     help='Whether to save intermediate embeddings.')
     parser.add_argument('--calc_acc', action='store_true', default=False,
                     help='Whether to output accuracy.')
+    parser.add_argument('--create_random', action='store_true', default=False,
+                    help='If set to true, the model is initialized using random weights.')
     args, unparsed = parser.parse_known_args()
 
     main(args)

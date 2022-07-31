@@ -1,5 +1,5 @@
 """
-Contrastive multimodal learning: Evaluation
+Contrastive multimodal learning: Evaluation summaries
 Author: Casper Wortmann
 Usage: python evaluate_summary.py
 """
