@@ -557,10 +557,13 @@ def main(args):
 
     # Load the model
     full_model = mmModule(CFG)
-    full_model.load_state_dict(torch.load(model_weights_path,  map_location=CFG.device))   
+      
     # To create random results:
     if args.create_random:
-        full_model = randomize_model(full_model) # REMOVE THIS!!
+        full_model = randomize_model(full_model) 
+        print("---------------------------------------------------DEL random ")
+    else:
+        full_model.load_state_dict(torch.load(model_weights_path,  map_location=CFG.device)) 
 
     full_model = full_model.to(CFG.device)     
     full_model.eval()
