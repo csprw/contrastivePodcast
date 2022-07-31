@@ -155,8 +155,8 @@ def main(args):
             save_intermediate=False, calc_acc = True)
     max_samples = evaluator.get_max_data()
 
-    print(max_samples)
-    max_samples = 128* 4
+    # print(max_samples)
+    # max_samples = 128* 4
 
     evaluator.encode_testset_new(max_samples) 
     evaluator.encode_sent_descr(topics_df, field='query', sent_dict=sent_query_dict, audio_dict=sent_query_audio_dict)
