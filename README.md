@@ -25,7 +25,7 @@ This repository contains a framework to learn multi-modal podcast representation
 python train.py --args
 ```
 
-## 1. Setting up environment ###
+## Getting started 
 ### 1a. Set up your own python environment.
 > The following package versions are used:
 - Python 3.9.7
