@@ -4,11 +4,11 @@
 */logs/*
 
 # Files to ignore, regardless of where they are
-# NOTE: remove in final version
 **/config.yaml
 **/config*
 
-code/scripts/config.yaml
+src/scripts/config.yaml
+src/old_del/*
 
 # These files are usually too big
 # *.pkl
