@@ -48,7 +48,7 @@ conda env create -f environment.yml
 ### 3. Preprocess data
 1. Follow all steps in src/scripts/ to start preprocess all data. 
 
-### 4. Run the training fild:
+### 4. Run the training file:
 ```
 python train.py --args
 ```
