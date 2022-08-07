@@ -7,8 +7,10 @@
 **/config.yaml
 **/config*
 
+src/scripts/*
 src/scripts/config.yaml
 src/old_del/*
+src/notebooks/*
 
 # These files are usually too big
 # *.pkl
