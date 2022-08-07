@@ -18,7 +18,7 @@ from datetime import datetime
 from dacite import from_dict
 
 ###############################################################################
-# Utils for train.py
+# Training utils. 
 def set_seed(args):
     """
     Sets the seed for the current run.
@@ -117,12 +117,12 @@ def to_plot(filename, column='accuracy', title="Val accuracy"):
 
 ###############################################################################
 # preprocessing utils
-
 def read_metadata_subset(conf, traintest='test'):
     """
     Read the subset of metadata which we will use for the topic task
     """
-    metadata = load_metadata(conf.dataset_path)
+    metadata_path = os.path.join(conf.dataset_path, "metadata.tsv")
+    metadata  = pd.read_csv(metadata_path, delimiter="\t")
     print("[utils] metadata loaded ", len(metadata))
 
     target_dir = os.path.join(conf.dataset_path, 'TREC_topic')
@@ -222,16 +222,14 @@ def preprocess(text):
     processed = [[j.lower() for j in i] for i in tokenized_corpus]
     return processed
 
-################
-#### Code from https://github.com/trecpodcasts/podcast-audio-feature-extraction.git
-def load_metadata(dataset_path):
-    """Load the Spotify podcast dataset metadata."""
-    return pd.read_csv(dataset_path + "metadata.tsv", delimiter="\t")
 
 def load_transcript(path):
     """
-    Note: function from []
-    Load a python dictionary with the .json transcript.
+    Loads a transcript from the SP dataset.
+    Input: 
+        path: path to a transcript .json file
+    output:
+        transcript: the corresponding transcript as dicitonary. 
     """
     with open(path, "r") as file:
         transcript = json.load(file)
@@ -239,13 +237,17 @@ def load_transcript(path):
     
 def extract_transcript(transcript_json, yamnet_embedding):
     '''
-    Extracts sentences and corresponding timestamps from a transcript.
+    Extracts sentences and corresponding timestamps from a transcript, 
+        and returns the corresopnding yamnet embeddings. 
     Input: 
-        Json file containing a podcast transcript
+        transcript_json: Json file containing a podcast transcript
+        yamnet_embedding: The precomputed yamnet embedding. 
     Output:
         sentences: a list of sentences
         timestamps: a list of tuples [(starttime, endtime)]
+        segment_timestamps: the timestamps per segment
         mean_embeddings: the mean of the yamnet embeddings inbetween (starttime, endtime)
+        full_embeddings: all yamnet embeddings inbetween (starttime, endtime)
     '''
     sentences = []
     timestamps = []
