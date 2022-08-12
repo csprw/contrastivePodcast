@@ -11,6 +11,7 @@ src/scripts_del/*
 src/scripts/config.yaml
 src/old_del/*
 src/notebooks/data_analysis/*
+src/notebooks/plots/*
 
 # These files are usually too big
 # *.pkl
