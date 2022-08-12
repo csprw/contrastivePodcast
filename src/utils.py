@@ -287,3 +287,30 @@ def extract_transcript(transcript_json, yamnet_embedding):
                 full_embeddings.append(torch.tensor(full_embedding.values))
     assert len(sentences) == len(timestamps) == len(mean_embeddings)
     return sentences, timestamps, segment_timestamps, mean_embeddings, full_embeddings
+
+def find_paths(metadata, base_folder, file_extension):
+    """
+    Finds the filepaths in base_folder with extension file_extension
+    Code taken from: https://github.com/trecpodcasts/podcast-audio-feature-extraction
+    """
+    paths = []
+    for i in range(len(metadata)):
+        relative_path = relative_file_path(
+            metadata.show_filename_prefix.iloc[i],
+            metadata.episode_filename_prefix.iloc[i],
+        )
+        path = os.path.join(base_folder, relative_path + file_extension)
+        paths.append(path)
+    return paths
+
+def relative_file_path(show_filename_prefix, episode_filename_prefix):
+    """
+    Return the relative filepath based on the episode metadata.
+    Code taken from: https://github.com/trecpodcasts/podcast-audio-feature-extraction
+    """
+    return os.path.join(
+        show_filename_prefix[5].upper(),
+        show_filename_prefix[6].upper(),
+        show_filename_prefix,
+        episode_filename_prefix,
+    )

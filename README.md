@@ -27,7 +27,7 @@ python train.py --args
 
 ## Getting started 
 ### 1a. Set up your own python environment.
-> The following package versions are used:
+###### The following package versions are used:
 - Python 3.9.7
 - PyTorch 1.11.0
 - pandas 1.3.4
@@ -36,7 +36,7 @@ python train.py --args
 - h5py 3.6.0
 
 ### 1b. Or clone our conda environment.
-> Create conda environment from .yml:
+###### Create conda environment from .yml:
 ```
 conda env create -f environment.yml
 ```

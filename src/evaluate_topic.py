@@ -11,12 +11,13 @@ from pathlib import Path
 import math
 import pandas as pd
 import numpy as np
+import glob
+
 from collections import defaultdict
 from argparse import ArgumentParser
 from dacite import from_dict
 from omegaconf import OmegaConf
 from torch import topk
-
 import torch 
 from torch.nn.utils.rnn import pad_sequence, pad_packed_sequence, pack_padded_sequence
 from nltk import tokenize
@@ -24,8 +25,6 @@ from nltk import tokenize
 from utils import read_metadata_subset, randomize_model
 from train import mmModule, Cfg
 from train import MMloader
-
-conf = OmegaConf.load("./config.yaml")
 
 class Evaluator(object):
     def __init__(self, CFG, model_path, full_model, data_loader, calc_acc):
@@ -41,11 +40,11 @@ class Evaluator(object):
         self.tokenizer =  data_loader.test_dataset.tokenizer
         self.test_loader = data_loader.test_loader
         self.test_dataset = data_loader.test_dataset
-
+        self.CFG = CFG
         self.audio_proj_head = CFG.audio_proj_head
         self.fixed_scale = CFG.scale
         
-        self.test_dir = os.path.join(conf.sp_path, 'test')
+        self.test_dir = os.path.join(CFG.sp_path, 'test')
         self.calc_acc = calc_acc
         self.acc = 0.0
 
@@ -171,12 +170,12 @@ class Evaluator(object):
         """
         assert query_field in [ 'query', 'description']
         if query_field == 'query':
-            embed_path = conf.yamnet_query_embed_path
+            embed_path = self.CFG.yamnet_query_embed_path
             self.queries = topics_df[query_field].tolist()
             self.query_text_encoding = self.text_to_embed(self.queries)
         
         elif query_field == 'description':
-            embed_path = conf.yamnet_descr_embed_path
+            embed_path = self.CFG.yamnet_descr_embed_path
             self.query_descr = topics_df[query_field].tolist()
             self.descr_text_encoding = self.text_to_embed(self.query_descr)
         self.query_nums  = topics_df['num'].tolist()
@@ -246,6 +245,49 @@ class Evaluator(object):
         self.relevant_eps = relevant_eps
         
         self.episode_targets = episode_targets
+
+    def encode_queries_natural(self, query_field):
+        """
+        For the query-description similarity task
+        """
+        if query_field == 'descr':
+            # sent_topic_descr_embed_dir = '../../../data/yamnet/sent_topic_descr_embedding' # staat ook in config!
+            sent_topic_descr_embed_dir = self.CFG.sent_topic_descr_embed_dir
+            thedict = {}
+            field_files = sorted(glob.glob(os.path.join(sent_topic_descr_embed_dir,'*.h5')))
+            
+        if query_field == 'query':
+            # sent_topic_query_embed_dir = '../../../data/yamnet/sent_topic_query_embedding' # staat ook in config!
+            sent_topic_query_embed_dir = self.CFG.sent_topic_query_embed_dir
+            thedict = {}
+            field_files = sorted(glob.glob(os.path.join(sent_topic_query_embed_dir,'*.h5')))
+
+            
+        for embed_path in field_files:
+            inbetween_yamnet_embeds = pd.read_hdf(embed_path)
+            yamnet_len = len(inbetween_yamnet_embeds)
+
+            yamnet_embed = torch.Tensor(inbetween_yamnet_embeds.values)
+
+            audio_encoding = self.audio_to_embed([yamnet_embed], [yamnet_len]).cpu()
+
+            name = os.path.split(embed_path)[-1].split(".")[0]
+            thedict[name] = audio_encoding
+
+        if query_field == 'descr':
+            self.embed_descr_natural = thedict
+            print("Descr natural encoded!")
+        elif query_field == 'query':
+            self.embed_query_natural = thedict
+            print("Query natural encoded!")
+
+
+    def encode_queries_descriptions(self, topics_df):
+        ds =  topics_df['description'].tolist()
+        ds_persent = [tokenize.sent_tokenize(p) for p in ds]
+        descr_text_sent_encoding = self.text_to_embed([d[0] for d in ds_persent])
+        self.descr_text_sent_encoding = descr_text_sent_encoding
+        
 
 def get_sent_audio(sent_summary_embed_dir):
     """
@@ -389,10 +431,11 @@ def save_eval_results(evaluator, results):
 
 def main(args):
     print("[main] Evaluate")
+    conf = OmegaConf.load("./config.yaml")
     sent_query_output_path = os.path.join(conf.dataset_path, 'TREC_topic', 'topic_dict_query.json')
     sent_descr_output_path = os.path.join(conf.dataset_path, 'TREC_topic', 'topic_dict_descr.json')
 
-    ## Read dictionary with summaries
+    ## Read dictionary with queries
     with open(sent_query_output_path, 'r') as f:
         sent_query_dict = json.load(f)
     with open(sent_descr_output_path, 'r') as f:
@@ -417,7 +460,7 @@ def main(args):
         val_df.loc[i,'ep_score'] = ifor_val
     val_df.ep_score = val_df.ep_score.astype(int)
 
-    # Loading the model.
+    # Rename model paths. 
     model_path = Path(args.model_weights_path).parents[1]
     model_weights_path = args.model_weights_path
     model_config_path = os.path.join(model_path, 'config.json')
@@ -434,12 +477,10 @@ def main(args):
 
     # Load the model.
     full_model = mmModule(CFG)
-
     full_model.load_state_dict(torch.load(model_weights_path,  map_location=CFG.device)) 
     if args.create_random:
         # In case we want to create a random baseline.
         full_model = randomize_model(full_model) 
-        
 
     full_model = full_model.to(CFG.device)     
     full_model.eval()

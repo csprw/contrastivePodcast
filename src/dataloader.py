@@ -78,10 +78,9 @@ class spDatasetWeakShuffle(datautil.Dataset):
     Weak shuffling to enable shuffle while clustering sentences of similar length.
     """
     def __init__(self, CFG, directory, traintest="train", load_full=False, device=None):
-        print("[spDataset] init from directory ", directory, traintest)
+        print("[MMloader] init from directory ", directory, traintest)
         directory = os.path.join(directory, traintest)
         h5py_files = list(Path(directory).glob('*.h5'))
-        print("[spDataset] found {} h5py files".format(len(h5py_files)))
         self.device = device
 
         idx2file = {}
@@ -97,7 +96,6 @@ class spDatasetWeakShuffle(datautil.Dataset):
 
         for h5idx, h5py_file in enumerate(h5py_files):    
             f = h5py.File(h5py_file, 'r')
-            print("[spdataset] loading {}/{}: {}".format(h5idx, len(h5py_files), h5py_file))
             start_idx = sample_idx
 
             for sentidx in range(len(f['sentences'])):
@@ -105,7 +103,7 @@ class spDatasetWeakShuffle(datautil.Dataset):
                 sample_idx += 1
 
                 if CFG.max_train_samples > 0 and traintest == 'train' and sample_idx >= CFG.max_train_samples:
-                    print("[del] Max exceeded {}".format(sample_idx))
+                    print("Max exceeded {}".format(sample_idx))
                     f.close()
                     self.file_startstop.append((start_idx, sample_idx))
                     break
@@ -128,7 +126,6 @@ class spDatasetWeakShuffle(datautil.Dataset):
     def __getitem__(self, index):
         """ Return one sample """
         if self.traintest == 'test':
-            # TODO: check if this works after cleaning for self==load_full
             text_embeds = []
             audio_embeds = []
             full_text = []
@@ -142,13 +139,14 @@ class spDatasetWeakShuffle(datautil.Dataset):
                 if h5py_idx != last_idx:
                     # Clear memory
                     self.f.close()
-                    del self.mean_embeds
-                    gc.collect()
 
                     if self.load_full:
+                        gc.collect()
                         h5py_file = self.h5py_idx2file[h5py_idx]
                         self.f = h5py.File(h5py_file, 'r')
                     else:
+                        del self.mean_embeds
+                        gc.collect()
                         h5py_file = self.h5py_idx2file[h5py_idx]
                         self.f = h5py.File(h5py_file, 'r')
                         self.mean_embeds = torch.Tensor(np.array(self.f['mean_embeddings']))

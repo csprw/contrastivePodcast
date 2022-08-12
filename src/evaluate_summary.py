@@ -28,7 +28,6 @@ from dacite import from_dict
 from argparse import ArgumentParser
 
 from omegaconf import OmegaConf
-conf = OmegaConf.load("./config.yaml")
 
 from utils import randomize_model
 from train import Cfg, mmModule
@@ -36,7 +35,7 @@ from dataloader import RandomBatchSampler
 
 class MMloader_summary(object):
     """
-    Module that load the summary dataset. 
+    Module that loads the summary dataset. 
     """
     def __init__(self, CFG, directory, lin_sep=False):
         self.batch_size = CFG.batch_size
@@ -181,7 +180,7 @@ class summaryEvaluator(object):
         self.audio_proj_head = CFG.audio_proj_head
         self.fixed_scale = CFG.scale
         
-        self.test_dir = os.path.join(conf.sp_path, 'test_summary')
+        self.test_dir = os.path.join(CFG.sp_path, 'test_summary')
     
     def get_max_episode_data(self):
         """
@@ -227,9 +226,8 @@ class summaryEvaluator(object):
     @torch.no_grad()  
     def encode_summary_episodes(self, max_samples):
         """
-        Creates representations of sentences in
-            all episodes in the summary test-set. 
-        param: max_samples, the number of samples to encode
+        Creates representations of sentences in all episodes in the summary test-set. 
+        :param max_samples: the number of samples to encode
         """
         text_encoding = np.zeros((max_samples, self.embed_dim)) 
         audio_encoding = np.zeros((max_samples, self.embed_dim)) 
@@ -369,7 +367,7 @@ def get_summ_sent_audio(sent_summary_embed_dir):
         with h5py.File(filename, "r") as f:
             filename = os.path.split(filename)[-1]
             target_name = filename.split('.')[0]
-            emb = torch.Tensor(f['embedding']['block0_values'])
+            emb = torch.Tensor(np.array(f['embedding']['block0_values']))
             sent_summary_audio_dict[target_name].append(emb)
 
     return sent_summary_audio_dict
@@ -496,6 +494,7 @@ def to_plot(results, target='sent'):
 
 
 def main(args):
+    conf = OmegaConf.load("./config.yaml")
     summaries_output_path = os.path.join(conf.dataset_path, 'TREC', 'good_summaries.json')
     sent_summaries_output_path = os.path.join(conf.dataset_path, 'TREC', 'sent_summaries.json')
 
@@ -514,6 +513,7 @@ def main(args):
     model_config = json.load(f)
     fullcfg = from_dict(data_class=Cfg, data=model_config)
     fullcfg.device = "cuda" if torch.cuda.is_available() else "cpu"
+    fullcfg.sp_path = conf.sp_path
 
     # Create dataloader
     data_loader = MMloader_summary(fullcfg, directory=conf.yamnet_processed_path, lin_sep=True)
@@ -533,8 +533,6 @@ def main(args):
     # Create evaluator en encode episodes and summaries
     evaluator = summaryEvaluator(fullcfg, model_path, full_model, data_loader)
     max_episodes = evaluator.get_max_episode_data()
-    # max_episodes = 128 * 2
-    # print("[del]", max_episodes)
     evaluator.encode_summary_episodes(max_episodes)
     evaluator.encode_summaries(summary_dict, summary_audio_dict)
     evaluator.encode_summaries_sentlevel(sent_summary_dict, sent_summary_audio_dict)
