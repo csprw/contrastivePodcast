@@ -1,7 +1,7 @@
 # Folders to ignore, regardless of where they are
 */data/*
 */checkpoints/*
-*/logs/*
+*/output/*
 
 # Files to ignore, regardless of where they are
 **/config.yaml

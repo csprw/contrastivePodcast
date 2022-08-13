@@ -1,12 +1,6 @@
 # Self-supervised Contrastive Learning from Podcast Audio and Transcripts
-<!-- ### Podcast representation learning -->
-<!-- <p align="center"> -->
-<br><br>
-<!-- <img src="./figures/Acrobot-v1_pair_plot.png"
-     alt="A paired-plot for metrics in the Acrobot-v1 environment"
-     style="float: center;" />
-</p> -->
 
+<br><br>
 
 ## General info 
 
@@ -46,9 +40,14 @@ conda env create -f environment.yml
 2. Place the dataset files in ./data/
 
 ### 3. Preprocess data
-1. Follow all steps in src/scripts/ to start preprocess all data. 
+1. Run the file in src/scripts/ to preprocess all data. 
 
-### 4. Run the training file:
+### 4a. Run the training file:
 ```
 python train.py --args
+```
+
+### 4b. or checkout some examples in the notebooks folder
+```
+src/notebooks/examples.ipynb
 ```
