@@ -1,8 +1,8 @@
 """
-Contrastive multimodal learning: Evaluation
-Topic evaluation task. 
+Self-supervised Contrastive Learning from Podcast Audio and Transcripts.
+Topic evaluation task.
 Author: Casper Wortmann
-Usage: python evaluate_topic_sent.py
+Usage: python evaluate_topic.py
 """
 import h5py
 import json
@@ -12,16 +12,15 @@ import math
 import pandas as pd
 import numpy as np
 import glob
-
 from collections import defaultdict
 from argparse import ArgumentParser
 from dacite import from_dict
 from omegaconf import OmegaConf
+
 from torch import topk
 import torch 
 from torch.nn.utils.rnn import pad_sequence, pad_packed_sequence, pack_padded_sequence
 from nltk import tokenize
-
 from utils import read_metadata_subset, randomize_model
 from train import mmModule, Cfg
 from train import MMloader
@@ -30,6 +29,12 @@ class Evaluator(object):
     def __init__(self, CFG, model_path, full_model, data_loader, calc_acc):
         """
         Evaluator object to perform a topical ranking task. 
+        Inputs:
+            CFG: configuration of the current model. 
+            model_path: path to the run we want to evaluate. 
+            full_model: the model with the loaded weights. 
+            data_loader: a summary dataoader. 
+            calc_acc: bool. If set to true, also calculate prediction accuracy.
         """
         self.model_path = model_path
         self.model = full_model
@@ -52,15 +57,22 @@ class Evaluator(object):
         """
         Returns max number of sentences to encode.
         """
-        max_samples = 128  * math.floor(len(self.test_dataset)/128)
+        max_samples = self.bs  * math.floor(len(self.test_dataset)/self.bs)
         return max_samples
 
     def audio_to_embed(self, yamnets, query_lengths):
         """
         Creates representations of all (precomputed) yamnet embeddings of the
         episodes in the topic-test set of the SP dataset.
+        Inputs:
+            yamnets: list of precomputed yamnet embeddings.
+            query_lengths: lengths of the yamnet embeddings before padding. 
+        Outputs:
+            embed: an audio embedding. 
         """
         if self.audio_proj_head in ['gru', 'rnn', 'lstm', 'mlp']:
+            # If the audio projection head contains an RNN-based layer we can
+            # push all yamnets through it.
             padded_yamnets = pad_sequence(yamnets, batch_first=True).to(self.device)
 
             with torch.no_grad():
@@ -68,8 +80,8 @@ class Evaluator(object):
                 embed = torch.nn.functional.normalize(reps_audio) 
         else:
             with torch.no_grad():
+                # Take the mean of the yamnet embeddings and push through SPH. 
                 yamnets_mean = [torch.tensor(y.mean(dim=0).clone().detach()) for y in yamnets]
-
                 audio_features = torch.stack(yamnets_mean).to(self.device)
                 reps_audio = self.model.audio_model((audio_features, query_lengths))
                 embed = torch.nn.functional.normalize(reps_audio) 
@@ -78,6 +90,10 @@ class Evaluator(object):
     def text_to_embed(self, text):
         """
         Creates embeddings of a text-string. 
+        Inputs:
+            text: a list of sentences.
+        Outputs:
+            embed: text embedding. 
         """
         tokenized_text = self.tokenizer(
             text, padding=True, truncation=True, max_length=32, 
@@ -95,6 +111,9 @@ class Evaluator(object):
     def encode_testset(self, max_samples):
         """
         Creates embeddings of all queries, descriptions, and episodes in the topic-test set.
+        Inputs:
+            max_samples: the maximum number of samples to encode 
+            (mostly used for debugging and the notebooks). 
         """
         max_steps = int(max_samples/self.bs)
         accs = []
@@ -164,9 +183,10 @@ class Evaluator(object):
 
     def encode_queries(self, topics_df, query_field='query'):
         """
-        Create representations of the topic-test set. 
-        :param topics_df: Dataframe containing queries and descriptions.
-        :param query_field: Wheter to encode the queries or the query descriptions.
+        Create representations of the queries in the topic-test set. 
+        Inputs: 
+            topics_df: Dataframe containing queries and descriptions.
+            query_field: Wheter to encode the queries or the query descriptions.
         """
         assert query_field in [ 'query', 'description']
         if query_field == 'query':
@@ -200,7 +220,10 @@ class Evaluator(object):
             
     def encode_sent_descr(self, sent_dict, audio_dict):
         """
-        Create encodings for all sentences in the descriptions of queries. 
+        Create representations for all sentences in the descriptions of queries. 
+        Inputs:
+            sent_dict: a dictionary with the text-sentences of the descriptions. 
+            audio_dict: a dictionary with the audio-sentences of the descriptions. 
         """
         targets = []
         text_encodings = []
@@ -229,6 +252,9 @@ class Evaluator(object):
         """
         Annotates all segments and episodes in the test-set as to whether they
         are relevant according to the relevance assesments.
+        Inputs:
+            topics_df: a df containing the topic descriptions.
+            val_df: a df containing the topic assessments. 
         """
         query_nums  = topics_df['num'].tolist()
         relevant_segs = defaultdict(list)
@@ -243,59 +269,58 @@ class Evaluator(object):
             episode_targets[query_num] = list(dict.fromkeys(relevant.episode_uri))
         self.relevant_segs = relevant_segs
         self.relevant_eps = relevant_eps
-        
         self.episode_targets = episode_targets
 
     def encode_queries_natural(self, query_field):
         """
-        For the query-description similarity task
+        Encode the audio for the query-description similarity task. 
+        Inputs: 
+            query_field: whether to encode queries or descriptions. 
         """
+        assert query_field in [ 'query', 'descr']
         if query_field == 'descr':
-            # sent_topic_descr_embed_dir = '../../../data/yamnet/sent_topic_descr_embedding' # staat ook in config!
             sent_topic_descr_embed_dir = self.CFG.sent_topic_descr_embed_dir
-            thedict = {}
+            embeddings = {}
             field_files = sorted(glob.glob(os.path.join(sent_topic_descr_embed_dir,'*.h5')))
             
         if query_field == 'query':
-            # sent_topic_query_embed_dir = '../../../data/yamnet/sent_topic_query_embedding' # staat ook in config!
             sent_topic_query_embed_dir = self.CFG.sent_topic_query_embed_dir
-            thedict = {}
+            embeddings = {}
             field_files = sorted(glob.glob(os.path.join(sent_topic_query_embed_dir,'*.h5')))
 
-            
+        # Iterate over embeddings and compute audio encodings. 
         for embed_path in field_files:
             inbetween_yamnet_embeds = pd.read_hdf(embed_path)
             yamnet_len = len(inbetween_yamnet_embeds)
-
             yamnet_embed = torch.Tensor(inbetween_yamnet_embeds.values)
-
             audio_encoding = self.audio_to_embed([yamnet_embed], [yamnet_len]).cpu()
-
             name = os.path.split(embed_path)[-1].split(".")[0]
-            thedict[name] = audio_encoding
+            embeddings[name] = audio_encoding
 
         if query_field == 'descr':
-            self.embed_descr_natural = thedict
-            print("Descr natural encoded!")
+            self.embed_descr_natural = embeddings
         elif query_field == 'query':
-            self.embed_query_natural = thedict
-            print("Query natural encoded!")
-
+            self.embed_query_natural = embeddings
 
     def encode_queries_descriptions(self, topics_df):
+        """ Encode the text for the query-description similarity task. """
         ds =  topics_df['description'].tolist()
         ds_persent = [tokenize.sent_tokenize(p) for p in ds]
         descr_text_sent_encoding = self.text_to_embed([d[0] for d in ds_persent])
         self.descr_text_sent_encoding = descr_text_sent_encoding
         
 
-def get_sent_audio(sent_summary_embed_dir):
+def get_sent_audio(embed_dir):
     """
-    Creates a dict with summary embeddings. s
+    Calculates audio embeddings. 
+    Inputs:
+        embed_dir: path to the precomputed yamnet embeddings of descriptions. 
+    Outputs:
+        sent_summary_audio_dict: the audio embeddings for each description-sentence. 
     """
     sent_summary_audio_dict = defaultdict(list)
 
-    pathlist = Path(sent_summary_embed_dir).glob('**/*.h5')
+    pathlist = Path(embed_dir).glob('**/*.h5')
     for path in pathlist:
         filename = str(path)
 
@@ -312,7 +337,8 @@ def topic_evaluation(evaluator):
     Creates similarity matrices between the topic encodings and 
     episode encodings. Based on this similarity matrix a ranking is created,
     and validated.
-    param: evaluator: an instance of Evaluator class.
+    Inputs:
+        evaluator: an instance of Evaluator class.
     """
     topic_encodings = [(evaluator.sent_topic_descr_text_encoding, 'sent_descr_text'),
                     (evaluator.sent_topic_descr_audio_encoding, 'sent_descr_audio')]
@@ -322,39 +348,37 @@ def topic_evaluation(evaluator):
     epi_encodings = [(evaluator.text_encoding, 'text'),
                     (evaluator.audio_encoding, 'audio')]
 
-    k = min(5000, evaluator.text_encoding.shape[0])
+    k = evaluator.text_encoding.shape[0]
+    #k = min(5000, evaluator.text_encoding.shape[0]) # In case of memory problems. 
     results = defaultdict(list)
 
     for topic_tup in topic_encodings:
-        
         for tup in epi_encodings:
-            name = topic_tup[1] + "2" + tup[1]
+            name = topic_tup[1] + "-" + tup[1]
             print("------- Results for: ", name)
             topic_encoding = topic_tup[0]
             epi_encoding = tup[0]
 
+            # To prevent memory problems, we create a similarity matrix in batches. 
             bound = int(epi_encoding.shape[0] / 8)
             start_bound = 0
             cur_bound = bound
             sims = []
-            for i in range(7):
-                print("sim i: ", i, cur_bound)
+            for _ in range(7):
                 sim = (100.0 * topic_encoding @ epi_encoding[start_bound:cur_bound].T)
                 start_bound = cur_bound
                 cur_bound += bound
                 sims.append(sim)
-
             sim = (100.0 * topic_encoding @ epi_encoding[start_bound:cur_bound].T)
             sims.append(sim)
-
             similarity = (100.0 * topic_encoding @ epi_encoding.T)
             similarity = torch.hstack(sims)
             del sims
 
+            # Transform similarity matrix to probabilites. 
             similarity = similarity.softmax(dim=-1)
             rank = []        
             mrr = []
-            
             confidence = []
             total_indices = []
             idxs= []
@@ -367,31 +391,28 @@ def topic_evaluation(evaluator):
                 total_indices.extend(indices)
                 idxs.append(idx)
                     
+                # Wait untill we have processed all sentences of a target. 
                 if idx != (len(targets) - 1):
                     next_target = targets[idx+1].split("_")[0]
                     if next_target == target:
                         continue
                     
+                # Sort the rankings. 
                 confidence = np.array(confidence)
                 total_indices = np.array(total_indices)
-                sorted_inds = confidence.argsort()
-
                 sorted_inds = confidence.argsort()[::-1]
                 total_indices = total_indices[sorted_inds]
 
+                # Get the positions of the predicted episodes. 
                 predicted_segs = evaluator.all_targs[total_indices.tolist()].tolist()
                 predicted_epis = list(dict.fromkeys([i.split("_")[0] for i in predicted_segs]))
 
+                # Calculate ranks. 
                 ranks = []
                 for possible_target in evaluator.episode_targets[int(target)]:
                     if possible_target in predicted_epis:
                         estimated_position = predicted_epis.index(possible_target)
                         ranks.append( estimated_position)
-                if len(ranks) > 0:
-                    best_estimation = np.min(ranks)
-                    rank.append(best_estimation)
-                    mrr.append(1 / (best_estimation + 1))
-
                 confidence = []
                 total_indices = []
                 idxs= []
@@ -408,6 +429,7 @@ def topic_evaluation(evaluator):
     return results
 
 def save_eval_results(evaluator, results):
+    """ Saves the results of the evaluation to local disk. """
     results['mean_acc'] = evaluator.mean_acc
     results['std_acc'] = evaluator.std_acc
     results['var_acc'] = evaluator.var_acc

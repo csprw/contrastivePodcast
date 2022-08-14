@@ -17,7 +17,7 @@ import math
 
 import sys
 sys.path.append('../') 
-from utils import get_embed_transcript_paths, read_metadata_subset, find_paths
+from utils import get_embed_transcript_paths, read_metadata_subset, find_paths, extract_transcript
 from omegaconf import OmegaConf
 
 def save_all(save_path, all_mean_embeddings, filenames, in_train_set, all_sentences, all_full_embeddings, segment_tsps):

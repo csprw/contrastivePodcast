@@ -17,7 +17,9 @@ from transformers import AutoTokenizer
 
 class MMloader(object):
     """
-    Module that load datasets. 
+    Dataloader that creates batches of transcript-audio sentences.
+    Input:
+        CFG: a configuration instance. 
     """
     def __init__(self, CFG):
 
@@ -69,6 +71,18 @@ class MMloader(object):
         print("[MMloader] test dataset loaded, length: ", len(self.test_dataset))
 
     def get_sp_dataset(self, CFG, directory, traintest="train", load_full=False, device=None):
+        """
+        Returns a dataloader for a (preprocessed) SP dataset. 
+        Input:
+            CFG: a configuration instance.
+            directory: directory where preprocessed .h5py files are stored. 
+            trainetst: either (train, val, test), the split of the dataset.
+            load_full: if set to True, the dataloader returns all samples directly. 
+                if set to False, then samples are averaged before returning. 
+            device: the device to use (usually GPU if available, else CPU).
+        Output:
+            dataset: a dataset to use for training. 
+        """
         dataset = spDatasetWeakShuffle(CFG, directory=directory, traintest=traintest,  load_full=load_full, device=device)
         return dataset
 
@@ -76,6 +90,13 @@ class spDatasetWeakShuffle(datautil.Dataset):
     """
     Spotify Podcast dataset dataloader. 
     Weak shuffling to enable shuffle while clustering sentences of similar length.
+    Input:
+        CFG: a configuration instance.
+        directory: directory where preprocessed .h5py files are stored. 
+        trainetst: either (train, val, test), the split of the dataset.
+        load_full: if set to True return all yamnet embeddings directly,
+            else average yamnets before returning them. 
+        device: the device to use (usually GPU if available, else CPU).
     """
     def __init__(self, CFG, directory, traintest="train", load_full=False, device=None):
         print("[MMloader] init from directory ", directory, traintest)
@@ -124,7 +145,7 @@ class spDatasetWeakShuffle(datautil.Dataset):
         return len(self.idx2file.keys())
 
     def __getitem__(self, index):
-        """ Return one sample """
+        """ Returns one sample of the dataset """
         if self.traintest == 'test':
             text_embeds = []
             audio_embeds = []
@@ -202,7 +223,6 @@ class spDatasetWeakShuffle(datautil.Dataset):
                         self.f = h5py.File(h5py_file, 'r')
                         self.mean_embeds = torch.Tensor(np.array(self.f['mean_embeddings']))
 
-
                 sent = self.f['sentences'][sent_idx].decode("utf-8")
 
                 if self.load_full:
@@ -231,24 +251,29 @@ class spDatasetWeakShuffle(datautil.Dataset):
                 max_length=self.text_max_length, return_tensors='pt'
             ).to(self.device)
 
-            return text_embeds, padded_audio_embeds, lengths
+            return text_embeds, audio_embeds, lengths
 
 class RandomBatchSampler(Sampler):
     """
-    Sampling class to create random sequential batches from a given dataset
-    :returns: generator object of shuffled batch indices
+    Sampling class to create batches of same length. 
+    Input:
+        dataset: a dataset instance.
+        batch_size: the number of samples in one batch.
+        shuffle: set to True to shuffle the samples within one batch. 
     """
     def __init__(self, dataset, batch_size, shuffle=True):
         self.batch_size = batch_size
         self.dataset_length = len(dataset)
         self.n_batches = self.dataset_length / self.batch_size
 
+        # Shuffle the samples within a batch (so keeping the same length).
         if shuffle:
             self.batch_ids = self.shuffle_within_file(dataset)
         else:
             self.batch_ids = torch.arange(int(self.n_batches))
 
     def shuffle_within_file(self, dataset):
+        """ Shuffles the samples within a batch. """
         batch_ids = np.arange(int(self.n_batches))
         file_startstop = [(int(i[0]/self.batch_size), int(i[1]/ self.batch_size)) for i in dataset.file_startstop]
         blocks = [list(batch_ids[i[0]:i[1]]) for i in file_startstop]
@@ -257,9 +282,14 @@ class RandomBatchSampler(Sampler):
         return torch.tensor(batch_ids)
 
     def __len__(self):
+        """ Denotes the length of one batch. """
         return self.batch_size
 
     def __iter__(self):
+        """ 
+        Yields a batch of samples. 
+        All samples are sorted according to their length. 
+        """
         for id in self.batch_ids:
             idx = torch.arange(id * self.batch_size, (id + 1) * self.batch_size)
             for index in idx:

@@ -11,7 +11,6 @@ import csv
 import os
 import math
 from collections import Counter, OrderedDict
-
 from dataclasses import dataclass
 from omegaconf import OmegaConf
 import pathlib
@@ -28,23 +27,30 @@ from dataloader import MMloader
 logging.set_verbosity_error()
 
 class mmModule(nn.Module):
+    """ Module that combines submodules into a training framwork. """
     def __init__(self, CFG):
+        """
+        Initializes the architecture of the framework.
+        Inputs: 
+            CFG: configuration instance (dict). 
+        """
         super().__init__()
         self.batch_size = CFG.batch_size
         self.device = CFG.device
         self.loss_type = CFG.loss_type
 
+        # Initalizes the models to encode transcripts. 
         if CFG.text_proj_head == 'sph':
             text_encoder = TextEncoder(CFG)
             text_projection = simple_ProjectionHead_text(CFG)
             pooling_model = Pooling(CFG.text_pooling)
             text_modules = [text_encoder, text_projection, pooling_model]
-
         elif CFG.text_proj_head.lower() == 'none':
             text_encoder = TextEncoder(CFG)
             pooling_model = Pooling(CFG.text_pooling)
             text_modules = [text_encoder, pooling_model]
 
+        # Initalizes the audio projection head used. 
         if CFG.audio_proj_head in ['rnn', 'gru', 'mlp', 'lstm']:
             audio_modules = [SequentialAudioModel(CFG)]
         elif CFG.audio_proj_head in ['sph']:
@@ -55,22 +61,27 @@ class mmModule(nn.Module):
             text_modules = OrderedDict([(str(idx), module) for idx, module in enumerate(text_modules)])
         if audio_modules is not None and not isinstance(audio_modules, OrderedDict):
             audio_modules = OrderedDict([(str(idx), module) for idx, module in enumerate(audio_modules)])
-
         self.text_model = nn.Sequential(text_modules)
         self.audio_model = nn.Sequential(audio_modules)
 
+        # Save some configuration variables. 
         self.eval_every = CFG.eval_every  
         self.print_every = CFG.print_every
         self.batch_size = CFG.batch_size
         self.device = CFG.device
 
+        # Setup logging. 
         self.log_name = CFG.log_name
         self.init_logging()
         self.best_loss = float('inf')
 
-    def _get_scheduler(self, optimizer, scheduler: str, warmup_steps: int):
+    def get_scheduler(self, optimizer, scheduler, warmup_steps):
         """
         Returns the a scheduler for the learning rate. 
+        Inputs:
+            optimizer: the optimizer used.
+            scheduler: the lr scheduler.
+            warmup_steps: Number of warmup steps to use during training. 
         """
         scheduler = scheduler.lower()
         if scheduler == 'constantlr':
@@ -82,9 +93,11 @@ class mmModule(nn.Module):
         else:
             raise ValueError("Unknown scheduler {}".format(scheduler))
 
-    def _get_optimizer(self, loss_model):
+    def get_optimizer(self, loss_model):
         """
         Returns the optimizer. 
+        Input:
+            loss_model: the (multimodal) loss used. 
         """
         parameters = list(loss_model.named_parameters())
         no_decay = ['bias', 'LayerNorm.bias', 'LayerNorm.weight']
@@ -107,6 +120,19 @@ class mmModule(nn.Module):
             loaded_optimizer_state = None,
             loaded_sched_state = None
         ):
+        """
+        Training and validation runs of the model. 
+        Inputs:
+            CFG: Configuration used (dict). 
+            train_loader: a MMloader instance that returns transcript-audio samples.
+            val_loader: a MMloader instance that returns transcript-audio samples (validation set).
+            steps_per_epoch: number of steps to train for in one epoch. 
+            loss_model: the loss function used. 
+            start_epoch: The epoch to start with (to continue a stopped run).
+            optimizer_class: the optimizer used. 
+            loaded_optimizer_state: params of the optimizer of an earlier run. 
+            loaded_optimizer_state: params of the schedier of an earlier run. 
+        """
         # Push to GPU or cpu.
         self.text_model.to(self.device)
         self.audio_model.to(self.device)
@@ -124,13 +150,13 @@ class mmModule(nn.Module):
         steps_so_far = (start_epoch + 1)
 
         # Initiate or load an optimizer.
-        optimizer = self._get_optimizer(loss_model)
+        optimizer = self.get_optimizer(loss_model)
         if loaded_optimizer_state != None:
-            optimizer = self._get_optimizer(loss_model)
+            optimizer = self.get_optimizer(loss_model)
             optimizer.load_state_dict(loaded_optimizer_state)
 
         # Initiate or load a scheduler.
-        scheduler = self._get_scheduler(optimizer, scheduler=scheduler_method, warmup_steps=warmup_steps)
+        scheduler = self.get_scheduler(optimizer, scheduler=scheduler_method, warmup_steps=warmup_steps)
         if loaded_sched_state != None:
             scheduler.load_state_dict(loaded_sched_state)
 
@@ -156,14 +182,15 @@ class mmModule(nn.Module):
                     if os.path.isfile(self.train_csv_filename):
                         self.output_all_plots()
 
+                # Forward pass.
                 sent_features, audio_features, seq_len = batch
                 loss_value, metrics = loss_model(sent_features, audio_features, seq_len)
 
+                # Backward pass and update parameters.
                 loss_value.backward()
                 torch.nn.utils.clip_grad_norm_(loss_model.parameters(), 1.0)
                 optimizer.step()
                 optimizer.zero_grad()
-
                 scheduler.step()
                 steps_so_far += 1
 
@@ -180,46 +207,54 @@ class mmModule(nn.Module):
                 self.save_checkpoint(epoch, step, optimizer, scheduler)
 
     def evaluate(self, loss_model):
+        """
+        Evaluates the model performance on validation set. 
+        Inputs:
+            loss_model: loss function used. 
+        outputs:
+            mean_loss: The mean loss of the evaluation task. 
+            mean_metrics: All other metrics of the evaluation task. 
+        """
         loss_model.eval()
         losses = 0
         self.to(self.device)
 
         iterator = iter(self.val_loader)
-        total_len = 1000   # for now I evaluate on a subset
-
         with torch.no_grad():
-            for step in range(total_len):
-                batch = next(iterator)
-                sent_features, audio_features, seq_len  = batch
-                with torch.no_grad():
-                    loss_value, metrics = loss_model(sent_features, audio_features, seq_len)
-                    losses += loss_value.detach().cpu().item()
+            for step, batch in enumerate(iterator):
+                sent_features, audio_features, seq_len = batch
 
-                    if step == 0:
-                        met_sum = Counter(metrics.copy())
-                    else:
-                        met_sum.update(Counter(metrics))
+                # Calculate evaluation metrics. 
+                loss_value, metrics = loss_model(sent_features, audio_features, seq_len)
+                losses += loss_value.detach().cpu().item()
+                if step == 0:
+                    met_sum = Counter(metrics.copy())
+                else:
+                    met_sum.update(Counter(metrics))
 
-        mean_metrics = {k: value / total_len  for k, value in met_sum.items()}
-        mean_loss = losses / total_len
+        mean_metrics = {k: value / step  for k, value in met_sum.items()}
+        mean_loss = losses / step
 
         del met_sum
         loss_model.train()
         return mean_loss, mean_metrics
 
     def output_all_plots(self):
+        """ Saves all plots of the current training process. """
         to_plot(self.train_csv_filename, column='audio_acc', title="Train accuracy (audio)")
         to_plot(self.train_csv_filename, column='text_acc', title="Train accuracy (text)")
         to_plot(self.train_csv_filename, column='loss', title="Train loss")
         to_plot(self.eval_csv_filename, column='mean_acc', title="val accuracy (mean)")
   
     def init_logging(self):
+        """ Setup the logging files and directories. """
         self.model_save_path = '{}/output'.format(self.log_name)
         os.makedirs(self.model_save_path, exist_ok=True)
         self.train_csv_filename = os.path.join(self.model_save_path, "train.csv")
         self.eval_csv_filename = os.path.join(self.model_save_path, "val.csv")
 
     def init_csv(self, metrics):
+        """ Initializes the csv logging files. """
         for filename in [self.train_csv_filename, self.eval_csv_filename]:
             self.metric_headers = [metric for metric in metrics.keys()]
             self.train_csv_headers = ["epoch", "steps", "loss"] + self.metric_headers
@@ -228,6 +263,7 @@ class mmModule(nn.Module):
                 writer.writerow(self.train_csv_headers)
 
     def add_logging(self, epoch, steps, loss, metrics, train=True):
+        """ Add the current metrics to the logging CSV files. """
         if train:
             filename = self.train_csv_filename
         else:
@@ -244,11 +280,23 @@ class mmModule(nn.Module):
             writer.writerow([epoch, steps, loss] + metric_vals)
 
     def save_model(self, extra_name=""):
-        # Save the model
+        """ 
+        Saves the model. 
+        Inputs: 
+            extra_name: adds the name of training run if save_model is set to True. 
+        """
         output_dir = os.path.join(self.model_save_path, '{}{}_weights.pt'.format('full_model', extra_name))
         torch.save(self.state_dict(), output_dir)
 
     def save_checkpoint(self, epoch, step, optimizer, scheduler):
+        """ 
+        Saves a checkpoint of the run. 
+        Inputs: 
+            epoch: current epoch (int). 
+            step: current step (int).
+            optimizer: The parameters of the optimizer at this point of training. 
+            Scheduler: The scheduler parameters.  
+        """
         checkpoint = { 
             'epoch': epoch,
             'step': step,
@@ -261,18 +309,24 @@ class mmModule(nn.Module):
 
 class multimodal_loss(nn.Module):
     """
+    The loss function used to optimize the framework. 
     This loss expects as input a batch consisting of transcript and 
-    audio encodings. 
+    audio encodings. The loss is inspired by CLIP. 
     """
     def __init__(self, full_model, CFG):
+        """
+        Inputs:
+            full_model: The model that needs to be optimized. 
+            CFG: dataclass configuration instance. 
+        """
         super(multimodal_loss, self).__init__()
-
         self.text_model = full_model.text_model
         self.audio_model = full_model.audio_model
         self.loss_type = CFG.loss_type
         self.scale_type = CFG.scale_type
         self.scale = CFG.scale
 
+        # Determine if we learn the temperature or use a fixed value. 
         if self.scale_type == 'fixed':
             self.fixed_scale = self.scale
         elif self.scale_type == 'learned':
@@ -282,10 +336,21 @@ class multimodal_loss(nn.Module):
         self.device = torch.device(CFG.device)
         self.batch_size = full_model.batch_size
 
+        # We use a symmetric cross entropy loss for audio and transcripts. 
         self.loss_audio = nn.CrossEntropyLoss()
         self.loss_text = nn.CrossEntropyLoss()
 
     def forward(self, sentence_features, audio_features, seq_len):
+        """ 
+        Forward pass of the framework. 
+        Inputs: 
+            sentence_features: the transcript-sentences. 
+            audio_features: the audio-sentences. 
+            seq_len: length of the audio embddings in the batch. 
+        Outputs:
+            total_loss: the loss in the batch.
+            metrics: accuracy (and other metrics) of the predictions of this batch. 
+        """
         # Get sentence Representations
         reps_text = self.text_model(sentence_features)['sentence_embedding']
 
@@ -310,15 +375,11 @@ class multimodal_loss(nn.Module):
         metrics = get_metrics(audio_logits.detach(), text_logits.detach(), ground_truth)
         return total_loss, metrics
 
-    def get_config_dict(self):
-        return {
-            'scale_type': self.scale_type, 
-            'similarity_fct': self.similarity_fct.__name__
-        }
 
 
 @dataclass
 class Cfg:
+    """ Configuration dataclass to load and save model setups. """
     batch_size: int = 128
     num_epochs: int = 1
     loss_type: str = 'simcse_loss'

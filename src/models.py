@@ -8,7 +8,12 @@ from transformers import AutoModel, AutoConfig
 from torch.nn.utils.rnn import pad_packed_sequence, pack_padded_sequence
 
 class TextEncoder(nn.Module):
+    """ The text-encoder. """
     def __init__(self, CFG):
+        """
+        Input:
+            CFG: configuration of the training (dict). 
+        """
         super().__init__()
         model_name_or_path = CFG.text_model_name
         self.config_keys = ['max_seq_length', 'do_lower_case']
@@ -21,6 +26,7 @@ class TextEncoder(nn.Module):
         self.max_seq_length = CFG.text_max_length
 
     def forward(self, text_embeds):
+        """ Forward pass through the text-encoder. """
         trans_features = {'input_ids': text_embeds['input_ids'], 'attention_mask': text_embeds['attention_mask']}
         output_tokens = self.auto_model(**trans_features, return_dict=False)[0]
         features = {'input_ids':text_embeds['input_ids'], 'attention_mask':text_embeds['attention_mask'],'token_embeddings': output_tokens}
@@ -30,7 +36,12 @@ class TextEncoder(nn.Module):
         return self.auto_model.config.hidden_size
 
 class SequentialAudioModel(nn.Module):
+    """ Model of audio projection head that contains rnn-based layer. """
     def __init__(self, CFG):
+        """
+        Input:
+            CFG: Configuration of the model (dict). 
+        """
         super(SequentialAudioModel, self).__init__()
         # Defining the number of layers and the nodes in each layer
         self.hidden_dim = CFG.audio_hidden_dim
@@ -80,6 +91,13 @@ class SequentialAudioModel(nn.Module):
         self.direction = 2 if CFG.bidirectional else 1
 
     def forward(self, audio_seq):
+        """ 
+        Forward pass through the audio projection head. 
+        Input: 
+            audio_seq: tuple of yamnet embeddings and sentence lengths. 
+        Output:
+            embeds: the output of the forward pass (audio embeddings)
+        """
         features, length = audio_seq
 
         # Initializing hidden state for first input with zeros
@@ -97,19 +115,21 @@ class SequentialAudioModel(nn.Module):
             out, h0 = self.seq_model(features)   
             out = out[:, -1, :]  
         
-        if self.audio_model in ['rnn', 'gru', 'lstm']:
-            out = self.non_seq_layers(out)
-        elif self.audio_model in ['mlp']:
-            out = self.non_seq_layers(out)
+        if self.audio_model in ['rnn', 'gru', 'lstm', 'mlp']:
+            embeds = self.non_seq_layers(out)
             
-        return out  # shape [bs*output]
+        return embeds 
 
 class simple_ProjectionHead(nn.Module):
     """
-    Simple projection head to transform embeddings to another dimension.
+    Simple projection head for audio.
     """
     def __init__(self, CFG):
         super(simple_ProjectionHead, self).__init__()
+        """
+        Inputs:
+            CFG: Configuration of the model (dict). 
+        """
         self.input_dim = CFG.audio_encoder_input
         self.hidden_dim = CFG.audio_hidden_dim
         self.output_dim = CFG.final_projection_dim
@@ -134,14 +154,8 @@ class simple_ProjectionHead(nn.Module):
                 nn.LayerNorm(self.output_dim),
             )
 
-    def __repr__(self):
-        return "Simple_projection_head({}) ".format(self.get_config_dict())
-
-    def get_config_dict(self):
-        return {key: self.__dict__[key] for key in self.config_keys}
-
     def forward(self, feat_len):
-        """Returns token_embeddings, cls_token"""
+        """ Forward pass through the projection head. """
         features, _ = feat_len
         features = self.simple_model(features)
         return features
@@ -173,6 +187,7 @@ class simple_ProjectionHead_text(nn.Module):
                 nn.LayerNorm(projection_dim),
             )
     def forward(self, x):
+        """ Forward pass through the projection head. """
         output_tokens = self.simple_model(x['token_embeddings'])
         features = {'input_ids':x['input_ids'], 'attention_mask':x['attention_mask'],'token_embeddings': output_tokens}
         return features
@@ -182,18 +197,21 @@ class Pooling(nn.Module):
     """
     Performs pooling on the token embeddings.
     """
-    def __init__(self,
-                 pooling_mode: str = 'cls',
-                 ):
+    def __init__(self, pooling_mode='cls'):
+        """
+        Inputs:
+            pooling_mode: poling strategy to use. 
+        """
         super(Pooling, self).__init__()
         assert pooling_mode in [ 'max', 'cls', 'mean']
         self.pooling_mode = pooling_mode
 
     def forward(self, features):
+        """ Pooling forward pass. """
         token_embeddings = features['token_embeddings']
         attention_mask = features['attention_mask']
 
-        ## Pooling strategy
+        # Pooling strategy
         if self.pooling_mode == 'cls':
             cls_token = features.get('cls_token_embeddings', token_embeddings[:, 0])  # Take first token by default
             features.update({'sentence_embedding': cls_token})

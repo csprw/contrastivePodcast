@@ -1,6 +1,5 @@
 """
 Self-supervised Contrastive Learning from Podcast Audio and Transcripts.
-Author: Casper Wortmann
 """
 import json, csv
 import os
@@ -11,14 +10,11 @@ import pprint
 import torch 
 from matplotlib import pyplot as plt
 import seaborn as sns
-
+from nltk import tokenize
 import logging
 from datetime import datetime
-
 from dacite import from_dict
 
-###############################################################################
-# Training utils. 
 def set_seed(args):
     """
     Sets the seed for the current run.
@@ -34,7 +30,7 @@ def set_logconfig():
             datefmt='%Y-%m-%d %H:%M:%S',
             level=logging.INFO)
 
-def get_log_name(args, dc):
+def get_log_name(args):
     """
     Returns name of the current run.
     """
@@ -47,10 +43,14 @@ def get_log_name(args, dc):
 def setup_config(args, dc, device='cpu'):
     """
     Creates a configuration file and saves it to disk. 
+    Inputs:
+        dc: Dataclass configuration of the training run. 
+    Outputs:
+        fullcfg: Dataclass configuration with argparse objects merged into it. 
     """
     # Set the seed and create output directories
     set_seed(args)
-    log_name = get_log_name(args, dc)
+    log_name = get_log_name(args)
     os.makedirs(log_name, exist_ok=True)
 
     # Create a configuration file from CL arguments. 
@@ -73,21 +73,34 @@ def setup_config(args, dc, device='cpu'):
     return fullcfg
 
 def print_best_results(eval_csv_filename, dur, out_dir):
+    """ 
+    Prints the best results of the training run. 
+    Inputs:
+        eval_csv_filename: path to the evaluation metrics of the run. 
+        dur: duration of the run (seconds). 
+        out_dir: path to the folder where best results should be saves. 
+    """
     csv_file = pd.read_csv(eval_csv_filename)
     best_idx = csv_file['mean_acc'].idxmax()
-    best2 = {'duration': dur}
+    best_metrics = {'duration': dur}
     for k, v in csv_file.iloc[best_idx].to_dict().items():
-        best2[k] = v
+        best_metrics[k] = v
 
     outfile = os.path.join(out_dir, 'best_results.json')
     with open(outfile, "w") as file:
-        json.dump(best2, file, indent=4, sort_keys=True)
+        json.dump(best_metrics, file, indent=4, sort_keys=True)
     print("---- Best epoch results ----")
-    pprint(best2)
+    pprint(best_metrics)
 
 def get_metrics(audio_logits, text_logits, ground_truth):
     """
     Adds accuracy metrics to the log file. 
+    Inputs:
+        audio_logits: output of the audio projection head.
+        text_logits: output of text projection head.
+        ground_truth: the targets (a diagonal matrix).
+    Outputs:
+        metrics: dict containing metrics of the prediction task. 
     """
     metrics = {}
     accs = []
@@ -115,11 +128,17 @@ def to_plot(filename, column='accuracy', title="Val accuracy"):
     plt.savefig(output_name)
     plt.close()
 
-###############################################################################
-# preprocessing utils
+
 def read_metadata_subset(conf, traintest='test'):
     """
     Read the subset of metadata which we will use for the topic task
+    Inputs:
+        traintest: read the train or test set of the topic task. 
+    Outputs:
+        metadata_subset: metadata after preprocessing (removed duplicates etc).
+        topics_df: dataframe containing topic-test set queries and descriptions.
+        topics_df_targets: df containing the relevance assessments of the episodes
+            in the topic test set. 
     """
     metadata_path = os.path.join(conf.dataset_path, "metadata.tsv")
     metadata  = pd.read_csv(metadata_path, delimiter="\t")
@@ -195,10 +214,10 @@ def get_embed_transcript_paths(transcripts_paths):
     return outer_folders, e_filenames, t_filenames
 
 def get_sent_indexes(sentences):
+    """ Returns a list of tuples, with (starttime, endtime) for each sentence. """
     indexes = []
     lb = 0
     ub = 0
-
     for s in sentences:
         extra_indexes = len(s.split())
         ub += extra_indexes 
@@ -207,6 +226,7 @@ def get_sent_indexes(sentences):
     return indexes
 
 def randomize_model(model):
+    """ Loads a model with random weights. """
     for module_ in model.named_modules(): 
         if isinstance(module_[1],(torch.nn.Linear, torch.nn.Embedding)):
             module_[1].weight.data.normal_(mean=0.0, std=1.0)
@@ -218,6 +238,7 @@ def randomize_model(model):
     return model
 
 def preprocess(text):
+    """ Preprocesses a text-corpus. """
     tokenized_corpus = [doc.split(" ") for doc in text]
     processed = [[j.lower() for j in i] for i in tokenized_corpus]
     return processed
@@ -290,27 +311,16 @@ def extract_transcript(transcript_json, yamnet_embedding):
 
 def find_paths(metadata, base_folder, file_extension):
     """
-    Finds the filepaths in base_folder with extension file_extension
-    Code taken from: https://github.com/trecpodcasts/podcast-audio-feature-extraction
+    Returns the paths to the .h5py files corresponding to the metadata df. 
+    Finds the filepaths in base_folder with extension file_extension.
     """
     paths = []
     for i in range(len(metadata)):
-        relative_path = relative_file_path(
+        relative_path = os.path.join(
+            metadata.show_filename_prefix.iloc[i][5].upper(), 
+            metadata.show_filename_prefix.iloc[i][6].upper(), 
             metadata.show_filename_prefix.iloc[i],
-            metadata.episode_filename_prefix.iloc[i],
-        )
-        path = os.path.join(base_folder, relative_path + file_extension)
-        paths.append(path)
+            metadata.episode_filename_prefix.iloc[i])
+        paths.append(os.path.join(base_folder, relative_path + file_extension))
     return paths
 
-def relative_file_path(show_filename_prefix, episode_filename_prefix):
-    """
-    Return the relative filepath based on the episode metadata.
-    Code taken from: https://github.com/trecpodcasts/podcast-audio-feature-extraction
-    """
-    return os.path.join(
-        show_filename_prefix[5].upper(),
-        show_filename_prefix[6].upper(),
-        show_filename_prefix,
-        episode_filename_prefix,
-    )

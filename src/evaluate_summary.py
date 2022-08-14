@@ -7,7 +7,6 @@ Usage: python evaluate_summary.py
 import sys
 import os
 from collections import defaultdict
-
 import seaborn as sn
 import matplotlib.pyplot as plt
 import numpy as np
@@ -15,20 +14,17 @@ import json
 from pathlib import Path
 from nltk import tokenize
 import gc
-
 import h5py
+
 import torch
 from torch.utils import data as datautil
 from torch.utils.data import Sampler, BatchSampler, DataLoader
 import torch.nn.functional as F
 from torch.nn.utils.rnn import pad_sequence
-
 from transformers import AutoTokenizer
 from dacite import from_dict
 from argparse import ArgumentParser
-
 from omegaconf import OmegaConf
-
 from utils import randomize_model
 from train import Cfg, mmModule
 from dataloader import RandomBatchSampler
@@ -36,18 +32,30 @@ from dataloader import RandomBatchSampler
 class MMloader_summary(object):
     """
     Module that loads the summary dataset. 
+    Inputs:
+        CFG: configuration of the current run. (See train.py).
+        directory: path to the directory of the summary .h5py files. 
     """
-    def __init__(self, CFG, directory, lin_sep=False):
+    def __init__(self, CFG, directory):
         self.batch_size = CFG.batch_size
         self.directory = directory
         self.device = CFG.device
         self.load_full = True if CFG.audio_proj_head in ['gru', 'rnn', 'lstm', 'mlp'] else False
-        self.lin_sep = lin_sep
-        
-        self.episodes_dataset, self.episodes_loader = self.create_dataset_summary(CFG, name="test_summary",  traintest="test_summary", shuffle=False)
 
-    def create_dataset_summary(self, CFG, name, traintest, shuffle=True):
-        dataset = self.get_sp_dataset(CFG, directory=self.directory,  traintest=traintest, load_full=self.load_full, lin_sep=self.lin_sep)
+        # Create a dataloader that returns summaries and summary-episodes of the summary test-set. 
+        self.episodes_dataset, self.episodes_loader = self.create_dataset_summary(CFG,  traintest="test_summary")
+
+    def create_dataset_summary(self, CFG, traintest):
+        """
+        Create a dataloader for the summary test-set. 
+        Inputs:
+            CFG: Configuration instance. 
+            traintest: The name of the test set (test_summary). 
+        Outputs:
+            dataset: the dataset of the summary set. 
+            laoder: dataloader that returns samples of the summary set. 
+        """
+        dataset = self.get_sp_dataset(CFG, directory=self.directory,  traintest=traintest, load_full=self.load_full)
         loader = DataLoader(
             dataset, batch_size=None,  # must be disabled when using samplers
             sampler=BatchSampler(RandomBatchSampler(dataset, self.batch_size), 
@@ -55,8 +63,9 @@ class MMloader_summary(object):
         )
         return dataset, loader
 
-    def get_sp_dataset(self, CFG, directory, traintest="train", load_full=False, lin_sep=False):
-        dataset = spDatasetWeakShuffleLinSep(CFG, directory=directory, traintest=traintest,  load_full=load_full, lin_sep=lin_sep, device=self.device)
+    def get_sp_dataset(self, CFG, directory, traintest="train", load_full=False):
+        """ Generates the dataset itself. """
+        dataset = spDatasetWeakShuffleLinSep(CFG, directory=directory, traintest=traintest,  load_full=load_full, device=self.device)
         return dataset
 
 class spDatasetWeakShuffleLinSep(datautil.Dataset):
@@ -64,14 +73,22 @@ class spDatasetWeakShuffleLinSep(datautil.Dataset):
     Spotify Podcast dataset dataloader. 
     Weak shuffling to enable shuffle while clustering sentences of similar length.
     """
-    def __init__(self, CFG, directory, traintest="train", load_full=False,lin_sep=False, device=None):
+    def __init__(self, CFG, directory, traintest="train", load_full=False, device=None):
+        """
+        Inputs:
+            CFG: Configuration settings of the current run.
+            Directory: path to the SP dataset.
+            traintest: The test split to use (test_summary). 
+            load_full: if set to True return all yamnet embeddings directly,
+                else average yamnets before returning them. 
+            device: cpu or gpu specification. 
+        """
         
         directory = os.path.join(directory, traintest)
         h5py_files = list(Path(directory).glob('*.h5'))
         print("[spDataset] found {} h5py files".format(len(h5py_files)))
 
         self.device = device
-        self.lin_sep = lin_sep
         self.return_targets = True
         
         idx2file = {}
@@ -104,11 +121,11 @@ class spDatasetWeakShuffleLinSep(datautil.Dataset):
         self.f =  h5py.File(h5py_file, 'r')
 
     def __len__(self):
-        """ Denotes the total number of utterances """
+        """ Denotes the total number of utterances. """
         return len(self.idx2file.keys())
 
     def __getitem__(self, index):
-        """ Return one item from the df """
+        """ Return one item from the df. """
         text_embeds = []
         audio_embeds = []
         full_text = []
@@ -164,6 +181,11 @@ class summaryEvaluator(object):
     def __init__(self, CFG, model_path, full_model, data_loader):
         """
         Evaluator object to perform a summary ranking task. 
+        Inputs:
+            CFG: configuration of current run. 
+            model_path: path to the run we want to evaluate. 
+            full_model: the model with the loaded weights. 
+            data_loader: a summary dataoader. 
         """
         self.model_path = model_path
         self.model = full_model
@@ -192,6 +214,11 @@ class summaryEvaluator(object):
     def audio_to_embed(self, yamnets, query_lengths):
         """
         Creates summary embeddings from yamnet embeddings.
+        Inputs:
+            yamnets: a list of yamnet embeddings. 
+            query_lengths: the lengths of the yamnet embeddings before padding. 
+        Output:
+            embed: an embedding of the audio squence given the current model. 
         """
         if self.audio_proj_head in ['gru', 'rnn', 'lstm', 'mlp']:
             padded_yamnets = pad_sequence(yamnets, batch_first=True).to(self.device)
@@ -211,6 +238,10 @@ class summaryEvaluator(object):
     def text_to_embed(self, text):
         """
         Creates summary embeddings from symmary texts.
+        Inputs:
+            text: a list of strings (sentences). 
+        Outputs:
+            embed: the text embddings, output of the text encoder. 
         """
         tokenized_text = self.tokenizer(
             text, padding=True, truncation=True, max_length=32, return_tensors='pt', return_token_type_ids=True,
@@ -227,7 +258,8 @@ class summaryEvaluator(object):
     def encode_summary_episodes(self, max_samples):
         """
         Creates representations of sentences in all episodes in the summary test-set. 
-        :param max_samples: the number of samples to encode
+        Inputs:
+            max_samples: the number of samples to encode.
         """
         text_encoding = np.zeros((max_samples, self.embed_dim)) 
         audio_encoding = np.zeros((max_samples, self.embed_dim)) 
@@ -269,6 +301,9 @@ class summaryEvaluator(object):
         """
         Creates representations of all summaries in the summary test-set. 
         Pushes the entire summary at once through the encoder. 
+        Inputs:
+            summary_dict: a dict consisting of episodes and their summaries (text).
+            summary_audio_dict: a dict consisting of episodes and their summaries (yamnet embeddings). 
         """
         summary_targets = []
         summary_text_encodings = []
@@ -280,16 +315,13 @@ class summaryEvaluator(object):
             
             for summ_text, yamnet_embed in zip(summlist, audio_embeds):
                 summary_targets.append(epi)
-                
                 summ_text = tokenize.sent_tokenize(summ_text)[0]  
                 summary_text_encoding = self.text_to_embed(summ_text)[0]
 
                 summary_text_encodings.append(summary_text_encoding)
                 summary_texts.append(summ_text)
-
                 query_length = len(yamnet_embed)
                 summary_audio_encoding = self.audio_to_embed([yamnet_embed], [query_length]).cpu()
-
                 summary_audio_encodings.append(summary_audio_encoding)
 
         self.summary_targets = summary_targets
@@ -302,6 +334,9 @@ class summaryEvaluator(object):
         """
         Creates representations of sentences in all summaries in the summary test-set. 
         Pushes the each sentence of the summary seperately through the encoder. 
+        Inputs:
+            summary_dict: a dict consisting of episodes and their summaries (text).
+            summary_audio_dict: a dict consisting of episodes and their summaries (yamnet embeddings). 
         """
         sent_summ_targets = []
         sent_summ_text_encodings = []
@@ -329,7 +364,10 @@ class summaryEvaluator(object):
 def get_summ_audio(summary_embed_dir):
     """
     Returns audio fragments of summaries in a directory.
-    param summary_embed_dir: path to a folder containing summary yamnet embeddings
+    Inputs:
+        summary_embed_dir: path to a folder containing summary yamnet embeddings.
+    Output:
+        summary_audio_dict: dict containing episodes and the audio fragments of the summaries. 
     """
     # Read the audio embeddings of the summaries
     summary_audio_dict = defaultdict(list)
@@ -354,7 +392,10 @@ def get_summ_audio(summary_embed_dir):
 def get_summ_sent_audio(sent_summary_embed_dir):
     """
     Returns audio fragments of summaries in a directory.
-    param sentsummary_embed_dir: path to a folder containing summary yamnet embeddings (per sentence)
+    Inputs:
+        sent_summary_embed_dir: path to a folder containing summary yamnet embeddings (per sentence).
+    Output:
+        sent_summary_audio_dict: dict containing episodes and the audio fragments of the summaries (per sentence)
     """
     # Read summary embeddings into a dict
     sent_summary_audio_dict = defaultdict(list)
@@ -377,24 +418,23 @@ def summary_evaluation(evaluator, target='sent'):
     """
     Creates similarity matrices between the summary encodings and 
     episode encodings. 
-    param: evaluator: an instance of Evaluator class.
-    param: target: Wheter to push the entire summary at once
-        through the encoder (arg 'sent'), or each sentence seperately (arg 'full)
+    Inputs:
+        evaluator: an instance of Evaluator class.
+        target: Wheter to push the entire summary at once
+            through the encoder ('sent'), or each sentence seperately ('full')
     """
     assert target in [ 'sent', 'full']
     if target == 'sent':
         # Results on sent-summary level, each sentence was pushed seperately
-        # through the encocder
+        # through the encoder
         summary_encodings = [(evaluator.sent_summ_text_encoding, 'sentsummtext'),
                         (evaluator.sent_summ_audio_encoding, 'sentsummaudio')]
         targets = evaluator.sent_summ_targets
-        texts = evaluator.sent_summ_texts
     else:
-        # All sentences of summaries are merged. 
+        # Sentences are not split, the summary was pushed at once through encoder.
         summary_encodings = [(evaluator.summary_text_encoding, 'fullsummtext'),
                         (evaluator.summary_audio_encoding, 'fullsummaudio')]
         targets = evaluator.summary_targets
-        texts = evaluator.summary_texts
     epi_encodings = [(evaluator.text_encoding, 'text'),
                     (evaluator.audio_encoding, 'audio')]
 
@@ -402,20 +442,20 @@ def summary_evaluation(evaluator, target='sent'):
     results = defaultdict(list)
     for summary_tup in summary_encodings:
         for tup in epi_encodings:
-            name = summary_tup[1] + "2" + tup[1]
+            name = summary_tup[1] + "-" + tup[1]
             print("------- Results for: ", name)
             summ_encoding = summary_tup[0]
             epi_encoding = tup[0]
             
+            # Create similarity matrix.
             similarity = (100.0 * summ_encoding @ epi_encoding.T).softmax(dim=-1)
             rank = []        
             mrr = []
-            
             confidence = []
             total_indices = []
             idxs= []
             for idx in range(len(targets)):
-            
+                # Calculate topK.
                 values, indices = similarity[idx].topk(k)
                 target = targets[idx].split("_")[0]
                 
@@ -423,21 +463,20 @@ def summary_evaluation(evaluator, target='sent'):
                 total_indices.extend(indices)
                 idxs.append(idx)
                     
+                # Continue untill we have the ranks of all sentences in the summary.
                 if idx != (len(targets) - 1):
                     next_target = targets[idx+1].split("_")[0]
                     if next_target == target:
                         continue
                     
+                # Combine the rankings of all sentences in the summary to one rank. 
                 confidence = np.array(confidence)
                 total_indices = np.array(total_indices)
-                sorted_inds = confidence.argsort()
-
                 sorted_inds = confidence.argsort()[::-1]
                 total_indices = total_indices[sorted_inds]
-
-
                 predicted_epis = evaluator.all_targs[total_indices.tolist()].tolist()
 
+                # Calculate best rank.
                 if target in  predicted_epis:
                     estimated_position = predicted_epis.index(target)
                     rank.append( estimated_position)
@@ -482,7 +521,7 @@ def to_plot(results, target='sent'):
     ax.set_xticks(name_vals, names)
     plt.xticks(rotation=30)
 
-    # Save the figure and show
+    # Save the figure. 
     plt.legend(loc='best',  bbox_to_anchor=(1.0,1.0))
     plt.tight_layout()
     if target != 'sent':
@@ -494,6 +533,11 @@ def to_plot(results, target='sent'):
 
 
 def main(args):
+    """
+    Loads the model, the test set, and targets. 
+    Inputs:
+        args: argpars instance. 
+    """
     conf = OmegaConf.load("./config.yaml")
     summaries_output_path = os.path.join(conf.dataset_path, 'TREC', 'good_summaries.json')
     sent_summaries_output_path = os.path.join(conf.dataset_path, 'TREC', 'sent_summaries.json')
@@ -516,7 +560,7 @@ def main(args):
     fullcfg.sp_path = conf.sp_path
 
     # Create dataloader
-    data_loader = MMloader_summary(fullcfg, directory=conf.yamnet_processed_path, lin_sep=True)
+    data_loader = MMloader_summary(fullcfg, directory=conf.yamnet_processed_path)
 
     # Load the model
     full_model = mmModule(fullcfg)
@@ -546,7 +590,8 @@ def main(args):
     with open(os.path.join(json_out, 'summary_results_sent.json'), 'w') as fp:
         json.dump(results, fp, indent=4)
 
-    # Perform evaluation on sentence level
+    # Perform evaluation by pushing the full summary at once through the encoder
+    # (Only first 512 tokens are taken into account)
     results = summary_evaluation(evaluator, target='full') 
 
     # Save the results
@@ -562,7 +607,6 @@ if __name__ == "__main__":
 
     parser.add_argument('--model_weights_path', type=str, default="./logs/30m-mlp_2022-07-05_10-54-42/output/full_model_weights.pt",
                         help='Folder where model weights are saved.')
-
     parser.add_argument('--create_random', action='store_true', default=False,
                     help='If set to true, the model is initialized using random weights.')
     args, unparsed = parser.parse_known_args()
