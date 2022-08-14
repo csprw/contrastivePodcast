@@ -9,9 +9,9 @@ This repository contains a framework to learn multi-modal podcast representation
 
 ## Folders included
 
-- src                        : Python files to train the framework, logs, and results. 
 - data                       : Folder containing the Spotify Podcast Dataset.
-- figures                    : Figures.
+- src                        : Python files to train the framework, logs, and results. 
+
 
 
 ## Usage 
